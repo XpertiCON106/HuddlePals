@@ -11,6 +11,9 @@ import SwiftData
 final class AppSession {
     var currentUser: User?
     var activeVault: Vault?
+    /// Authenticated but never finished the profile step — onboarding
+    /// resumes there instead of at sign-in.
+    var needsProfileSetup = false
     /// False until seeding + session restore finish on launch.
     var isReady = false
 }
@@ -28,12 +31,13 @@ final class DebugSettings {
 
 /// Composition root. Views receive this through the SwiftUI environment and
 /// hand it to their view models — views themselves never call services.
-///
-/// TODO: BACKEND — add `static func live()` that wires Supabase-backed
-/// implementations of the same protocols; nothing else changes.
+/// `makeMock()` wires the seeded offline world; `makeLive(config:)` wires
+/// Supabase behind the same protocols. No view knows the difference.
 @MainActor
 @Observable
 final class AppDependencies {
+    /// True when running against Supabase. Gates seeding and DEBUG tooling.
+    let isLive: Bool
     let modelContainer: ModelContainer
     let engine: VaultEngine
     let dateProvider: AppDateProvider
@@ -48,6 +52,7 @@ final class AppDependencies {
     let seeder: SeedDataService
 
     init(
+        isLive: Bool = false,
         modelContainer: ModelContainer,
         engine: VaultEngine,
         dateProvider: AppDateProvider,
@@ -60,6 +65,7 @@ final class AppDependencies {
         notificationService: any NotificationServiceProtocol,
         seeder: SeedDataService
     ) {
+        self.isLive = isLive
         self.modelContainer = modelContainer
         self.engine = engine
         self.dateProvider = dateProvider
@@ -74,20 +80,7 @@ final class AppDependencies {
     }
 
     static func makeMock(inMemory: Bool = false) -> AppDependencies {
-        let schema = Schema(VaultSchema.models)
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
-        let container: ModelContainer
-        do {
-            container = try ModelContainer(for: schema, configurations: [configuration])
-        } catch {
-            // A schema mismatch from an old dev build is the only realistic
-            // cause; fall back to a fresh in-memory store rather than crash.
-            container = try! ModelContainer(
-                for: schema,
-                configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
-            )
-        }
-
+        let container = Self.makeContainer(inMemory: inMemory)
         let context = container.mainContext
         let engine = VaultEngine()
         let dateProvider = AppDateProvider()
@@ -113,5 +106,58 @@ final class AppDependencies {
                 dateProvider: dateProvider
             )
         )
+    }
+
+    /// Supabase-backed wiring. Same protocols, same views, real backend.
+    static func makeLive(config: BackendConfig) -> AppDependencies {
+        let container = Self.makeContainer(inMemory: false)
+        let context = container.mainContext
+        let engine = VaultEngine()
+        let dateProvider = AppDateProvider()
+        // A mock-day offset left over from demo sessions must never bend
+        // time against the real backend.
+        dateProvider.reset()
+
+        let client = SupabaseClient(config: config)
+        let store = SupabaseStore(context: context)
+        let media = LiveMediaService(client: client)
+
+        return AppDependencies(
+            isLive: true,
+            modelContainer: container,
+            engine: engine,
+            dateProvider: dateProvider,
+            session: AppSession(),
+            debug: DebugSettings(),
+            auth: LiveAuthService(client: client, store: store),
+            vaultService: LiveVaultService(client: client, store: store, engine: engine),
+            depositService: LiveDepositService(client: client, store: store),
+            mediaService: media,
+            notificationService: LiveNotificationService(),
+            // Constructed but never invoked in live mode (RootViewModel
+            // gates seeding on isLive).
+            seeder: SeedDataService(
+                context: context,
+                engine: engine,
+                media: media,
+                skipLedger: SkipLedger(),
+                dateProvider: dateProvider
+            )
+        )
+    }
+
+    private static func makeContainer(inMemory: Bool) -> ModelContainer {
+        let schema = Schema(VaultSchema.models)
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
+        do {
+            return try ModelContainer(for: schema, configurations: [configuration])
+        } catch {
+            // A schema mismatch from an old dev build is the only realistic
+            // cause; fall back to a fresh in-memory store rather than crash.
+            return try! ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+            )
+        }
     }
 }

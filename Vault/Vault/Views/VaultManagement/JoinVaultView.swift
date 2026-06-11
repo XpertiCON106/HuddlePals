@@ -66,6 +66,10 @@ private struct JoinVaultContent: View {
                 .focused($codeFocused)
                 .padding(.vertical, 14)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
                 .onChange(of: viewModel.code) { _, newValue in
                     if newValue.count > 6 {
                         viewModel.code = String(newValue.prefix(6))

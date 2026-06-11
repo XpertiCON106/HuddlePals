@@ -80,7 +80,7 @@ private struct SettingsContent: View {
                     )
                     VStack(alignment: .leading, spacing: 2) {
                         Text(membership.user?.displayName ?? "Former member")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Theme.textPrimary)
                         Text(membership.role.displayName)
                             .font(.system(size: 12))
@@ -126,7 +126,7 @@ private struct SettingsContent: View {
         } header: {
             Text("Reminder")
         } footer: {
-            Text("UI only in this build — nothing is scheduled yet.")
+            Text("Vault nudges everyone at this hour. Mock builds don’t schedule real notifications.")
         }
     }
 

@@ -68,6 +68,7 @@ private struct ArchiveContent: View {
         .navigationTitle("Archive")
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(Theme.background, for: .navigationBar)
+        .refreshable { await viewModel.refresh() }
         .task { await viewModel.refresh() }
         .onChange(of: deps.dateProvider.dayOffset) {
             Task { await viewModel.refresh() }
@@ -91,7 +92,7 @@ private struct ArchiveContent: View {
                     .foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Add to yesterday")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("You have 48 hours to slip a photo into a missed day.")
                         .font(.system(size: 12))
@@ -104,6 +105,11 @@ private struct ArchiveContent: View {
             }
             .padding(14)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Theme.hairline, lineWidth: 1)
+            )
+            .shadow(color: Theme.shadow, radius: 8, x: 0, y: 3)
         }
         .buttonStyle(.plain)
     }
@@ -116,7 +122,7 @@ private struct DayRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(day.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -129,6 +135,10 @@ private struct DayRow: View {
                                 LocalDepositImage(relativePath: deposit.localImagePath)
                                     .frame(width: 110, height: 146)
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                                    )
                                 HStack(spacing: 5) {
                                     AvatarView(
                                         name: deposit.author?.displayName ?? "?",

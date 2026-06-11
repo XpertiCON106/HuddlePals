@@ -30,19 +30,20 @@ final class SeedDataService {
         self.dateProvider = dateProvider
     }
 
-    func seedIfNeeded() throws {
+    func seedIfNeeded() async throws {
         // Skips are in-memory (see SkipLedger), so they must be re-recorded
         // every launch even when the SwiftData store already exists.
         if UserDefaults.standard.bool(forKey: Self.seededKey) {
             try reseedSkipLedger()
             return
         }
-        try seed()
+        try await seed()
         UserDefaults.standard.set(true, forKey: Self.seededKey)
     }
 
     /// DEBUG: wipe everything and rebuild the seed world.
-    func regenerate() throws {
+    func regenerate() async throws {
+        MockAuthService.resetForReseed()
         try context.delete(model: Reaction.self)
         try context.delete(model: Comment.self)
         try context.delete(model: Deposit.self)
@@ -51,7 +52,7 @@ final class SeedDataService {
         try context.delete(model: User.self)
         try context.save()
         skipLedger.removeAll()
-        try seed()
+        try await seed()
         UserDefaults.standard.set(true, forKey: Self.seededKey)
     }
 
@@ -66,14 +67,14 @@ final class SeedDataService {
         static let skippedDays: [Int: String] = [-14: "Sam"] // token spent, streak survives
     }
 
-    private func seed() throws {
+    private func seed() async throws {
         let now = dateProvider.now
         let todayKey = engine.todayKey(now: now)
 
-        let you = User(displayName: Self.currentUserName, avatarColorHex: "E8A33D")
-        let maya = User(displayName: "Maya", avatarColorHex: "7FB069")
-        let sam = User(displayName: "Sam", avatarColorHex: "5B8DEF")
-        let riley = User(displayName: "Riley", avatarColorHex: "C97FD6")
+        let you = User(displayName: Self.currentUserName, avatarColorHex: "161614")
+        let maya = User(displayName: "Maya", avatarColorHex: "555450")
+        let sam = User(displayName: "Sam", avatarColorHex: "7E7D78")
+        let riley = User(displayName: "Riley", avatarColorHex: "343431")
         let allUsers = [you, maya, sam, riley]
         allUsers.forEach { context.insert($0) }
 
@@ -110,7 +111,7 @@ final class SeedDataService {
                     continue
                 }
                 imageSeed += 1
-                try insertDeposit(
+                try await insertDeposit(
                     vault: vault, author: user, dayKey: key,
                     createdAt: dayStart.addingTimeInterval(TimeInterval(9 * 3600 + userIndex * 4200 + offset * 60)),
                     imageSeed: imageSeed,
@@ -122,7 +123,7 @@ final class SeedDataService {
         // Today: everyone but the current user has deposited → LOCKED.
         for (userIndex, user) in [maya, sam, riley].enumerated() {
             imageSeed += 1
-            try insertDeposit(
+            try await insertDeposit(
                 vault: vault, author: user, dayKey: todayKey,
                 createdAt: now.addingTimeInterval(TimeInterval(-3600 * (userIndex + 1))),
                 imageSeed: imageSeed,
@@ -165,9 +166,9 @@ final class SeedDataService {
         createdAt: Date,
         imageSeed: Int,
         caption: String?
-    ) throws {
+    ) async throws {
         let data = PlaceholderImageGenerator.jpegData(seed: imageSeed)
-        let path = try media.saveImageData(data, preferredName: "seed-\(dayKey)-\(author.displayName).jpg")
+        let path = try await media.saveImageData(data, preferredName: "seed-\(dayKey)-\(author.displayName).jpg")
         let deposit = Deposit(
             vault: vault,
             author: author,

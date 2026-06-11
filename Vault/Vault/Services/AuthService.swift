@@ -1,21 +1,102 @@
 import Foundation
 import SwiftData
 
+// MARK: - Auth surface
+
+/// Where a verification code gets sent.
+enum OTPDestination: Equatable, Hashable {
+    case email(String)
+    case phone(String)
+
+    var displayValue: String {
+        switch self {
+        case .email(let address): address
+        case .phone(let number): number
+        }
+    }
+}
+
+/// Where the app should route after an auth step.
+enum AuthSessionState {
+    /// No session — show sign-in.
+    case signedOut
+    /// Authenticated, but no profile yet — finish onboarding.
+    /// `suggestedName` carries Apple's full name when available.
+    case needsProfile(suggestedName: String?)
+    /// Fully signed in.
+    case signedIn(User)
+}
+
+enum AuthError: LocalizedError {
+    case invalidEmail
+    case invalidPhone
+    case invalidCode
+    case notAuthenticated
+    case provider(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEmail: "That doesn't look like an email address."
+        case .invalidPhone: "Use the full international format, like +14155550123."
+        case .invalidCode: "That code didn't match. Check it and try again."
+        case .notAuthenticated: "You're not signed in."
+        case .provider(let message): message
+        }
+    }
+}
+
+enum AuthValidation {
+    static func normalizedEmail(_ raw: String) -> String? {
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let parts = cleaned.split(separator: "@")
+        guard parts.count == 2, !parts[0].isEmpty, parts[1].contains("."),
+              !parts[1].hasPrefix("."), !parts[1].hasSuffix(".")
+        else { return nil }
+        return cleaned
+    }
+
+    /// E.164: leading "+", 8–15 digits. Spaces, dashes, dots, and parens
+    /// are stripped so "+1 (415) 555-0123" works.
+    static func normalizedPhone(_ raw: String) -> String? {
+        let cleaned = String(raw.filter { !$0.isWhitespace && !"-().".contains($0) })
+        guard cleaned.hasPrefix("+") else { return nil }
+        let digits = cleaned.dropFirst()
+        guard (8...15).contains(digits.count), digits.allSatisfy(\.isNumber) else { return nil }
+        return cleaned
+    }
+}
+
 @MainActor
 protocol AuthServiceProtocol: AnyObject {
-    /// Restores the persisted session, if any. The mock auto-signs-in the
-    /// seeded "You" user on first launch.
-    func restoreSession() async throws -> User?
-    func signIn(displayName: String, avatarColorHex: String) async throws -> User
+    /// Session state at launch (restores a persisted session if present).
+    func currentState() async throws -> AuthSessionState
+    /// Sends a 6-digit verification code to the email or phone.
+    func requestCode(to destination: OTPDestination) async throws
+    /// Exchanges destination + code for a session.
+    func verifyCode(_ code: String, for destination: OTPDestination) async throws -> AuthSessionState
+    /// Native Sign in with Apple: exchanges the identity token for a session.
+    func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState
+    /// Creates the profile for a freshly authenticated account.
+    func completeProfile(displayName: String, avatarColorHex: String) async throws -> User
     func updateProfile(user: User, displayName: String, avatarColorHex: String) async throws
     func signOut() async throws
 }
 
 // MARK: - Mock
 
+/// Offline stand-in that mirrors the real flow exactly: codes are "sent"
+/// (always `123456`), identities map to local users, and sign-out sticks
+/// until the next sign-in. First launch auto-signs-in the seeded "You" so
+/// the LOCKED mechanic shows immediately.
 @MainActor
 final class MockAuthService: AuthServiceProtocol {
+    /// Every mock "delivery" uses this code.
+    static let mockCode = "123456"
+
     private static let currentUserIDKey = "vault.mock.currentUserID"
+    private static let signedOutKey = "vault.mock.signedOutExplicitly"
+    private static let identityPrefix = "vault.mock.identity."
+    private static let pendingIdentityKey = "vault.mock.pendingIdentity"
 
     private let context: ModelContext
 
@@ -23,44 +104,66 @@ final class MockAuthService: AuthServiceProtocol {
         self.context = context
     }
 
-    func restoreSession() async throws -> User? {
-        // TODO: BACKEND — replace with Supabase session restore
-        // (supabase.auth.session) and a profile fetch keyed by auth uid.
+    /// Called by the seeder when the mock world is rebuilt.
+    static func resetForReseed() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: signedOutKey)
+        defaults.removeObject(forKey: pendingIdentityKey)
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(identityPrefix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    func currentState() async throws -> AuthSessionState {
         let users = try context.fetch(FetchDescriptor<User>())
         if let stored = UserDefaults.standard.string(forKey: Self.currentUserIDKey),
            let id = UUID(uuidString: stored),
            let user = users.first(where: { $0.id == id }) {
-            return user
+            return .signedIn(user)
         }
-        // Auto-sign-in the seeded current user so first launch lands
-        // directly in the LOCKED vault.
-        if let seeded = users.first(where: { $0.displayName == SeedDataService.currentUserName }) {
+        // A sign-up that got as far as verification but never finished the
+        // profile resumes there, exactly like the live service.
+        if UserDefaults.standard.string(forKey: Self.pendingIdentityKey) != nil {
+            return .needsProfile(suggestedName: nil)
+        }
+        // Demo nicety: land signed-in as the seeded user — unless the user
+        // explicitly signed out, in which case the sign-in flow shows.
+        if !UserDefaults.standard.bool(forKey: Self.signedOutKey),
+           let seeded = users.first(where: { $0.displayName == SeedDataService.currentUserName }) {
             persist(seeded)
-            return seeded
+            return .signedIn(seeded)
         }
-        return nil
+        return .signedOut
     }
 
-    func signIn(displayName: String, avatarColorHex: String) async throws -> User {
-        // TODO: BACKEND — replace with Supabase sign-in (magic link / Apple)
-        // followed by an upsert into a `profiles` table.
+    func requestCode(to destination: OTPDestination) async throws {
+        // TODO: BACKEND — the live service sends a real code via GoTrue.
+        print("[MockAuth] Verification code for \(destination.displayValue): \(Self.mockCode)")
+    }
+
+    func verifyCode(_ code: String, for destination: OTPDestination) async throws -> AuthSessionState {
+        guard code == Self.mockCode else { throw AuthError.invalidCode }
+        return try signIn(identityKey: identityKey(for: destination), suggestedName: nil)
+    }
+
+    func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState {
+        try signIn(identityKey: Self.identityPrefix + "apple", suggestedName: suggestedName)
+    }
+
+    func completeProfile(displayName: String, avatarColorHex: String) async throws -> User {
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let users = try context.fetch(FetchDescriptor<User>())
-        let user: User
-        if let existing = users.first(where: { $0.displayName == trimmed }) {
-            existing.avatarColorHex = avatarColorHex
-            user = existing
-        } else {
-            user = User(displayName: trimmed, avatarColorHex: avatarColorHex)
-            context.insert(user)
-        }
+        let user = User(displayName: trimmed, avatarColorHex: avatarColorHex)
+        context.insert(user)
         try context.save()
+        if let pendingIdentity = UserDefaults.standard.string(forKey: Self.pendingIdentityKey) {
+            UserDefaults.standard.set(user.id.uuidString, forKey: pendingIdentity)
+            UserDefaults.standard.removeObject(forKey: Self.pendingIdentityKey)
+        }
         persist(user)
         return user
     }
 
     func updateProfile(user: User, displayName: String, avatarColorHex: String) async throws {
-        // TODO: BACKEND — push profile changes to the `profiles` table.
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { user.displayName = trimmed }
         user.avatarColorHex = avatarColorHex
@@ -68,9 +171,32 @@ final class MockAuthService: AuthServiceProtocol {
     }
 
     func signOut() async throws {
-        // TODO: BACKEND — supabase.auth.signOut(); local cache stays so the
-        // user can sign back in offline.
         UserDefaults.standard.removeObject(forKey: Self.currentUserIDKey)
+        UserDefaults.standard.set(true, forKey: Self.signedOutKey)
+    }
+
+    // MARK: Internals
+
+    /// Returning identity → signed in; new identity → profile step, with
+    /// the identity parked until `completeProfile` claims it.
+    private func signIn(identityKey: String, suggestedName: String?) throws -> AuthSessionState {
+        UserDefaults.standard.removeObject(forKey: Self.signedOutKey)
+        let users = try context.fetch(FetchDescriptor<User>())
+        if let stored = UserDefaults.standard.string(forKey: identityKey),
+           let id = UUID(uuidString: stored),
+           let user = users.first(where: { $0.id == id }) {
+            persist(user)
+            return .signedIn(user)
+        }
+        UserDefaults.standard.set(identityKey, forKey: Self.pendingIdentityKey)
+        return .needsProfile(suggestedName: suggestedName)
+    }
+
+    private func identityKey(for destination: OTPDestination) -> String {
+        switch destination {
+        case .email(let address): Self.identityPrefix + "email." + address
+        case .phone(let number): Self.identityPrefix + "phone." + number
+        }
     }
 
     private func persist(_ user: User) {

@@ -1,0 +1,8 @@
+# Real backend credentials — copy supabase/Supabase.example.plist here and
+# fill it in; never commit it.
+Vault/Supabase.plist
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate

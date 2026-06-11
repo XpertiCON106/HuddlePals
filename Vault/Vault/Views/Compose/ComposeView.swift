@@ -94,6 +94,7 @@ private struct ComposeContent: View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
                 .fill(Theme.surface)
+                .strokeBorder(Theme.hairline, lineWidth: 1)
                 .aspectRatio(3 / 4, contentMode: .fit)
 
             if let image = viewModel.previewImage {
@@ -120,7 +121,7 @@ private struct ComposeContent: View {
                         .font(.system(size: 42, weight: .light))
                         .foregroundStyle(Theme.accent)
                     Text("Pick today's photo")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Theme.textSecondary)
 
                     HStack(spacing: 14) {
@@ -143,7 +144,7 @@ private struct ComposeContent: View {
             showPicker = true
         } label: {
             Label(label, systemImage: systemImage)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)

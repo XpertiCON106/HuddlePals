@@ -3,17 +3,20 @@ import Foundation
 protocol MediaServiceProtocol: AnyObject {
     /// Persists image data and returns a path *relative to Documents* —
     /// the sandbox container path changes between launches, so absolute
-    /// paths must never be stored.
-    func saveImageData(_ data: Data, preferredName: String?) throws -> String
+    /// paths must never be stored. Async because the live implementation
+    /// also uploads to Supabase Storage.
+    func saveImageData(_ data: Data, preferredName: String?) async throws -> String
     func imageURL(for relativePath: String) -> URL
-    func loadImageData(at relativePath: String) -> Data?
+    /// Async because the live implementation falls back to a Storage
+    /// download when the local cache misses.
+    func loadImageData(at relativePath: String) async -> Data?
     func deleteImage(at relativePath: String)
 }
 
 // MARK: - Mock
 
-/// "Mock" here means local-only: files really are written to Documents,
-/// which is exactly what the offline cache will keep doing post-backend.
+/// "Mock" here means local-only: files really are written to Documents.
+/// The live service composes this exact class as its offline cache.
 final class MockMediaService: MediaServiceProtocol {
     static let mediaDirectoryName = "Media"
 
@@ -26,24 +29,24 @@ final class MockMediaService: MediaServiceProtocol {
         self.fileManager = fileManager
     }
 
-    func saveImageData(_ data: Data, preferredName: String?) throws -> String {
-        // TODO: BACKEND — also enqueue an upload to Supabase Storage
-        // (bucket "deposits"); the deposit row stores the remote object key
-        // and this local file becomes the cache entry.
-        let directory = documentsURL.appendingPathComponent(Self.mediaDirectoryName, isDirectory: true)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+    func saveImageData(_ data: Data, preferredName: String?) async throws -> String {
         let name = preferredName ?? "\(UUID().uuidString).jpg"
-        try data.write(to: directory.appendingPathComponent(name), options: .atomic)
-        return "\(Self.mediaDirectoryName)/\(name)"
+        let relativePath = "\(Self.mediaDirectoryName)/\(name)"
+        let fileURL = documentsURL.appendingPathComponent(relativePath)
+        // preferredName may carry subfolders ("<vault_id>/<file>.jpg").
+        try fileManager.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: fileURL, options: .atomic)
+        return relativePath
     }
 
     func imageURL(for relativePath: String) -> URL {
         documentsURL.appendingPathComponent(relativePath)
     }
 
-    func loadImageData(at relativePath: String) -> Data? {
-        // TODO: BACKEND — fall back to a signed-URL download when the local
-        // cache misses.
+    func loadImageData(at relativePath: String) async -> Data? {
         try? Data(contentsOf: imageURL(for: relativePath))
     }
 

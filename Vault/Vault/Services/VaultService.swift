@@ -5,12 +5,14 @@ enum VaultServiceError: LocalizedError {
     case inviteCodeNotFound
     case alreadyMember
     case notAMember
+    case vaultFull
 
     var errorDescription: String? {
         switch self {
         case .inviteCodeNotFound: "No vault found for that code. Double-check it and try again."
         case .alreadyMember: "You're already a member of this vault."
         case .notAMember: "You're not a member of this vault."
+        case .vaultFull: "This vault already has 8 members — that's the limit."
         }
     }
 }
@@ -22,8 +24,9 @@ protocol VaultServiceProtocol: AnyObject {
     func joinVault(inviteCode: String, user: User) async throws -> Vault
     func leaveVault(_ vault: Vault, user: User) async throws
     /// Skip-token usage per dayKey, consumed by streak math.
-    func skipRecords(for vault: Vault) -> [String: Set<UUID>]
+    func skipRecords(for vault: Vault) async throws -> [String: Set<UUID>]
     func spendSkipToken(membership: Membership, dayKey: String) async throws
+    func updateNotificationHour(_ hour: Int, for vault: Vault) async throws
     /// Recomputes and persists the group streak. Called on launch and after
     /// every deposit.
     func recomputeStreak(for vault: Vault, now: Date) async throws
@@ -117,8 +120,13 @@ final class MockVaultService: VaultServiceProtocol {
         try context.save()
     }
 
-    func skipRecords(for vault: Vault) -> [String: Set<UUID>] {
+    func skipRecords(for vault: Vault) async throws -> [String: Set<UUID>] {
         skipLedger.skips(for: vault.id)
+    }
+
+    func updateNotificationHour(_ hour: Int, for vault: Vault) async throws {
+        vault.notificationHour = hour
+        try context.save()
     }
 
     func spendSkipToken(membership: Membership, dayKey: String) async throws {

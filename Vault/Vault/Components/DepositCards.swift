@@ -11,6 +11,7 @@ struct LocalDepositImage: View {
     let relativePath: String
 
     @State private var image: UIImage?
+    @State private var loadedPath: String?
 
     var body: some View {
         GeometryReader { proxy in
@@ -26,13 +27,12 @@ struct LocalDepositImage: View {
             .clipped()
         }
         .task(id: relativePath) {
-            guard image == nil else { return }
-            let media = deps.mediaService
-            let path = relativePath
-            let loaded = await Task.detached(priority: .userInitiated) {
-                media.loadImageData(at: path).flatMap(UIImage.init(data:))
-            }.value
-            image = loaded
+            // Reload when the path changes (same-day replacement keeps the
+            // deposit id but swaps the file); skip when already loaded.
+            guard loadedPath != relativePath else { return }
+            let loaded = await deps.mediaService.loadImageData(at: relativePath)
+            image = loaded.flatMap(UIImage.init(data:))
+            loadedPath = relativePath
         }
     }
 }
@@ -63,7 +63,7 @@ struct DepositCard: View {
                         size: 30
                     )
                     Text(deposit.author?.displayName ?? "Former member")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Spacer()
                     Text(deposit.createdAt, format: .dateTime.hour().minute())
@@ -96,8 +96,7 @@ struct DepositCard: View {
             }
             .padding(14)
         }
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+        .cardSurface()
     }
 }
 
@@ -118,7 +117,7 @@ struct BlurredDepositCard: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color(hex: deposit.author?.avatarColorHex ?? "888888").opacity(0.45),
+                                Color(hex: deposit.author?.avatarColorHex ?? "555555").opacity(0.30),
                                 Theme.surfaceElevated,
                             ],
                             startPoint: .topLeading,
@@ -130,7 +129,7 @@ struct BlurredDepositCard: View {
 
                 Image(systemName: "lock.fill")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(Theme.accent.opacity(0.55))
             }
 
             HStack(spacing: 7) {
@@ -140,14 +139,13 @@ struct BlurredDepositCard: View {
                     size: 22
                 )
                 Text(deposit.author?.displayName ?? "Member")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
         }
         .padding(10)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+        .cardSurface()
     }
 }

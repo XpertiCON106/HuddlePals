@@ -49,10 +49,14 @@ private struct CreateVaultContent: View {
                 .padding(.top, 12)
 
             TextField("Vault name", text: $viewModel.name)
-                .font(.system(size: 18, weight: .medium, design: .rounded))
+                .font(.system(size: 18, weight: .medium))
                 .multilineTextAlignment(.center)
                 .padding(14)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
                 ForEach(CreateVaultViewModel.emojiChoices, id: \.self) { choice in
@@ -110,11 +114,15 @@ private struct CreateVaultContent: View {
                 .padding(.vertical, 14)
                 .frame(maxWidth: .infinity)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
 
             if let url = viewModel.shareURL {
                 ShareLink(item: url, message: Text("Join our vault \"\(vault.name)\" on Vault")) {
                     Label("Share invite link", systemImage: "square.and.arrow.up")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.background)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
@@ -123,7 +131,7 @@ private struct CreateVaultContent: View {
             }
 
             Button("Done") { onDone() }
-                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
         }
     }

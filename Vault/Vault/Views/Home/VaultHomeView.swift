@@ -25,6 +25,7 @@ struct VaultHomeView: View {
 private struct HomeContent: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(AppRouter.self) private var router
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var viewModel: VaultHomeViewModel
 
     var body: some View {
@@ -39,6 +40,12 @@ private struct HomeContent: View {
         .toolbar { toolbarContent }
         .toolbarBackground(Theme.background, for: .navigationBar)
         .task { await viewModel.refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            // Pick up other members' deposits when returning to the app.
+            if phase == .active {
+                Task { await viewModel.refresh() }
+            }
+        }
         .onChange(of: deps.debug.simulateNotPostedToday) {
             Task { await viewModel.refresh() }
         }
@@ -98,6 +105,7 @@ private struct HomeContent: View {
             .padding(.horizontal, Theme.screenPadding)
             .padding(.bottom, 36)
         }
+        .refreshable { await viewModel.refresh() }
         .overlay {
             if viewModel.playUnlockReveal {
                 UnlockRevealOverlay {
@@ -133,7 +141,7 @@ private struct HomeContent: View {
     private var lockedGrid: some View {
         VStack(alignment: .leading, spacing: 18) {
             Label("Locked until you share", systemImage: "lock.fill")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.accent)
 
             LazyVGrid(
@@ -266,7 +274,7 @@ private struct NoVaultView: View {
             Button("Join with a code") {
                 router.todayPath.append(.joinVault)
             }
-            .font(.system(size: 15, weight: .medium, design: .rounded))
+            .font(.system(size: 15, weight: .medium))
             .foregroundStyle(Theme.accent)
         }
         .padding(Theme.screenPadding)

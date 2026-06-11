@@ -55,7 +55,10 @@ final class ComposeViewModel {
         isSaving = true
         defer { isSaving = false }
         do {
-            let path = try deps.mediaService.saveImageData(imageData, preferredName: nil)
+            let path = try await deps.mediaService.saveImageData(
+                imageData,
+                preferredName: "\(vault.id.uuidString)/\(UUID().uuidString).jpg"
+            )
             try await deps.depositService.createDeposit(
                 in: vault,
                 author: user,

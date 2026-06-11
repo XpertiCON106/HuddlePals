@@ -16,6 +16,10 @@ struct CaptionTextField: View {
                 .lineLimit(1...3)
                 .padding(14)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
                 .onChange(of: text) { _, newValue in
                     if newValue.count > VaultEngine.captionLimit {
                         text = String(newValue.prefix(VaultEngine.captionLimit))

@@ -7,7 +7,14 @@ struct VaultApp: App {
     @State private var router = AppRouter()
 
     init() {
-        _dependencies = State(initialValue: AppDependencies.makeMock())
+        // Live when a filled-in Supabase.plist is bundled; mock otherwise.
+        let deps: AppDependencies
+        if let config = BackendConfig.load() {
+            deps = AppDependencies.makeLive(config: config)
+        } else {
+            deps = AppDependencies.makeMock()
+        }
+        _dependencies = State(initialValue: deps)
     }
 
     var body: some Scene {
@@ -16,7 +23,7 @@ struct VaultApp: App {
                 .environment(dependencies)
                 .environment(router)
                 .modelContainer(dependencies.modelContainer)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(.light)
                 .tint(Theme.accent)
         }
     }

@@ -25,6 +25,10 @@ final class ProfileViewModel {
 
     var mockDayOffset: Int { deps.dateProvider.dayOffset }
 
+    /// Live builds hide the DEBUG tooling — those knobs only make sense
+    /// against the mock world.
+    var isLiveBackend: Bool { deps.isLive }
+
     init(deps: AppDependencies) {
         self.deps = deps
         if let user = deps.session.currentUser {
@@ -54,6 +58,7 @@ final class ProfileViewModel {
         try? await deps.auth.signOut()
         deps.session.currentUser = nil
         deps.session.activeVault = nil
+        deps.session.needsProfileSetup = false
     }
 
     // MARK: DEBUG actions
@@ -62,17 +67,23 @@ final class ProfileViewModel {
     /// launch flow so the UI lands back in the seeded LOCKED state.
     func regenerateSeedData() async {
         isWorking = true
-        defer { isWorking = false }
+        // Drop to the splash while the world is torn down and rebuilt —
+        // otherwise onboarding flashes and views can render mid-deletion.
+        deps.session.isReady = false
+        defer {
+            deps.session.isReady = true
+            isWorking = false
+        }
         do {
             deps.dateProvider.reset()
             deps.debug.simulateNotPostedToday = false
             deps.session.currentUser = nil
             deps.session.activeVault = nil
+            deps.session.needsProfileSetup = false
             try? await deps.auth.signOut()
-            try deps.seeder.regenerate()
-            let user = try await deps.auth.restoreSession()
-            deps.session.currentUser = user
-            if let user {
+            try await deps.seeder.regenerate()
+            if case .signedIn(let user) = try await deps.auth.currentState() {
+                deps.session.currentUser = user
                 let vaults = try await deps.vaultService.vaults(for: user)
                 deps.session.activeVault = vaults.first
                 if let vault = vaults.first {

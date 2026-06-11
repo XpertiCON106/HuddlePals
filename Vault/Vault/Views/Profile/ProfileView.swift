@@ -28,15 +28,34 @@ private struct ProfileContent: View {
     @Bindable var viewModel: ProfileViewModel
     let onSignOut: () -> Void
 
+    @State private var showSignOutConfirmation = false
+
     var body: some View {
         List {
             profileSection
             accountSection
-            debugSection
+            if !viewModel.isLiveBackend {
+                debugSection
+            }
             aboutSection
         }
         .scrollContentBackground(.hidden)
         .background(Theme.background)
+        .confirmationDialog(
+            "Sign out?",
+            isPresented: $showSignOutConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Sign out", role: .destructive) {
+                Task {
+                    await viewModel.signOut()
+                    onSignOut()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can sign back in any time with the same Apple ID, email, or phone number.")
+        }
     }
 
     private var profileSection: some View {
@@ -48,7 +67,7 @@ private struct ProfileContent: View {
                     size: 52
                 )
                 TextField("Display name", text: $viewModel.displayName)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .font(.system(size: 17, weight: .medium))
             }
             .listRowBackground(Theme.surface)
 
@@ -91,10 +110,7 @@ private struct ProfileContent: View {
     private var accountSection: some View {
         Section("Account") {
             Button(role: .destructive) {
-                Task {
-                    await viewModel.signOut()
-                    onSignOut()
-                }
+                showSignOutConfirmation = true
             } label: {
                 Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
             }

@@ -113,9 +113,9 @@ final class VaultSettingsViewModel {
         return line
     }
 
-    /// UI-only in MVP: persists the hour but nothing is scheduled.
     func setNotificationHour(_ hour: Int) async {
-        vault.notificationHour = hour
+        try? await deps.vaultService.updateNotificationHour(hour, for: vault)
+        _ = await deps.notificationService.requestAuthorization()
         await deps.notificationService.scheduleDailyReminder(
             vaultID: vault.id,
             vaultName: vault.name,

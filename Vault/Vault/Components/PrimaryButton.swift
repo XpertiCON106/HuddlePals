@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// The single action style: ink-black bar, white label, soft lift. One
+/// button color in the whole app keeps the hierarchy unmistakable.
 struct PrimaryButton: View {
     let title: String
     var systemImage: String?
@@ -12,20 +14,24 @@ struct PrimaryButton: View {
             HStack(spacing: 8) {
                 if isLoading {
                     ProgressView()
-                        .tint(Theme.background)
+                        .tint(.white)
                 } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 17, weight: .semibold))
                 }
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.system(size: 17, weight: .semibold))
             }
-            .foregroundStyle(Theme.background)
+            .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(
-                Theme.accent.opacity(isEnabled ? 1 : 0.35),
+                Theme.accent.opacity(isEnabled ? 1 : 0.25),
                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .shadow(
+                color: .black.opacity(isEnabled ? 0.18 : 0),
+                radius: 12, x: 0, y: 5
             )
         }
         .disabled(!isEnabled || isLoading)

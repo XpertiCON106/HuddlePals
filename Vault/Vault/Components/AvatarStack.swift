@@ -13,13 +13,14 @@ struct AvatarView: View {
 
     var body: some View {
         Circle()
-            .fill(Color(hex: colorHex).gradient)
+            .fill(Color(hex: colorHex))
             .frame(width: size, height: size)
             .overlay {
                 Text(initials)
-                    .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
+                    .font(.system(size: size * 0.4, weight: .semibold))
                     .foregroundStyle(.white)
             }
+            .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
     }
 }
 
@@ -43,7 +44,7 @@ struct AvatarStack: View {
                     .frame(width: size, height: size)
                     .overlay {
                         Text("+\(users.count - maxVisible)")
-                            .font(.system(size: size * 0.36, weight: .semibold, design: .rounded))
+                            .font(.system(size: size * 0.36, weight: .semibold))
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))

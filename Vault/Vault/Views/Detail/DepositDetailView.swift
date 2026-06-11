@@ -36,6 +36,11 @@ private struct DetailContent: View {
                 LocalDepositImage(relativePath: deposit.localImagePath)
                     .aspectRatio(3 / 4, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                    )
+                    .shadow(color: Theme.shadow, radius: 14, x: 0, y: 5)
 
                 if let caption = deposit.caption {
                     Text(caption)
@@ -52,7 +57,7 @@ private struct DetailContent: View {
                     )
                     VStack(alignment: .leading, spacing: 1) {
                         Text(deposit.author?.displayName ?? "Former member")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Theme.textPrimary)
                         Text(deposit.createdAt, format: .dateTime.weekday(.wide).month().day().hour().minute())
                             .font(.system(size: 12))
@@ -89,7 +94,7 @@ private struct DetailContent: View {
                         Text(emoji).font(.system(size: 17))
                         if count > 0 {
                             Text("\(count)")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(mine ? Theme.accent : Theme.textSecondary)
                                 .contentTransition(.numericText())
                         }
@@ -129,7 +134,7 @@ private struct DetailContent: View {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: 8) {
                                 Text(comment.user?.displayName ?? "Former member")
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(Theme.textPrimary)
                                 Text(comment.createdAt, format: .dateTime.hour().minute())
                                     .font(.system(size: 11))

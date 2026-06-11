@@ -16,11 +16,17 @@ final class RootViewModel {
     func bootstrap() async {
         guard !deps.session.isReady else { return }
         do {
-            try deps.seeder.seedIfNeeded()
-            let user = try await deps.auth.restoreSession()
-            deps.session.currentUser = user
-            if let user {
+            if !deps.isLive {
+                try await deps.seeder.seedIfNeeded()
+            }
+            switch try await deps.auth.currentState() {
+            case .signedIn(let user):
+                deps.session.currentUser = user
                 await selectInitialVault(for: user)
+            case .needsProfile:
+                deps.session.needsProfileSetup = true
+            case .signedOut:
+                break
             }
         } catch {
             bootstrapError = error.localizedDescription
