@@ -1,5 +1,19 @@
 # Vault
 
+---
+
+## ⚖️ Copyright & Proprietary Notice
+
+**Copyright © 2026 [YOUR LEGAL NAME OR COMPANY ENTITY]. All rights reserved.**
+
+This is **proprietary software — not open source.** The entire contents of this repository — source code, architecture, database schemas, documentation, designs, product concepts, and the "Vault" name and branding — are the exclusive property of the copyright holder. **No license of any kind is granted** by the availability of this repository.
+
+**Any unauthorized copying, reproduction, modification, distribution, or use of this software, in whole or in part, in any product or service, is strictly prohibited and will be pursued to the fullest extent permitted by law** — including DMCA takedown actions, claims for damages and disgorgement of profits, injunctive relief, and recovery of attorneys' fees where available.
+
+Full terms: [LICENSE](LICENSE). Licensing inquiries: **hello@huddlepals.com**.
+
+---
+
 > **New here? Read [OVERVIEW.md](OVERVIEW.md)** — the complete guide with diagrams. [CLAUDE.md](CLAUDE.md) is the agent context; [DEPLOYMENT.md](DEPLOYMENT.md) is the go-live runbook.
 
 A private, daily photo-sharing app for small groups (2–8 people). One photo per person per day goes into a shared vault. Today's photos from the others stay **blurred until you deposit your own** (the reciprocity gate). Streaks belong to the group, not the individual. Over time the vault becomes a permanent collective archive — the opposite of Instagram: private, permanent, small, daily.
