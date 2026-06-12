@@ -1,4 +1,3 @@
----
 ## ⚖️ Copyright & Proprietary Notice
 
 **Copyright © 2026 HuddlePals All rights reserved.**
@@ -8,5 +7,3 @@ This is **proprietary software — not open source.** The entire contents of thi
 **Any unauthorized copying, reproduction, modification, distribution, or use of this software, in whole or in part, in any product or service, is strictly prohibited and will be pursued to the fullest extent permitted by law** — including DMCA takedown actions, claims for damages and disgorgement of profits, injunctive relief, and recovery of attorneys' fees where available.
 
 Full terms: [LICENSE](LICENSE). Licensing inquiries: **hello@huddlepals.com**.
-
----
