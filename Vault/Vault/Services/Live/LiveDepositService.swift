@@ -46,20 +46,26 @@ final class LiveDepositService: DepositServiceProtocol {
             let caption: String?
             let dayKey: String
         }
-        // The (vault, author, day_key) unique constraint turns this upsert
-        // into the same-day replacement: Postgres updates the existing row
-        // in place (same id), atomically.
-        let rows: [DepositDTO] = try await client.upsert(
-            "deposits",
-            values: NewDeposit(
-                vaultId: vault.id,
-                authorId: author.id,
-                storagePath: LiveMediaService.storagePath(forCachePath: localImagePath),
-                caption: VaultEngine.sanitizedCaption(caption),
-                dayKey: dayKey
-            ),
-            onConflict: "vault_id,author_id,day_key"
-        )
+        // Once-and-permanent: plain insert — the (vault, author, day_key)
+        // unique constraint makes a second attempt fail atomically.
+        let rows: [DepositDTO]
+        do {
+            rows = try await client.upsert(
+                "deposits",
+                values: NewDeposit(
+                    vaultId: vault.id,
+                    authorId: author.id,
+                    storagePath: LiveMediaService.storagePath(forCachePath: localImagePath),
+                    caption: VaultEngine.sanitizedCaption(caption),
+                    dayKey: dayKey
+                )
+            )
+        } catch let SupabaseClient.ClientError.http(status, message) {
+            if status == 409 || message.contains("duplicate key") {
+                throw DepositError.alreadyDepositedToday
+            }
+            throw SupabaseClient.ClientError.http(status: status, message: message)
+        }
         guard let dto = rows.first else {
             throw SupabaseClient.ClientError.http(status: 500, message: "deposit insert returned nothing")
         }

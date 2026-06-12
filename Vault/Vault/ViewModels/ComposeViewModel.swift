@@ -6,12 +6,22 @@ import SwiftUI
 @MainActor
 @Observable
 final class ComposeViewModel {
+    /// Once-and-permanent flow: pick → confirm ("This is permanent —
+    /// post it?") → posted. No retakes after confirmation.
+    enum Stage: Equatable {
+        case pick
+        case confirm
+    }
+
     private let deps: AppDependencies
+    let vault: Vault
 
     /// Today for the normal flow; yesterday when launched as a backfill
-    /// from the archive.
+    /// (or recovery) from the archive or recovery banner.
     let targetDayKey: String
     let isBackfill: Bool
+
+    private(set) var stage: Stage = .pick
 
     var photoItem: PhotosPickerItem? {
         didSet { Task { await loadSelectedPhoto() } }
@@ -22,10 +32,11 @@ final class ComposeViewModel {
     private(set) var isSaving = false
     private(set) var errorMessage: String?
 
-    var canDeposit: Bool { imageData != nil && !isSaving }
+    var canContinue: Bool { imageData != nil && !isSaving }
 
-    init(deps: AppDependencies, targetDayKey: String? = nil) {
+    init(deps: AppDependencies, vault: Vault, targetDayKey: String? = nil) {
         self.deps = deps
+        self.vault = vault
         let today = deps.engine.todayKey(now: deps.dateProvider.now)
         self.targetDayKey = targetDayKey ?? today
         self.isBackfill = (targetDayKey ?? today) != today
@@ -47,10 +58,19 @@ final class ComposeViewModel {
         }
     }
 
+    /// Pick → the permanence gate.
+    func continueToConfirm() {
+        guard canContinue else { return }
+        errorMessage = nil
+        stage = .confirm
+        Haptics.light()
+    }
+
     /// Returns true on success so the sheet can dismiss into the reveal.
-    func deposit() async -> Bool {
+    /// Irreversible: once this succeeds the photo can never be deleted,
+    /// edited, or replaced.
+    func confirmAndPost() async -> Bool {
         guard let imageData,
-              let vault = deps.session.activeVault,
               let user = deps.session.currentUser else { return false }
         isSaving = true
         defer { isSaving = false }
@@ -68,7 +88,7 @@ final class ComposeViewModel {
             )
             return true
         } catch {
-            errorMessage = "Couldn't save the deposit: \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
             return false
         }
     }

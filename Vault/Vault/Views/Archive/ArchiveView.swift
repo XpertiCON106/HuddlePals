@@ -5,6 +5,8 @@ import SwiftUI
 /// you fall into.
 struct ArchiveView: View {
     @Environment(AppDependencies.self) private var deps
+    let vault: Vault
+
     @State private var viewModel: ArchiveViewModel?
 
     var body: some View {
@@ -17,7 +19,7 @@ struct ArchiveView: View {
         }
         .background(Theme.background)
         .onAppear {
-            if viewModel == nil { viewModel = ArchiveViewModel(deps: deps) }
+            if viewModel == nil { viewModel = ArchiveViewModel(deps: deps, vault: vault) }
         }
     }
 }
@@ -48,7 +50,7 @@ private struct ArchiveContent: View {
                         Section {
                             ForEach(month.days) { day in
                                 DayRow(day: day) { deposit in
-                                    router.archivePath.append(.depositDetail(deposit))
+                                    router.vaultsPath.append(.depositDetail(deposit))
                                 }
                             }
                         } header: {
@@ -74,7 +76,7 @@ private struct ArchiveContent: View {
             Task { await viewModel.refresh() }
         }
         .sheet(isPresented: $showBackfillCompose) {
-            ComposeView(targetDayKey: viewModel.backfillDayKey) { success in
+            ComposeView(vault: viewModel.vault, targetDayKey: viewModel.backfillDayKey) { success in
                 if success {
                     Task { await viewModel.refresh() }
                 }

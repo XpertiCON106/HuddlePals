@@ -7,16 +7,31 @@ import SwiftData
 final class User {
     @Attribute(.unique) var id: UUID
     var displayName: String
+    /// Identity color token: solid hex or "hex-hex" gradient (AvatarStyle).
     var avatarColorHex: String
+    /// Short bio, max 160 chars (enforced in UI + DB check).
+    var bio: String?
+    /// Up to 3 profile photos, Documents-relative cache paths
+    /// ("Media/avatars/<user_id>/<file>.jpg").
+    var profilePhotoPaths: [String] = []
     var joinedAt: Date
 
     @Relationship(deleteRule: .cascade, inverse: \Membership.user)
     var memberships: [Membership] = []
 
-    init(id: UUID = UUID(), displayName: String, avatarColorHex: String, joinedAt: Date = .now) {
+    init(
+        id: UUID = UUID(),
+        displayName: String,
+        avatarColorHex: String,
+        bio: String? = nil,
+        profilePhotoPaths: [String] = [],
+        joinedAt: Date = .now
+    ) {
         self.id = id
         self.displayName = displayName
         self.avatarColorHex = avatarColorHex
+        self.bio = bio
+        self.profilePhotoPaths = profilePhotoPaths
         self.joinedAt = joinedAt
     }
 

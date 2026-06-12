@@ -1,42 +1,124 @@
 import SwiftUI
+import UIKit
 
-/// Monochrome "gallery print" palette: warm paper background, true-white
-/// cards lifted by hairlines and soft shadows, ink-black type and actions,
-/// serif display headings. Photos are the only color in the app — the
-/// chrome stays black and white so the memories carry the room.
+/// Adaptive "gallery print" palette. Light: warm paper, true-white cards,
+/// ink actions. Dark: deep charcoal (never flat black), softly elevated
+/// surfaces, paper-white actions. Every constant is a dynamic color, so the
+/// whole app flips with the system (or the in-app appearance setting) with
+/// no per-view work. Member avatars carry the color; chrome stays neutral.
 enum Theme {
-    /// Warm paper — the canvas everything sits on.
-    static let background = Color(red: 0.980, green: 0.978, blue: 0.972)
-    /// True white — cards, fields, list rows. Lifts off the paper.
-    static let surface = Color.white
-    /// Pressed/recessed surfaces.
-    static let surfaceElevated = Color(red: 0.942, green: 0.940, blue: 0.933)
-    /// Ink — the single action color. Buttons, badges, highlights.
-    static let accent = Color(red: 0.086, green: 0.086, blue: 0.078)
-    static let textPrimary = Color(red: 0.102, green: 0.102, blue: 0.094)
-    static let textSecondary = Color(red: 0.478, green: 0.478, blue: 0.463)
-    /// The one permitted non-monochrome: a muted brick red, reserved for
-    /// destructive actions and errors.
-    static let destructive = Color(red: 0.62, green: 0.21, blue: 0.16)
+    private static func dynamic(
+        light: (CGFloat, CGFloat, CGFloat),
+        dark: (CGFloat, CGFloat, CGFloat)
+    ) -> Color {
+        Color(uiColor: UIColor { traits in
+            let rgb = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1)
+        })
+    }
 
-    /// Hairline strokes that define edges on white-on-paper layering.
-    static let hairline = Color.black.opacity(0.08)
-    /// Soft ambient card shadow.
-    static let shadow = Color.black.opacity(0.07)
+    /// Canvas: warm paper / deep charcoal.
+    static let background = dynamic(
+        light: (0.980, 0.978, 0.972),
+        dark: (0.090, 0.088, 0.082)
+    )
+    /// Cards, fields, list rows — lifted off the canvas.
+    static let surface = dynamic(
+        light: (1.0, 1.0, 1.0),
+        dark: (0.137, 0.134, 0.126)
+    )
+    /// Pressed / recessed surfaces.
+    static let surfaceElevated = dynamic(
+        light: (0.942, 0.940, 0.933),
+        dark: (0.190, 0.186, 0.176)
+    )
+    /// The single action color: ink on paper, paper on charcoal.
+    static let accent = dynamic(
+        light: (0.086, 0.086, 0.078),
+        dark: (0.952, 0.948, 0.938)
+    )
+    /// Text/icon color drawn on top of `accent` fills.
+    static let onAccent = dynamic(
+        light: (1.0, 1.0, 1.0),
+        dark: (0.090, 0.088, 0.082)
+    )
+    static let textPrimary = dynamic(
+        light: (0.102, 0.102, 0.094),
+        dark: (0.945, 0.941, 0.930)
+    )
+    static let textSecondary = dynamic(
+        light: (0.478, 0.478, 0.463),
+        dark: (0.604, 0.600, 0.584)
+    )
+    /// Muted brick red — destructive actions and errors only.
+    static let destructive = dynamic(
+        light: (0.62, 0.21, 0.16),
+        dark: (0.88, 0.42, 0.36)
+    )
+
+    /// Hairline edges that define layering in both modes.
+    static let hairline = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.09)
+            : UIColor(white: 0, alpha: 0.08)
+    })
+    /// Soft ambient card shadow (near-invisible in dark; surfaces carry depth).
+    static let shadow = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0, alpha: 0.30)
+            : UIColor(white: 0, alpha: 0.07)
+    })
 
     static let cardCornerRadius: CGFloat = 18
     static let screenPadding: CGFloat = 20
 
-    /// Display type is serif (New York) — the editorial, printed-album
-    /// voice of the app. Body text stays SF for crispness.
+    /// Display type is serif (New York); body stays SF.
     static func displayFont(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         .system(size: size, weight: weight, design: .serif)
     }
 }
 
+// MARK: - Appearance preference
+
+enum AppearancePreference: String, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    /// nil follows the device.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
+/// User-facing app settings, persisted across launches.
+@Observable
+final class AppearanceSettings {
+    private static let key = "vault.appearance"
+
+    var preference: AppearancePreference {
+        didSet { UserDefaults.standard.set(preference.rawValue, forKey: Self.key) }
+    }
+
+    init() {
+        preference = UserDefaults.standard.string(forKey: Self.key)
+            .flatMap(AppearancePreference.init(rawValue:)) ?? .system
+    }
+}
+
 extension View {
-    /// The signature surface treatment: white card on paper, hairline
-    /// edge, soft shadow. Used by every card-like component.
+    /// The signature surface: card on canvas, hairline edge, soft shadow.
     func cardSurface(cornerRadius: CGFloat = Theme.cardCornerRadius) -> some View {
         self
             .background(Theme.surface)
@@ -50,12 +132,12 @@ extension View {
 }
 
 extension Color {
-    /// "1A1A18" → Color. Falls back to ink for malformed input.
+    /// "FF5E5B" → Color. Falls back to a neutral for malformed input.
     init(hex: String) {
         var value: UInt64 = 0
         let cleaned = hex.trimmingCharacters(in: .alphanumerics.inverted)
         guard cleaned.count == 6, Scanner(string: cleaned).scanHexInt64(&value) else {
-            self = Theme.accent
+            self.init(white: 0.5)
             return
         }
         self.init(
@@ -66,12 +148,55 @@ extension Color {
     }
 }
 
-/// Avatar colors offered during onboarding/profile editing — an ink ramp,
-/// near-black to warm gray, so member identity reads in pure monochrome.
-/// All values stay dark enough for white initials.
+// MARK: - Avatar identity colors
+
+/// A member's identity color token: either a solid ("FF5E5B") or a gradient
+/// ("FF5E5B-FF9F1C"). Stored as-is in `avatarColorHex` locally and in the
+/// `profiles.avatar_color_hex` column, so the choice follows the user
+/// everywhere their name or avatar appears.
+enum AvatarStyle {
+    static func components(of token: String) -> [Color] {
+        let parts = token.split(separator: "-").map { Color(hex: String($0)) }
+        return parts.isEmpty ? [Color(white: 0.5)] : parts
+    }
+
+    /// Fill for avatars and large identity surfaces.
+    static func fill(for token: String) -> AnyShapeStyle {
+        let colors = components(of: token)
+        if colors.count >= 2 {
+            return AnyShapeStyle(
+                LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+        }
+        return AnyShapeStyle(colors[0])
+    }
+
+    /// Single representative color (tints, locked-card washes).
+    static func base(for token: String) -> Color {
+        components(of: token)[0]
+    }
+}
+
+/// Identity palette: bold saturated solids plus a few gradients. All dark
+/// enough for white initials, vivid in both light and dark mode.
 enum AvatarPalette {
-    static let hexes = [
-        "161614", "2B2B28", "403F3C", "555450",
-        "6A6964", "7E7D78", "343431", "4A4946",
+    static let solids = [
+        "E5484D", // coral red
+        "F76B15", // tangerine
+        "FFB224", // amber
+        "46A758", // leaf
+        "12A594", // teal
+        "0091FF", // azure
+        "6E56CF", // violet
+        "D6409F", // magenta
+        "E93D82", // rose
+        "5B5BD6", // indigo
     ]
+    static let gradients = [
+        "F76B15-E5484D", // sunset
+        "0091FF-6E56CF", // twilight
+        "12A594-46A758", // rainforest
+        "D6409F-FFB224", // pop
+    ]
+    static let hexes = solids + gradients
 }

@@ -3,7 +3,7 @@ import UIKit
 
 struct VaultSettingsView: View {
     @Environment(AppDependencies.self) private var deps
-    @Environment(\.dismiss) private var dismiss
+    @Environment(AppRouter.self) private var router
     let vault: Vault
 
     @State private var viewModel: VaultSettingsViewModel?
@@ -12,7 +12,7 @@ struct VaultSettingsView: View {
         Group {
             if let viewModel {
                 SettingsContent(viewModel: viewModel) {
-                    dismiss()
+                    router.popToVaultList()
                 }
             } else {
                 Color.clear
@@ -72,24 +72,29 @@ private struct SettingsContent: View {
     private var membersSection: some View {
         Section {
             ForEach(viewModel.memberships) { membership in
-                HStack(spacing: 12) {
-                    AvatarView(
-                        name: membership.user?.displayName ?? "?",
-                        colorHex: membership.user?.avatarColorHex ?? "888888",
-                        size: 34
-                    )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(membership.user?.displayName ?? "Former member")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text(membership.role.displayName)
-                            .font(.system(size: 12))
-                            .foregroundStyle(membership.role == .keeper ? Theme.accent : Theme.textSecondary)
+                UserLink(user: membership.user) {
+                    HStack(spacing: 12) {
+                        AvatarView(
+                            name: membership.user?.displayName ?? "?",
+                            colorHex: membership.user?.avatarColorHex ?? "888888",
+                            size: 34
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(membership.user?.displayName ?? "Former member")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text(membership.role.displayName)
+                                .font(.system(size: 12))
+                                .foregroundStyle(membership.role == .keeper ? Theme.accent : Theme.textSecondary)
+                        }
+                        Spacer()
+                        Label("\(membership.skipTokensRemaining)", systemImage: "ticket")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.textSecondary.opacity(0.6))
                     }
-                    Spacer()
-                    Label("\(membership.skipTokensRemaining)", systemImage: "ticket")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Theme.surface)
             }

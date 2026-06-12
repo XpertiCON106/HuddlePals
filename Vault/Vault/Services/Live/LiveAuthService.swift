@@ -79,12 +79,20 @@ final class LiveAuthService: AuthServiceProtocol {
         return user
     }
 
-    func updateProfile(user: User, displayName: String, avatarColorHex: String) async throws {
+    func updateProfile(
+        user: User,
+        displayName: String,
+        avatarColorHex: String,
+        bio: String?,
+        photoPaths: [String]
+    ) async throws {
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let dto = ProfileDTO(
             id: user.id,
             displayName: trimmed.isEmpty ? user.displayName : trimmed,
             avatarColorHex: avatarColorHex,
+            bio: AuthValidation.sanitizedBio(bio),
+            photoPaths: Array(photoPaths.prefix(AuthValidation.maxProfilePhotos)),
             createdAt: nil
         )
         let saved: [ProfileDTO] = try await client.upsert("profiles", values: dto, onConflict: "id")

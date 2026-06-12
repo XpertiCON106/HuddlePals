@@ -30,8 +30,8 @@ struct StreakResult: Equatable, Sendable {
 // MARK: - VaultEngine
 
 /// All vault business rules as pure functions: dayKey derivation, the
-/// reciprocity gate, group streak math, same-day replacement, and the
-/// backfill window. No SwiftData, no UIKit, no singletons — everything is
+/// reciprocity gate, group streak math, once-and-permanent deposits,
+/// the recovery window, and backfill. No SwiftData, no UIKit, no singletons — everything is
 /// injected so tests can pin the calendar and the clock.
 struct VaultEngine {
     static let captionLimit = 80
@@ -92,24 +92,20 @@ struct VaultEngine {
         }
     }
 
-    // MARK: Same-day replacement
+    // MARK: Permanence
 
-    /// One deposit per user per vault per dayKey: applying a new deposit
-    /// replaces any existing one for the same (vault, author, dayKey).
-    /// Returns the new set plus the id of the replaced deposit, if any.
-    func applying(
-        _ new: DepositSnapshot,
-        to deposits: [DepositSnapshot]
-    ) -> (deposits: [DepositSnapshot], replacedID: UUID?) {
-        let existing = deposits.first {
-            $0.id != new.id
-                && $0.vaultID == new.vaultID
-                && $0.authorID == new.authorID
-                && $0.dayKey == new.dayKey
+    /// Once-and-permanent: exactly one deposit per member per vault per
+    /// day, no retakes, no redos. Services must refuse a second deposit
+    /// for a dayKey this returns true for.
+    func hasDeposit(
+        vaultID: UUID,
+        authorID: UUID,
+        dayKey key: String,
+        in deposits: [DepositSnapshot]
+    ) -> Bool {
+        deposits.contains {
+            $0.vaultID == vaultID && $0.authorID == authorID && $0.dayKey == key
         }
-        var result = deposits.filter { $0.id != existing?.id }
-        result.append(new)
-        return (result, existing?.id)
     }
 
     // MARK: Streaks
@@ -158,6 +154,59 @@ struct VaultEngine {
             cursor = previous
         }
         return StreakResult(count: count, lastCompleteDayKey: lastComplete)
+    }
+
+    // MARK: Recovery window
+
+    /// A broken-but-recoverable streak. Exists from the moment a day ends
+    /// incomplete until 24h later (== the backfill deadline for that day):
+    /// if the missing members backfill within the window, the streak is
+    /// restored by the normal full-history recompute; when the window
+    /// expires, backfill becomes impossible and the reset is permanent.
+    struct StreakRecovery: Equatable, Sendable {
+        let brokenDayKey: String
+        let missingMemberIDs: Set<UUID>
+        /// When the window closes (brokenDay start + 48h).
+        let deadline: Date
+        /// What the streak becomes if recovery succeeds right now.
+        let recoverableStreak: Int
+    }
+
+    /// Non-nil while yesterday ended incomplete, the window is still open,
+    /// and there is actually a streak worth restoring.
+    func recovery(
+        memberIDs: Set<UUID>,
+        deposits: [DepositSnapshot],
+        skips: [String: Set<UUID>] = [:],
+        now: Date
+    ) -> StreakRecovery? {
+        guard let brokenKey = yesterdayKey(now: now),
+              !isDayComplete(dayKey: brokenKey, memberIDs: memberIDs, deposits: deposits, skips: skips),
+              let dayStart = date(fromDayKey: brokenKey)
+        else { return nil }
+        let deadline = dayStart.addingTimeInterval(Self.backfillWindow)
+        guard now < deadline else { return nil }
+
+        let covered = Set(deposits.lazy.filter { $0.dayKey == brokenKey }.map(\.authorID))
+            .union(skips[brokenKey] ?? [])
+        let missing = memberIDs.subtracting(covered)
+        guard !missing.isEmpty else { return nil }
+
+        // Streak as if the broken day were covered — only meaningful when
+        // the patched chain extends beyond the broken day itself.
+        var patched = skips
+        patched[brokenKey, default: []].formUnion(missing)
+        let restored = computeStreak(
+            memberIDs: memberIDs, deposits: deposits, skips: patched, now: now
+        ).count
+        guard restored >= 2 else { return nil }
+
+        return StreakRecovery(
+            brokenDayKey: brokenKey,
+            missingMemberIDs: missing,
+            deadline: deadline,
+            recoverableStreak: restored
+        )
     }
 
     // MARK: Backfill

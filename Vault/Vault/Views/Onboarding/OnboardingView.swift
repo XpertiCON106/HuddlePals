@@ -242,7 +242,7 @@ private struct CodeStep: View {
                 .padding(.vertical, 8)
                 .onChange(of: viewModel.codeInput) { _, newValue in
                     // Auto-submit the moment the sixth digit lands.
-                    if newValue.count == 6 {
+                    if newValue.count == 6, !viewModel.attemptsExhausted {
                         Task { await viewModel.verify() }
                     }
                 }
@@ -336,22 +336,8 @@ private struct ProfileStep: View {
                 )
                 .padding(.horizontal, 44)
 
-            HStack(spacing: 12) {
-                ForEach(AvatarPalette.hexes.prefix(6), id: \.self) { hex in
-                    Circle()
-                        .fill(Color(hex: hex))
-                        .frame(width: 32, height: 32)
-                        .overlay {
-                            if hex == viewModel.selectedColorHex {
-                                Circle().strokeBorder(.white, lineWidth: 2.5)
-                            }
-                        }
-                        .onTapGesture {
-                            viewModel.selectedColorHex = hex
-                            Haptics.light()
-                        }
-                }
-            }
+            ColorRampPicker(selection: $viewModel.selectedColorHex)
+                .padding(.horizontal, Theme.screenPadding)
 
             if let error = viewModel.errorMessage {
                 Text(error)

@@ -1,11 +1,23 @@
 import Foundation
 import SwiftData
 
+enum DepositError: LocalizedError {
+    case alreadyDepositedToday
+
+    var errorDescription: String? {
+        switch self {
+        case .alreadyDepositedToday:
+            "That day's photo is already in the vault. One a day — forever."
+        }
+    }
+}
+
 @MainActor
 protocol DepositServiceProtocol: AnyObject {
     func deposits(in vault: Vault) async throws -> [Deposit]
-    /// Creates a deposit for the given dayKey. A second deposit by the same
-    /// author in the same vault on the same day *replaces* the first.
+    /// Creates a deposit for the given dayKey. Once-and-permanent: throws
+    /// `DepositError.alreadyDepositedToday` if the author already has one
+    /// for that day. Deposits can never be edited, replaced, or deleted.
     @discardableResult
     func createDeposit(
         in vault: Vault,
@@ -47,14 +59,12 @@ final class MockDepositService: DepositServiceProtocol {
         caption: String?,
         dayKey: String
     ) async throws -> Deposit {
-        // TODO: BACKEND — upload the image to Supabase Storage, then insert
-        // the deposit row; the (vault, author, day_key) unique constraint
-        // makes the replacement an upsert.
-        if let replaced = vault.deposits.first(where: {
+        // Once-and-permanent: a day that already holds this member's photo
+        // is closed forever.
+        guard !vault.deposits.contains(where: {
             $0.author?.id == author.id && $0.dayKey == dayKey
-        }) {
-            media.deleteImage(at: replaced.localImagePath)
-            context.delete(replaced)
+        }) else {
+            throw DepositError.alreadyDepositedToday
         }
         let deposit = Deposit(
             vault: vault,

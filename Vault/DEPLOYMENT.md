@@ -31,6 +31,8 @@ seeded **mock** world. No code changes to switch.
      id (default `com.vaultapp.Vault`) to **Client IDs**. The native iOS
      flow needs no secret key.
 3. **Storage** → *New bucket* → name `deposits`, **Private** (not public).
+   (Profile photos live in the same bucket under `avatars/…` — the schema's
+   storage policies cover both namespaces; no second bucket needed.)
 4. **SQL Editor** → *New query* → paste the entire contents of
    [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates all
    seven tables, every RLS policy, the storage policies, and four RPCs
@@ -89,6 +91,10 @@ seeded **mock** world. No code changes to switch.
    permission prompt → a daily local reminder is now scheduled.
 
 ---
+
+> Already ran an earlier `schema.sql`? The bottom of the file carries a
+> commented idempotent migration block (profile columns, deposit
+> immutability, rebuilt storage policies) — run that instead of the file.
 
 ## Caveats you accepted by shipping this MVP
 

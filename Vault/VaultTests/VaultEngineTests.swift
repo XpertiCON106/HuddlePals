@@ -99,27 +99,87 @@ final class VaultEngineTests: XCTestCase {
         XCTAssertEqual(streak.lastCompleteDayKey, "2026-06-09")
     }
 
-    // MARK: 4. Same-day replacement
+    // MARK: 4. Once and permanent
 
-    func testSameDayReplacementDeposit() {
+    func testOnceAndPermanent() {
         let key = "2026-06-10"
-        let original = deposit(alice, key)
-        let bystander = deposit(bob, key)
-        let replacement = deposit(alice, key)
+        let existing = [deposit(alice, key), deposit(bob, key)]
 
-        let (result, replacedID) = engine.applying(replacement, to: [original, bystander])
+        // The services consult this before any insert: a second deposit for
+        // the same (vault, author, day) must be refused.
+        XCTAssertTrue(
+            engine.hasDeposit(vaultID: vaultID, authorID: alice, dayKey: key, in: existing)
+        )
+        XCTAssertFalse(
+            engine.hasDeposit(vaultID: vaultID, authorID: cleo, dayKey: key, in: existing),
+            "a member who hasn't posted is free to"
+        )
+        XCTAssertFalse(
+            engine.hasDeposit(vaultID: vaultID, authorID: alice, dayKey: "2026-06-11", in: existing),
+            "a new day is always open"
+        )
+        XCTAssertFalse(
+            engine.hasDeposit(vaultID: UUID(), authorID: alice, dayKey: key, in: existing),
+            "per-vault: the same day in another vault is independent"
+        )
+    }
 
-        XCTAssertEqual(replacedID, original.id)
-        XCTAssertEqual(result.count, 2, "one per user per vault per day")
-        let aliceDeposits = result.filter { $0.authorID == alice }
-        XCTAssertEqual(aliceDeposits.map(\.id), [replacement.id])
-        XCTAssertTrue(result.contains(bystander), "other members' deposits are untouched")
+    // MARK: Recovery window
 
-        // A different day is never a replacement.
-        let nextDay = deposit(alice, "2026-06-11")
-        let (twoDays, replaced) = engine.applying(nextDay, to: [original])
-        XCTAssertNil(replaced)
-        XCTAssertEqual(twoDays.count, 2)
+    func testRecoveryWindowOpensWhenStreakBreaks() {
+        // Streak through -3..-2, cleo missed yesterday (-1), today is the
+        // recovery window.
+        let now = date(2026, 6, 10, 9, 0)
+        let deposits = fullDays(offsets: -3...(-1), now: now, absent: [-1: cleo])
+
+        let recovery = engine.recovery(memberIDs: members, deposits: deposits, now: now)
+        XCTAssertNotNil(recovery)
+        XCTAssertEqual(recovery?.brokenDayKey, "2026-06-09")
+        XCTAssertEqual(recovery?.missingMemberIDs, [cleo])
+        XCTAssertEqual(
+            recovery?.recoverableStreak, 3,
+            "restoring yesterday revives the 2-day chain plus yesterday itself"
+        )
+        // Deadline is the end of the recovery day: brokenDay start + 48h.
+        XCTAssertEqual(
+            recovery?.deadline,
+            engine.date(fromDayKey: "2026-06-09")?.addingTimeInterval(48 * 3600)
+        )
+        // While the window is open the streak itself reads 0 — broken until
+        // recovered.
+        XCTAssertEqual(engine.computeStreak(memberIDs: members, deposits: deposits, now: now).count, 0)
+    }
+
+    func testRecoverySucceedsWithinWindow() {
+        let now = date(2026, 6, 10, 9, 0)
+        var deposits = fullDays(offsets: -3...(-1), now: now, absent: [-1: cleo])
+        // cleo backfills the broken day inside the window…
+        deposits.append(deposit(cleo, "2026-06-09"))
+        XCTAssertNil(
+            engine.recovery(memberIDs: members, deposits: deposits, now: now),
+            "no recovery banner once the day is complete again"
+        )
+        // …and the full-history recompute restores the streak.
+        XCTAssertEqual(engine.computeStreak(memberIDs: members, deposits: deposits, now: now).count, 3)
+        XCTAssertTrue(engine.canBackfill(dayKey: "2026-06-09", now: now), "the fix is a legal backfill")
+    }
+
+    func testRecoveryWindowExpiresPermanently() {
+        // Two days later: the window for 2026-06-09 has closed.
+        let later = date(2026, 6, 11, 9, 0)
+        let deposits = fullDays(offsets: -4...(-2), now: later, absent: [-2: cleo])
+        XCTAssertNil(engine.recovery(memberIDs: members, deposits: deposits, now: later))
+        XCTAssertFalse(
+            engine.canBackfill(dayKey: "2026-06-09", now: later),
+            "after expiry the broken day can never be filled — the reset is permanent"
+        )
+    }
+
+    func testNoRecoveryWithoutAPriorStreak() {
+        // Only yesterday exists and it's incomplete — nothing to restore.
+        let now = date(2026, 6, 10, 9, 0)
+        let deposits = fullDays(offsets: -1...(-1), now: now, absent: [-1: cleo])
+        XCTAssertNil(engine.recovery(memberIDs: members, deposits: deposits, now: now))
     }
 
     // MARK: 5. dayKey boundary behavior

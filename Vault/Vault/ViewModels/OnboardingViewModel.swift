@@ -57,7 +57,13 @@ final class OnboardingViewModel {
     var codeInput = ""
     private(set) var destination: OTPDestination?
     private(set) var resendSecondsRemaining = 0
+    /// Wrong-code guard: after 5 misses, verification locks until a fresh
+    /// code is requested.
+    private(set) var failedAttempts = 0
+    private(set) var attemptsExhausted = false
     private var cooldownTask: Task<Void, Never>?
+
+    static let maxCodeAttempts = 5
 
     // Profile step
     var displayName = ""
@@ -82,7 +88,7 @@ final class OnboardingViewModel {
         }
     }
 
-    var canVerify: Bool { codeInput.count == 6 && !isWorking }
+    var canVerify: Bool { codeInput.count == 6 && !isWorking && !attemptsExhausted }
 
     var canCompleteProfile: Bool {
         !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isWorking
@@ -145,6 +151,8 @@ final class OnboardingViewModel {
         do {
             try await deps.auth.requestCode(to: destination)
             codeInput = ""
+            failedAttempts = 0
+            attemptsExhausted = false
             startResendCooldown()
             Haptics.light()
         } catch {
@@ -159,10 +167,17 @@ final class OnboardingViewModel {
         defer { isWorking = false }
         do {
             let state = try await deps.auth.verifyCode(codeInput, for: destination)
+            failedAttempts = 0
             await handle(state)
         } catch {
             codeInput = ""
-            errorMessage = error.localizedDescription
+            failedAttempts += 1
+            if failedAttempts >= Self.maxCodeAttempts {
+                attemptsExhausted = true
+                errorMessage = "Too many attempts. Request a fresh code to continue."
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -170,6 +185,8 @@ final class OnboardingViewModel {
         step = .method
         codeInput = ""
         errorMessage = nil
+        failedAttempts = 0
+        attemptsExhausted = false
         cooldownTask?.cancel()
         resendSecondsRemaining = 0
     }
@@ -270,20 +287,10 @@ final class OnboardingViewModel {
         }
     }
 
-    /// Loads the user's vaults, then flips the session — RootView swaps to
-    /// the main app the moment currentUser is set.
+    /// Flips the session — RootView swaps to the main app the moment
+    /// currentUser is set; the vault list loads itself on appear.
     private func finishSignIn(_ user: User) async {
         Haptics.success()
-        do {
-            let vaults = try await deps.vaultService.vaults(for: user)
-            deps.session.activeVault = vaults.first
-            if let vault = vaults.first {
-                try? await deps.vaultService.recomputeStreak(for: vault, now: deps.dateProvider.now)
-            }
-        } catch {
-            // Vault loading is best-effort here; Home shows the no-vault
-            // state and the next refresh retries.
-        }
         deps.session.currentUser = user
     }
 

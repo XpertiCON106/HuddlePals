@@ -18,17 +18,18 @@ final class ArchiveViewModel {
     }
 
     private let deps: AppDependencies
+    let vault: Vault
     private(set) var months: [MonthSection] = []
     /// Non-nil when "add to yesterday" should be offered.
     private(set) var backfillDayKey: String?
 
-    init(deps: AppDependencies) {
+    init(deps: AppDependencies, vault: Vault) {
         self.deps = deps
+        self.vault = vault
     }
 
     func refresh() async {
-        guard let vault = deps.session.activeVault,
-              let user = deps.session.currentUser else {
+        guard let user = deps.session.currentUser else {
             months = []
             backfillDayKey = nil
             return

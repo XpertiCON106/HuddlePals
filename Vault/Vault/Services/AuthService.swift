@@ -38,7 +38,7 @@ enum AuthError: LocalizedError {
         switch self {
         case .invalidEmail: "That doesn't look like an email address."
         case .invalidPhone: "Use the full international format, like +14155550123."
-        case .invalidCode: "That code didn't match. Check it and try again."
+        case .invalidCode: "That code didn't match — or it expired. Check it or request a fresh one."
         case .notAuthenticated: "You're not signed in."
         case .provider(let message): message
         }
@@ -78,8 +78,28 @@ protocol AuthServiceProtocol: AnyObject {
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState
     /// Creates the profile for a freshly authenticated account.
     func completeProfile(displayName: String, avatarColorHex: String) async throws -> User
-    func updateProfile(user: User, displayName: String, avatarColorHex: String) async throws
+    /// Updates the editable profile: name, identity color, bio (≤160),
+    /// and up to 3 profile photo paths.
+    func updateProfile(
+        user: User,
+        displayName: String,
+        avatarColorHex: String,
+        bio: String?,
+        photoPaths: [String]
+    ) async throws
     func signOut() async throws
+}
+
+extension AuthValidation {
+    static let bioLimit = 160
+    static let maxProfilePhotos = 3
+
+    static func sanitizedBio(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(bioLimit))
+    }
 }
 
 // MARK: - Mock
@@ -163,10 +183,18 @@ final class MockAuthService: AuthServiceProtocol {
         return user
     }
 
-    func updateProfile(user: User, displayName: String, avatarColorHex: String) async throws {
+    func updateProfile(
+        user: User,
+        displayName: String,
+        avatarColorHex: String,
+        bio: String?,
+        photoPaths: [String]
+    ) async throws {
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { user.displayName = trimmed }
         user.avatarColorHex = avatarColorHex
+        user.bio = AuthValidation.sanitizedBio(bio)
+        user.profilePhotoPaths = Array(photoPaths.prefix(AuthValidation.maxProfilePhotos))
         try context.save()
     }
 

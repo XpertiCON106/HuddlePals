@@ -38,7 +38,6 @@ final class CreateVaultViewModel {
         do {
             let vault = try await deps.vaultService.createVault(name: name, emoji: emoji, keeper: user)
             createdVault = vault
-            deps.session.activeVault = vault
             Haptics.success()
         } catch {
             errorMessage = error.localizedDescription
@@ -64,6 +63,11 @@ final class JoinVaultViewModel {
 
     init(deps: AppDependencies) {
         self.deps = deps
+        // A vault://join/<code> link may have arrived before this screen.
+        if let pending = deps.session.pendingInviteCode {
+            code = pending
+            deps.session.pendingInviteCode = nil
+        }
     }
 
     func join() async {
@@ -74,7 +78,6 @@ final class JoinVaultViewModel {
         do {
             let vault = try await deps.vaultService.joinVault(inviteCode: code, user: user)
             joinedVault = vault
-            deps.session.activeVault = vault
             Haptics.success()
         } catch {
             errorMessage = error.localizedDescription
@@ -127,8 +130,6 @@ final class VaultSettingsViewModel {
         guard let user = deps.session.currentUser else { return }
         do {
             try await deps.vaultService.leaveVault(vault, user: user)
-            let remaining = try await deps.vaultService.vaults(for: user)
-            deps.session.activeVault = remaining.first
             didLeave = true
         } catch {
             errorMessage = error.localizedDescription

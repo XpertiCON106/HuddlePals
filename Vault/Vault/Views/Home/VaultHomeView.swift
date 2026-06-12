@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// The main screen. LOCKED: frosted grid of today's deposits + deposit CTA.
-/// UNLOCKED: today's deposits as a vertical feed.
+/// One vault's "Today". LOCKED: frosted grid of today's deposits + deposit
+/// CTA. UNLOCKED: today's deposits as a vertical feed. When yesterday broke
+/// the streak, the 24-hour recovery countdown sits at the top.
 struct VaultHomeView: View {
     @Environment(AppDependencies.self) private var deps
-    @Environment(AppRouter.self) private var router
+    let vault: Vault
+
     @State private var viewModel: VaultHomeViewModel?
 
     var body: some View {
@@ -17,7 +19,7 @@ struct VaultHomeView: View {
         }
         .background(Theme.background)
         .onAppear {
-            if viewModel == nil { viewModel = VaultHomeViewModel(deps: deps) }
+            if viewModel == nil { viewModel = VaultHomeViewModel(deps: deps, vault: vault) }
         }
     }
 }
@@ -28,71 +30,28 @@ private struct HomeContent: View {
     @Environment(\.scenePhase) private var scenePhase
     @Bindable var viewModel: VaultHomeViewModel
 
+    /// Identifiable wrapper so the recovery sheet can target yesterday.
+    private struct DayKeyTarget: Identifiable {
+        let key: String
+        var id: String { key }
+    }
+
+    @State private var recoveryTarget: DayKeyTarget?
+
     var body: some View {
-        Group {
-            if let vault = viewModel.vault {
-                vaultBody(vault)
-            } else {
-                NoVaultView()
-            }
-        }
-        .navigationTitle("")
-        .toolbar { toolbarContent }
-        .toolbarBackground(Theme.background, for: .navigationBar)
-        .task { await viewModel.refresh() }
-        .onChange(of: scenePhase) { _, phase in
-            // Pick up other members' deposits when returning to the app.
-            if phase == .active {
-                Task { await viewModel.refresh() }
-            }
-        }
-        .onChange(of: deps.debug.simulateNotPostedToday) {
-            Task { await viewModel.refresh() }
-        }
-        .onChange(of: deps.dateProvider.dayOffset) {
-            Task { await viewModel.refresh() }
-        }
-        .sheet(isPresented: $viewModel.showCompose) {
-            ComposeView { success in
-                if success {
-                    Task { await viewModel.handleDepositSuccess() }
-                }
-            }
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                if let vault = viewModel.vault {
-                    Button {
-                        router.todayPath.append(.vaultSettings(vault))
-                    } label: {
-                        Label("Vault Settings", systemImage: "gearshape")
-                    }
-                }
-                Button {
-                    router.todayPath.append(.createVault)
-                } label: {
-                    Label("Create a Vault", systemImage: "plus.circle")
-                }
-                Button {
-                    router.todayPath.append(.joinVault)
-                } label: {
-                    Label("Join a Vault", systemImage: "person.badge.plus")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(Theme.textSecondary)
-            }
-        }
-    }
-
-    private func vaultBody(_ vault: Vault) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                header(vault)
+                header
+
+                if let recovery = viewModel.recovery {
+                    RecoveryBanner(
+                        recovery: recovery,
+                        missingMembers: viewModel.recoveryMissingMembers,
+                        currentUserID: viewModel.currentUser?.id
+                    ) {
+                        recoveryTarget = DayKeyTarget(key: recovery.brokenDayKey)
+                    }
+                }
 
                 if viewModel.todayDeposits.isEmpty && !viewModel.isUnlocked {
                     firstToDepositState
@@ -114,12 +73,63 @@ private struct HomeContent: View {
             }
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.75), value: viewModel.isUnlocked)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { toolbarContent }
+        .toolbarBackground(Theme.background, for: .navigationBar)
+        .task { await viewModel.refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await viewModel.refresh() }
+            }
+        }
+        .onChange(of: deps.debug.simulateNotPostedToday) {
+            Task { await viewModel.refresh() }
+        }
+        .onChange(of: deps.dateProvider.dayOffset) {
+            Task { await viewModel.refresh() }
+        }
+        .sheet(isPresented: $viewModel.showCompose) {
+            ComposeView(vault: viewModel.vault) { success in
+                if success {
+                    Task { await viewModel.handleDepositSuccess() }
+                }
+            }
+        }
+        .sheet(item: $recoveryTarget) { target in
+            // Recovery: backfill the broken day within the 24h window.
+            ComposeView(vault: viewModel.vault, targetDayKey: target.key) { success in
+                if success {
+                    Task { await viewModel.handleDepositSuccess() }
+                }
+            }
+        }
     }
 
-    private func header(_ vault: Vault) -> some View {
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: 16) {
+                Button {
+                    router.vaultsPath.append(.archive(viewModel.vault))
+                } label: {
+                    Image(systemName: "archivebox")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Button {
+                    router.vaultsPath.append(.vaultSettings(viewModel.vault))
+                } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+        }
+    }
+
+    private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("\(vault.emoji) \(vault.name)")
+                Text("\(viewModel.vault.emoji) \(viewModel.vault.name)")
                     .font(Theme.displayFont(28))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
@@ -188,7 +198,7 @@ private struct HomeContent: View {
             } else {
                 ForEach(viewModel.todayDeposits) { deposit in
                     Button {
-                        router.todayPath.append(.depositDetail(deposit))
+                        router.vaultsPath.append(.depositDetail(deposit))
                     } label: {
                         DepositCard(deposit: deposit)
                     }
@@ -206,16 +216,74 @@ private struct HomeContent: View {
                 }
                 .padding(.top, 2)
             }
-
-            Button {
-                viewModel.showCompose = true
-            } label: {
-                Label("Replace today's photo", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            .padding(.top, 4)
         }
+    }
+}
+
+// MARK: - Recovery banner
+
+/// The streak broke yesterday, but it isn't gone yet: a 24-hour window is
+/// running. Live countdown, who's missing, and — if the current user is
+/// one of them — the way back in.
+private struct RecoveryBanner: View {
+    let recovery: VaultEngine.StreakRecovery
+    let missingMembers: [User]
+    let currentUserID: UUID?
+    let onRecover: () -> Void
+
+    private var currentUserIsMissing: Bool {
+        guard let currentUserID else { return false }
+        return recovery.missingMemberIDs.contains(currentUserID)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "bolt.heart.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Theme.destructive)
+                    .symbolEffect(.pulse)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Streak on the line")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("Save the \(recovery.recoverableStreak)-day streak before the window closes.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Spacer()
+                Text(timerInterval: Date()...recovery.deadline, countsDown: true)
+                    .font(.system(size: 17, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Theme.destructive)
+                    .monospacedDigit()
+            }
+
+            HStack(spacing: 8) {
+                AvatarStack(users: missingMembers, size: 22)
+                Text(missingLine)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                if currentUserIsMissing {
+                    Button("Post yesterday's") {
+                        onRecover()
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                }
+            }
+        }
+        .padding(14)
+        .cardSurface()
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                .strokeBorder(Theme.destructive.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private var missingLine: String {
+        let names = missingMembers.map(\.displayName).joined(separator: ", ")
+        return names.isEmpty ? "Waiting on yesterday's photos" : "Missing yesterday: \(names)"
     }
 }
 
@@ -253,30 +321,5 @@ private struct UnlockRevealOverlay: View {
                 onFinished()
             }
         }
-    }
-}
-
-// MARK: - No vault
-
-private struct NoVaultView: View {
-    @Environment(AppRouter.self) private var router
-
-    var body: some View {
-        VStack(spacing: 20) {
-            EmptyVaultState(
-                systemImage: "shippingbox",
-                title: "No vault yet",
-                message: "A vault is a small, private group — create one or join with an invite code."
-            )
-            PrimaryButton(title: "Create a Vault", systemImage: "plus") {
-                router.todayPath.append(.createVault)
-            }
-            Button("Join with a code") {
-                router.todayPath.append(.joinVault)
-            }
-            .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(Theme.accent)
-        }
-        .padding(Theme.screenPadding)
     }
 }

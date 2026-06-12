@@ -50,18 +50,22 @@ private struct DetailContent: View {
                 }
 
                 HStack(spacing: 10) {
-                    AvatarView(
-                        name: deposit.author?.displayName ?? "?",
-                        colorHex: deposit.author?.avatarColorHex ?? "888888",
-                        size: 34
-                    )
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(deposit.author?.displayName ?? "Former member")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text(deposit.createdAt, format: .dateTime.weekday(.wide).month().day().hour().minute())
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.textSecondary)
+                    UserLink(user: deposit.author) {
+                        HStack(spacing: 10) {
+                            AvatarView(
+                                name: deposit.author?.displayName ?? "?",
+                                colorHex: deposit.author?.avatarColorHex ?? "888888",
+                                size: 34
+                            )
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(deposit.author?.displayName ?? "Former member")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(Theme.textPrimary)
+                                Text(deposit.createdAt, format: .dateTime.weekday(.wide).month().day().hour().minute())
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
                     }
                     Spacer()
                 }
@@ -126,11 +130,13 @@ private struct DetailContent: View {
             } else {
                 ForEach(viewModel.sortedComments) { comment in
                     HStack(alignment: .top, spacing: 10) {
-                        AvatarView(
-                            name: comment.user?.displayName ?? "?",
-                            colorHex: comment.user?.avatarColorHex ?? "888888",
-                            size: 26
-                        )
+                        UserLink(user: comment.user) {
+                            AvatarView(
+                                name: comment.user?.displayName ?? "?",
+                                colorHex: comment.user?.avatarColorHex ?? "888888",
+                                size: 26
+                            )
+                        }
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: 8) {
                                 Text(comment.user?.displayName ?? "Former member")

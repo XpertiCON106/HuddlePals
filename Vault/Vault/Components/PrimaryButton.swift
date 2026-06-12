@@ -14,7 +14,7 @@ struct PrimaryButton: View {
             HStack(spacing: 8) {
                 if isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(Theme.onAccent)
                 } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 17, weight: .semibold))
@@ -22,7 +22,7 @@ struct PrimaryButton: View {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(

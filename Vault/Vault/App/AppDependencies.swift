@@ -10,7 +10,9 @@ import SwiftData
 @Observable
 final class AppSession {
     var currentUser: User?
-    var activeVault: Vault?
+    /// Invite code arriving via a vault://join/<code> link, consumed by the
+    /// Join screen.
+    var pendingInviteCode: String?
     /// Authenticated but never finished the profile step — onboarding
     /// resumes there instead of at sign-in.
     var needsProfileSetup = false
@@ -43,6 +45,7 @@ final class AppDependencies {
     let dateProvider: AppDateProvider
     let session: AppSession
     let debug: DebugSettings
+    let appearance: AppearanceSettings
 
     let auth: any AuthServiceProtocol
     let vaultService: any VaultServiceProtocol
@@ -58,6 +61,7 @@ final class AppDependencies {
         dateProvider: AppDateProvider,
         session: AppSession,
         debug: DebugSettings,
+        appearance: AppearanceSettings = AppearanceSettings(),
         auth: any AuthServiceProtocol,
         vaultService: any VaultServiceProtocol,
         depositService: any DepositServiceProtocol,
@@ -71,6 +75,7 @@ final class AppDependencies {
         self.dateProvider = dateProvider
         self.session = session
         self.debug = debug
+        self.appearance = appearance
         self.auth = auth
         self.vaultService = vaultService
         self.depositService = depositService

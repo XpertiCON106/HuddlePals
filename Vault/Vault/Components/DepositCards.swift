@@ -57,14 +57,18 @@ struct DepositCard: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
-                    AvatarView(
-                        name: deposit.author?.displayName ?? "?",
-                        colorHex: deposit.author?.avatarColorHex ?? "888888",
-                        size: 30
-                    )
-                    Text(deposit.author?.displayName ?? "Former member")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                    UserLink(user: deposit.author) {
+                        HStack(spacing: 10) {
+                            AvatarView(
+                                name: deposit.author?.displayName ?? "?",
+                                colorHex: deposit.author?.avatarColorHex ?? "888888",
+                                size: 30
+                            )
+                            Text(deposit.author?.displayName ?? "Former member")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                        }
+                    }
                     Spacer()
                     Text(deposit.createdAt, format: .dateTime.hour().minute())
                         .font(.system(size: 13))

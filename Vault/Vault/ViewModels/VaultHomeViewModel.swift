@@ -5,18 +5,21 @@ import Observation
 @Observable
 final class VaultHomeViewModel {
     private let deps: AppDependencies
+    let vault: Vault
 
     private(set) var todayDeposits: [Deposit] = []
     private(set) var isUnlocked = false
     private(set) var streakCount = 0
     private(set) var members: [User] = []
+    /// Non-nil while yesterday broke the streak and the 24h recovery
+    /// window is still open.
+    private(set) var recovery: VaultEngine.StreakRecovery?
     /// Set for one render cycle when a deposit flips the gate open, to
     /// drive the lock-opening reveal.
     private(set) var playUnlockReveal = false
 
     var showCompose = false
 
-    var vault: Vault? { deps.session.activeVault }
     var currentUser: User? { deps.session.currentUser }
 
     var todayKey: String {
@@ -29,15 +32,23 @@ final class VaultHomeViewModel {
         return members.filter { !depositedIDs.contains($0.id) }
     }
 
-    init(deps: AppDependencies) {
+    /// Members still missing from the broken day, resolved to users.
+    var recoveryMissingMembers: [User] {
+        guard let recovery else { return [] }
+        return members.filter { recovery.missingMemberIDs.contains($0.id) }
+    }
+
+    init(deps: AppDependencies, vault: Vault) {
         self.deps = deps
+        self.vault = vault
     }
 
     func refresh() async {
-        guard let vault, let user = currentUser else {
+        guard let user = currentUser else {
             todayDeposits = []
             members = []
             isUnlocked = false
+            recovery = nil
             return
         }
         do {
@@ -48,23 +59,31 @@ final class VaultHomeViewModel {
                 .sorted { $0.createdAt < $1.createdAt }
             members = vault.members
 
+            let snapshots = all.compactMap(\.snapshot)
             let gateOpen = deps.engine.isUnlocked(
                 vaultID: vault.id,
                 currentUserID: user.id,
-                deposits: all.compactMap(\.snapshot),
+                deposits: snapshots,
                 now: deps.dateProvider.now
             )
             // DEBUG override demos the locked state on demand.
             isUnlocked = gateOpen && !deps.debug.simulateNotPostedToday
             streakCount = vault.streakCount
+
+            let skips = (try? await deps.vaultService.skipRecords(for: vault)) ?? [:]
+            recovery = deps.engine.recovery(
+                memberIDs: Set(members.map(\.id)),
+                deposits: snapshots,
+                skips: skips,
+                now: deps.dateProvider.now
+            )
         } catch {
-            // Mock services can't realistically fail here; keep last state.
+            // Pull-based refresh: keep last state on transient failure.
         }
     }
 
     /// Called when Compose succeeds: recompute streak, reveal, celebrate.
     func handleDepositSuccess() async {
-        guard let vault else { return }
         let wasLocked = !isUnlocked
         deps.debug.simulateNotPostedToday = false
         try? await deps.vaultService.recomputeStreak(for: vault, now: deps.dateProvider.now)

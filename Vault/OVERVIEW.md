@@ -12,7 +12,7 @@ This document is the single place to understand everything: the product, the rul
 | State | `@Observable` (Observation framework), no Combine |
 | Backends | Mock (seeded offline demo) and Live (Supabase) behind identical protocols |
 | Auth | Sign in with Apple, email + SMS 6-digit codes (mock code: `123456`) |
-| Design | Monochrome "gallery print": paper white, ink black, serif display type |
+| Design | Adaptive "gallery print": paper + ink in light, deep charcoal + paper-white in dark; system-following with in-app override |
 | Tests | `VaultEngine` covered by deterministic XCTests (⌘U) |
 
 ---
@@ -40,7 +40,7 @@ This document is the single place to understand everything: the product, the rul
 
 ## 1. What Vault is
 
-A vault is a private group of 2–8 people — a family, a couple, a friend group. Every member deposits exactly one photo per day. The hook is the **reciprocity gate**: you can see *that* your people posted today (frosted cards with their names), but not *what* — until you deposit your own. Past days are always open, like a shared album the group binds one page at a time.
+A vault is a private group of 2–8 people — and you can belong to **many vaults at once**: one with your family, one with your best friends. Each vault tracks its own photos, members, and streak independently. Every member deposits exactly one photo per day per vault. The hook is the **reciprocity gate**: you can see *that* your people posted today (frosted cards with their names), but not *what* — until you deposit your own. Past days are always open, like a shared album the group binds one page at a time.
 
 The daily loop:
 
@@ -63,7 +63,7 @@ All rules live in one pure-logic file, [`VaultEngine.swift`](Vault/Engine/VaultE
 
 **dayKey.** Every deposit is stamped with the calendar day in the device's timezone, formatted `"yyyy-MM-dd"`. Lexicographic order equals chronological order. A photo at 23:59 belongs to that day; 00:01 starts a new locked day.
 
-**One per day.** One deposit per member per vault per dayKey. A second deposit the same day *replaces* the first (locally: delete-then-insert; server: an upsert on the unique constraint, atomically, keeping the same row id).
+**Once and permanent.** One deposit per member per vault per dayKey — a single post behind a "This is permanent — post it?" confirmation. No retakes, no edits, no deletes, ever: both backends refuse a second deposit for the same day, and the database carries no update/delete policies on deposits at all.
 
 **The reciprocity gate.** Today is unlocked for you ⟺ a deposit exists with your author id and today's dayKey in this vault. Nothing else opens it — not others' deposits, not yesterday's deposit. While locked, today's cards show the author's name and avatar over a frosted stand-in; the actual image bytes are deliberately never loaded. The gate only ever applies to *today*.
 
@@ -78,41 +78,47 @@ Worked example (the seeded world, streak = 6):
 
 A subtle consequence, verified by test: if yesterday broke the streak but *today* is already complete, the streak is 1 — a new chain starts immediately.
 
-**Backfill.** A past day can receive a deposit within 48 hours of that day's start — in practice, yesterday. The Archive tab surfaces this as "Add to yesterday". In this MVP a backfill does not *specially* repair streaks, but since streaks are recomputed over full history, a backfilled day is naturally seen on the next recompute (documented in `testBackfillDoesNotRepairBrokenStreak`).
+**The recovery window.** When a day ends incomplete, the streak reads 0 — but it isn't dead yet. A 24-hour window runs until the end of the following day (brokenDayStart + 48h): the vault's home screen shows a live countdown and who's missing, and if those members backfill the broken day in time, the next recompute restores the full streak. When the window closes, backfill becomes impossible and the reset is permanent. (`VaultEngine.recovery(...)`, covered by four dedicated tests.)
+
+**Backfill.** A past day can receive a deposit within 48 hours of that day's start — in practice, yesterday. Surfaced in the Archive and by the recovery banner.
 
 **Invite codes.** 6 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` — ambiguous glyphs (0/O, 1/I/L) excluded. Server-generated and uniqueness-checked in live mode. The seeded vault's code is `CREW42`.
 
 **Captions.** Optional, hard-capped at 80 characters (enforced in the UI field, the engine sanitizer, and the database constraint).
 
-## 3. The nine screens
+## 3. The screens
 
 ```mermaid
 flowchart TD
-    Root[RootView<br>splash → route] --> OB[Onboarding<br>4 steps]
+    Root[RootView<br>launch reveal → route] --> OB[Onboarding<br>4 steps]
     Root --> Tabs{{Tab bar}}
-    Tabs --> Home[1. Vault Home / Today]
-    Tabs --> Arch[2. Archive]
-    Tabs --> Prof[3. Profile]
-    Home -- sheet --> Compose[Compose]
+    Tabs --> List[1. Vaults shelf]
+    Tabs --> Prof[2. Your profile]
+    List --> Home[Vault Home / Today]
+    List --> Create[Create Vault]
+    List --> Join[Join Vault]
+    Home -- sheet --> Compose[Compose<br>pick → confirm]
+    Home --> Arch[Archive]
     Home --> Detail[Deposit Detail]
-    Home -- menu --> Settings[Vault Settings]
-    Home -- menu --> Create[Create Vault]
-    Home -- menu --> Join[Join Vault]
+    Home --> Settings[Vault Settings]
     Arch --> Detail
-    Arch -- backfill sheet --> Compose
+    Detail -- tap a name --> UP[Member profile]
+    Settings -- tap a member --> UP
 ```
 
 | Screen | What it does |
 |---|---|
 | **Onboarding** | Three concept cards → sign-in method (Apple / email / phone) → 6-digit code → profile (name + avatar ink). Returning accounts skip the profile step. |
-| **Vault Home (Today)** | The main screen. Serif vault name, member avatar stack, streak badge. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards, "waiting on…" row, replace-photo action. Distinct empty state when nobody has posted. |
-| **Compose** (sheet) | Photo picker opens immediately (camera button routes here too — single ingest path), caption with live 80-char counter, Deposit. Success plays the lock-opening spring + haptic. Also serves backfill with a "Deposit to yesterday" title. |
+| **Vaults shelf** | Every vault you belong to: emoji, name, member stack, streak, lock state, "N waiting for you". Tap to step inside; create/join from the toolbar. |
+| **Vault Home (Today)** | One vault's day. Serif vault name, member stack, streak badge, and — when a streak just broke — the 24h recovery banner with a live countdown. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards + "waiting on…" row. |
+| **Compose** (sheet) | Two stages: pick (photo opens immediately, caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
 | **Archive** | Full history: month headers → day rows → horizontal photo strips. Today appears only once unlocked. Pull-to-refresh. Backfill banner when eligible. |
 | **Deposit Detail** | Framed photo, caption, author, date, 5-emoji reaction row (tap toggles yours), comment thread + input bar. |
-| **Create Vault** | Name + emoji picker → server-generated invite code → ShareLink with stub deep link `vault://join/{code}`. |
+| **Create Vault** | Name + emoji picker → server-generated invite code → ShareLink with a working `vault://join/{code}` deep link (the app registers the scheme and prefills Join). |
 | **Join Vault** | 6-char code entry with error states (not found / already member / vault full). |
 | **Vault Settings** | Members with roles + skip tokens, streak detail, daily reminder hour (schedules a real local notification in live builds), invite code with copy, leave vault (destructive, confirmed). |
-| **Profile** | Name + avatar ink editing, sign out (confirmed), version — and in mock mode only, the DEBUG section. |
+| **Your profile** | Up to 3 profile photos, display name, 160-char bio, vibrant identity color (solids + gradients), light/dark appearance picker, sign out (confirmed) — and in mock mode only, the DEBUG section. |
+| **Member profile** | Opened by tapping any name or avatar anywhere: swipeable photo pager, bio, and the vaults + streaks you share with them. |
 
 ## 4. Architecture
 
@@ -321,14 +327,14 @@ The Swift side talks to all of this through [`SupabaseClient`](Vault/Services/Li
 
 ## 11. Design system
 
-Monochrome "gallery print," defined entirely in [Support/Theme.swift](Vault/Support/Theme.swift):
+Adaptive "gallery print," defined entirely in [Support/Theme.swift](Vault/Support/Theme.swift) as dynamic colors — every screen is intentional in both modes:
 
-- **Canvas**: warm paper (`#FAFAF8`-ish) background; true-white cards lifted by 1px hairline borders + soft shadows (`.cardSurface()` is the reusable treatment).
-- **Ink**: one near-black for text, buttons, badges, highlights. The only non-monochrome color is a muted brick red reserved for destructive actions and errors.
-- **Type**: New York serif for display moments (vault name, onboarding titles, archive months — `Theme.displayFont`); SF for everything else; monospaced for codes.
-- **Identity**: avatars use an 8-step ink ramp (`AvatarPalette`) so member colors stay strictly black-and-white. **Photos are the only color in the app** — by design, they read like prints in a gallery.
-- **Signature motion**: the lock→unlock spring reveal with a heavy-impact-then-success haptic ([Support/Haptics.swift](Vault/Support/Haptics.swift)).
-- The app icon (ink vault wheel on paper) is generated by [tools/generate_icon.swift](tools/generate_icon.swift) — vector-drawn, 1024×1024, opaque, App Store-compliant.
+- **Light**: warm paper canvas, true-white cards, ink-black actions. **Dark**: deep charcoal (never flat pure black), softly elevated card surfaces, paper-white actions, hairlines flipped to white-alpha. `Theme.onAccent` keeps button labels legible on either accent.
+- **Appearance control**: follows the device by default; a System/Light/Dark picker lives in Profile (`AppearanceSettings`, persisted, applied via `.preferredColorScheme`).
+- **Type**: New York serif for display moments; SF for everything else; monospaced for codes and countdowns.
+- **Identity color**: each member picks from a vibrant palette — 10 saturated solids plus 4 gradients — stored as a token ("`FF5E5B`" or "`F76B15-E5484D`") that follows them everywhere (`AvatarStyle`). Chrome stays neutral; members and photos carry the color.
+- **Micro-animations throughout**: the launch dial reveal, the lock→unlock spring with layered haptics, swatch selection springs, card transitions, the pulsing recovery countdown, animated streak numerals.
+- The app icon (ink vault wheel) is generated by [tools/generate_icon.swift](tools/generate_icon.swift) — vector-drawn, 1024×1024, opaque, App Store-compliant.
 
 No red badges, no infinite scroll, no engagement tricks.
 
@@ -336,7 +342,7 @@ No red badges, no infinite scroll, no engagement tricks.
 
 First launch (mock mode) builds a complete demo world ([Seeding/SeedDataService.swift](Vault/Seeding/SeedDataService.swift)):
 
-- Vault **"The Crew" 🏔**, invite code `CREW42`, four members: You (keeper), Maya, Sam, Riley.
+- Two vaults: **"The Crew" 🏔** (code `CREW42` — You as keeper, Maya, Sam, Riley) and **"Sunday Dinners" 🍝** (code `PASTA7` — You + Maya), so the multi-vault shelf is alive from the first second. Members have bios, profile photos, and vibrant identity colors.
 - 30 days of history with deliberate texture: misses at day −24 (Riley) and −7 (Maya) that reset the streak, a skip-token save at day −14 (Sam, who therefore has 1 token left), reactions and comments on yesterday. Net seeded streak: **6**.
 - ~100 placeholder photos generated on-device (gradient + SF Symbol via `UIGraphicsImageRenderer`) — no bundled assets, no network.
 - Today: Maya, Sam, and Riley have posted; **you haven't** — so the app opens straight into the LOCKED state and the core mechanic is visible within the first second.

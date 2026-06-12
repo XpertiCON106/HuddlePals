@@ -1,14 +1,19 @@
 -- Vault — Supabase schema, RLS, and RPCs.
 -- Run this whole file once in the Supabase SQL editor (Dashboard → SQL → New query).
--- Prereqs (Dashboard): Auth → Sign In / Up → enable "Anonymous sign-ins".
---                      Storage → create PRIVATE bucket named "deposits".
+-- Prereqs (Dashboard): Auth providers per DEPLOYMENT.md (email template
+-- with {{ .Token }}, Apple client id, optional Twilio for SMS), and
+-- Storage → create PRIVATE bucket named "deposits".
 
 -- ============================================================ tables
 
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   display_name text not null check (char_length(display_name) between 1 and 40),
-  avatar_color_hex text not null default 'E8A33D',
+  -- Identity color token: solid hex or "hex-hex" gradient.
+  avatar_color_hex text not null default 'E5484D',
+  bio text check (bio is null or char_length(bio) <= 160),
+  -- Up to 3 profile photo storage paths ("avatars/<user_id>/<file>.jpg").
+  photo_paths jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -41,8 +46,8 @@ create table public.deposits (
   caption text check (caption is null or char_length(caption) <= 80),
   day_key text not null check (day_key ~ '^\d{4}-\d{2}-\d{2}$'),
   created_at timestamptz not null default now(),
-  -- One deposit per member per vault per day; the client upserts on this
-  -- constraint, which is what makes same-day replacement atomic.
+  -- Once-and-permanent: one deposit per member per vault per day; a second
+  -- insert fails atomically on this constraint.
   unique (vault_id, author_id, day_key)
 );
 
@@ -150,10 +155,9 @@ create policy deposits_insert on public.deposits for insert
     and day_key >= to_char(now() - interval '2 days', 'YYYY-MM-DD')
     and day_key <= to_char(now() + interval '1 day',  'YYYY-MM-DD')
   );
-create policy deposits_update on public.deposits for update
-  using (author_id = auth.uid());          -- same-day replacement upsert
-create policy deposits_delete on public.deposits for delete
-  using (author_id = auth.uid());
+-- Once-and-permanent: deliberately NO update and NO delete policies on
+-- deposits. Even a hacked client cannot edit, replace, or remove a photo
+-- after it is posted.
 
 -- reactions / comments: visible with the deposit; you manage your own.
 create policy reactions_select on public.reactions for select
@@ -282,14 +286,63 @@ begin
 end $$;
 
 -- ======================================================= storage RLS
--- Bucket "deposits" (private). Object paths are "<vault_id>/<file>.jpg",
--- so the first path folder gates access by vault membership.
+-- One private bucket, "deposits", with two path namespaces:
+--   "<vault_id>/<file>.jpg"          → vault photos, gated by membership
+--   "avatars/<user_id>/<file>.jpg"   → profile photos: any signed-in user
+--                                      may view; only the owner may write.
+
+-- Safe uuid cast: the avatars namespace would otherwise crash the
+-- vault-membership check ('avatars'::uuid raises).
+create or replace function public.try_uuid(t text)
+returns uuid
+language plpgsql immutable as $$
+begin
+  return t::uuid;
+exception when others then
+  return null;
+end $$;
 
 create policy deposits_storage_read on storage.objects for select
-  using (bucket_id = 'deposits' and is_vault_member(((storage.foldername(name))[1])::uuid));
+  using (
+    bucket_id = 'deposits' and (
+      (storage.foldername(name))[1] = 'avatars'
+      or (
+        try_uuid((storage.foldername(name))[1]) is not null
+        and is_vault_member(try_uuid((storage.foldername(name))[1]))
+      )
+    )
+  );
 
 create policy deposits_storage_insert on storage.objects for insert
-  with check (bucket_id = 'deposits' and is_vault_member(((storage.foldername(name))[1])::uuid));
+  with check (
+    bucket_id = 'deposits' and (
+      (
+        (storage.foldername(name))[1] = 'avatars'
+        and (storage.foldername(name))[2] = auth.uid()::text
+      )
+      or (
+        try_uuid((storage.foldername(name))[1]) is not null
+        and is_vault_member(try_uuid((storage.foldername(name))[1]))
+      )
+    )
+  );
 
 create policy deposits_storage_update on storage.objects for update
-  using (bucket_id = 'deposits' and is_vault_member(((storage.foldername(name))[1])::uuid));
+  using (
+    bucket_id = 'deposits'
+    and (storage.foldername(name))[1] = 'avatars'
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+-- ============================================ already ran an older schema?
+-- Idempotent migration for databases created before profiles/permanence:
+--   alter table public.profiles add column if not exists bio text
+--     check (bio is null or char_length(bio) <= 160);
+--   alter table public.profiles add column if not exists photo_paths jsonb
+--     not null default '[]'::jsonb;
+--   drop policy if exists deposits_update on public.deposits;
+--   drop policy if exists deposits_delete on public.deposits;
+--   drop policy if exists deposits_storage_read on storage.objects;
+--   drop policy if exists deposits_storage_insert on storage.objects;
+--   drop policy if exists deposits_storage_update on storage.objects;
+--   -- then re-run the "storage RLS" section above (and create try_uuid).

@@ -8,6 +8,8 @@ struct ProfileDTO: Codable {
     let id: UUID
     var displayName: String
     var avatarColorHex: String
+    var bio: String?
+    var photoPaths: [String]?
     var createdAt: Date?
 }
 

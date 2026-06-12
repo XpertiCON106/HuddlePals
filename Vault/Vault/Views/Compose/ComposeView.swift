@@ -1,12 +1,14 @@
 import SwiftUI
 import PhotosUI
 
-/// The deposit sheet. Target: under 15 seconds — pick, optionally caption,
-/// deposit. Also serves backfill ("add to yesterday") from the archive.
+/// The deposit sheet, in two stages: pick a photo, then face the
+/// permanence gate — "This is permanent — post it?" Once posted, the photo
+/// can never be deleted, edited, or replaced.
 struct ComposeView: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(\.dismiss) private var dismiss
 
+    let vault: Vault
     var targetDayKey: String?
     /// Called with `true` after a successful deposit, after dismissal.
     var onComplete: (Bool) -> Void = { _ in }
@@ -27,7 +29,7 @@ struct ComposeView: View {
                 }
             }
             .background(Theme.background)
-            .navigationTitle(viewModel?.isBackfill == true ? "Add to yesterday" : "Today's deposit")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -41,11 +43,17 @@ struct ComposeView: View {
         }
         .onAppear {
             if viewModel == nil {
-                viewModel = ComposeViewModel(deps: deps, targetDayKey: targetDayKey)
+                viewModel = ComposeViewModel(deps: deps, vault: vault, targetDayKey: targetDayKey)
                 // Friction killer: open the picker immediately.
                 showPicker = true
             }
         }
+    }
+
+    private var navigationTitle: String {
+        guard let viewModel else { return "" }
+        if viewModel.stage == .confirm { return "Last look" }
+        return viewModel.isBackfill ? "Yesterday's photo" : "Today's deposit"
     }
 }
 
@@ -57,6 +65,21 @@ private struct ComposeContent: View {
     @FocusState private var captionFocused: Bool
 
     var body: some View {
+        Group {
+            switch viewModel.stage {
+            case .pick:
+                pickStage
+            case .confirm:
+                confirmStage
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewModel.stage)
+        .photosPicker(isPresented: $showPicker, selection: $viewModel.photoItem, matching: .images)
+    }
+
+    // MARK: Stage 1 — pick
+
+    private var pickStage: some View {
         VStack(spacing: 18) {
             photoArea
                 .padding(.top, 12)
@@ -68,26 +91,21 @@ private struct ComposeContent: View {
                 Text(error)
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.destructive)
+                    .multilineTextAlignment(.center)
             }
 
             Spacer()
 
             PrimaryButton(
-                title: viewModel.isBackfill ? "Deposit to yesterday" : "Deposit",
-                systemImage: "lock.open.fill",
-                isLoading: viewModel.isSaving,
-                isEnabled: viewModel.canDeposit
+                title: "Continue",
+                systemImage: "arrow.right",
+                isEnabled: viewModel.canContinue
             ) {
                 captionFocused = false
-                Task {
-                    if await viewModel.deposit() {
-                        onSuccess()
-                    }
-                }
+                viewModel.continueToConfirm()
             }
         }
         .padding(Theme.screenPadding)
-        .photosPicker(isPresented: $showPicker, selection: $viewModel.photoItem, matching: .images)
     }
 
     private var photoArea: some View {
@@ -107,7 +125,7 @@ private struct ComposeContent: View {
                         Button {
                             showPicker = true
                         } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Image(systemName: "photo.on.rectangle")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .padding(10)
@@ -120,7 +138,7 @@ private struct ComposeContent: View {
                     Image(systemName: "photo.badge.plus")
                         .font(.system(size: 42, weight: .light))
                         .foregroundStyle(Theme.accent)
-                    Text("Pick today's photo")
+                    Text("Pick the photo")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Theme.textSecondary)
 
@@ -150,5 +168,65 @@ private struct ComposeContent: View {
                 .padding(.vertical, 10)
                 .background(Theme.surfaceElevated, in: Capsule())
         }
+    }
+
+    // MARK: Stage 2 — the permanence gate
+
+    private var confirmStage: some View {
+        VStack(spacing: 18) {
+            if let image = viewModel.previewImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .aspectRatio(3 / 4, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                    )
+                    .padding(.top, 12)
+                    .transition(.scale(scale: 0.97).combined(with: .opacity))
+            }
+
+            if !viewModel.caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(viewModel.caption)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.textPrimary)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(spacing: 6) {
+                Label("This is permanent", systemImage: "lock.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Once posted it joins the vault forever — no edits, no deletes, no retakes.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 24)
+
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.destructive)
+                    .multilineTextAlignment(.center)
+            }
+
+            Spacer()
+
+            PrimaryButton(
+                title: viewModel.isBackfill ? "Post to yesterday — forever" : "Post it — forever",
+                systemImage: "lock.open.fill",
+                isLoading: viewModel.isSaving
+            ) {
+                Task {
+                    if await viewModel.confirmAndPost() {
+                        onSuccess()
+                    }
+                }
+            }
+        }
+        .padding(Theme.screenPadding)
     }
 }

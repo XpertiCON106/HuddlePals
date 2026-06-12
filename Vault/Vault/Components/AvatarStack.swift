@@ -13,7 +13,7 @@ struct AvatarView: View {
 
     var body: some View {
         Circle()
-            .fill(Color(hex: colorHex))
+            .fill(AvatarStyle.fill(for: colorHex))
             .frame(width: size, height: size)
             .overlay {
                 Text(initials)
@@ -24,8 +24,7 @@ struct AvatarView: View {
     }
 }
 
-/// Overlapping colored circles with initials; collapses the overflow into
-/// a "+N" bubble.
+/// Overlapping identity circles; collapses overflow into a "+N" bubble.
 struct AvatarStack: View {
     let users: [User]
     var size: CGFloat = 32
@@ -50,5 +49,66 @@ struct AvatarStack: View {
                     .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))
             }
         }
+    }
+}
+
+/// Makes any name/avatar open that member's profile. Used everywhere a
+/// person appears: feed cards, detail headers, comments, member lists.
+struct UserLink<Content: View>: View {
+    @Environment(AppRouter.self) private var router
+    let user: User?
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if let user {
+            Button {
+                Haptics.light()
+                router.vaultsPath.append(.userProfile(user))
+            } label: {
+                content()
+            }
+            .buttonStyle(.plain)
+        } else {
+            content()
+        }
+    }
+}
+
+/// Shared identity-color picker (onboarding + profile editing): solid
+/// swatches in a grid, gradient swatches in a row beneath.
+struct ColorRampPicker: View {
+    @Binding var selection: String
+
+    var body: some View {
+        VStack(spacing: 14) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+                ForEach(AvatarPalette.solids, id: \.self) { token in
+                    swatch(token)
+                }
+            }
+            HStack(spacing: 12) {
+                ForEach(AvatarPalette.gradients, id: \.self) { token in
+                    swatch(token)
+                }
+            }
+        }
+    }
+
+    private func swatch(_ token: String) -> some View {
+        Circle()
+            .fill(AvatarStyle.fill(for: token))
+            .frame(width: 34, height: 34)
+            .overlay {
+                if token == selection {
+                    Circle().strokeBorder(.white, lineWidth: 2.5)
+                    Circle().strokeBorder(Theme.accent.opacity(0.35), lineWidth: 4.5)
+                }
+            }
+            .scaleEffect(token == selection ? 1.12 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: selection)
+            .onTapGesture {
+                selection = token
+                Haptics.light()
+            }
     }
 }

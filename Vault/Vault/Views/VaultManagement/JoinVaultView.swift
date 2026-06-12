@@ -8,8 +8,12 @@ struct JoinVaultView: View {
     var body: some View {
         Group {
             if let viewModel {
-                JoinVaultContent(viewModel: viewModel) {
-                    router.popToRoot(of: .today)
+                JoinVaultContent(viewModel: viewModel) { vault in
+                    if let vault {
+                        router.openVault(vault)
+                    } else {
+                        router.popToVaultList()
+                    }
                 }
             } else {
                 Color.clear
@@ -27,7 +31,8 @@ struct JoinVaultView: View {
 
 private struct JoinVaultContent: View {
     @Bindable var viewModel: JoinVaultViewModel
-    let onDone: () -> Void
+    /// nil = back to the list; a vault = open it.
+    let onDone: (Vault?) -> Void
 
     @FocusState private var codeFocused: Bool
 
@@ -107,8 +112,8 @@ private struct JoinVaultContent: View {
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
-            PrimaryButton(title: "Go to today", systemImage: "lock.fill") {
-                onDone()
+            PrimaryButton(title: "Step inside", systemImage: "lock.fill") {
+                onDone(vault)
             }
         }
     }

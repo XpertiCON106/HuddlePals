@@ -8,8 +8,12 @@ struct CreateVaultView: View {
     var body: some View {
         Group {
             if let viewModel {
-                CreateVaultContent(viewModel: viewModel) {
-                    router.popToRoot(of: .today)
+                CreateVaultContent(viewModel: viewModel) { vault in
+                    if let vault {
+                        router.openVault(vault)
+                    } else {
+                        router.popToVaultList()
+                    }
                 }
             } else {
                 Color.clear
@@ -27,7 +31,8 @@ struct CreateVaultView: View {
 
 private struct CreateVaultContent: View {
     @Bindable var viewModel: CreateVaultViewModel
-    let onDone: () -> Void
+    /// nil = back to the list; a vault = open it.
+    let onDone: (Vault?) -> Void
 
     var body: some View {
         ScrollView {
@@ -130,7 +135,11 @@ private struct CreateVaultContent: View {
                 }
             }
 
-            Button("Done") { onDone() }
+            PrimaryButton(title: "Open the vault", systemImage: "arrow.right") {
+                onDone(vault)
+            }
+
+            Button("Back to my vaults") { onDone(nil) }
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
         }

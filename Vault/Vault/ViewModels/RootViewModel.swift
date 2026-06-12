@@ -22,7 +22,6 @@ final class RootViewModel {
             switch try await deps.auth.currentState() {
             case .signedIn(let user):
                 deps.session.currentUser = user
-                await selectInitialVault(for: user)
             case .needsProfile:
                 deps.session.needsProfileSetup = true
             case .signedOut:
@@ -32,18 +31,5 @@ final class RootViewModel {
             bootstrapError = error.localizedDescription
         }
         deps.session.isReady = true
-    }
-
-    /// Called after onboarding sign-in too.
-    func selectInitialVault(for user: User) async {
-        do {
-            let vaults = try await deps.vaultService.vaults(for: user)
-            deps.session.activeVault = vaults.first
-            if let vault = vaults.first {
-                try await deps.vaultService.recomputeStreak(for: vault, now: deps.dateProvider.now)
-            }
-        } catch {
-            bootstrapError = error.localizedDescription
-        }
     }
 }

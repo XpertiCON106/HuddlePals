@@ -31,12 +31,16 @@ final class SupabaseStore {
         if let existing = try user(id: dto.id) {
             existing.displayName = dto.displayName
             existing.avatarColorHex = dto.avatarColorHex
+            existing.bio = dto.bio
+            existing.profilePhotoPaths = dto.photoPaths ?? []
             return existing
         }
         let user = User(
             id: dto.id,
             displayName: dto.displayName,
             avatarColorHex: dto.avatarColorHex,
+            bio: dto.bio,
+            profilePhotoPaths: dto.photoPaths ?? [],
             joinedAt: dto.createdAt ?? .now
         )
         context.insert(user)

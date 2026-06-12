@@ -1,5 +1,8 @@
 import SwiftUI
+import PhotosUI
 
+/// Your own profile: up to 3 photos, display name, bio, identity color,
+/// appearance setting, account, and (mock only) the DEBUG tools.
 struct ProfileView: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(AppRouter.self) private var router
@@ -32,7 +35,9 @@ private struct ProfileContent: View {
 
     var body: some View {
         List {
-            profileSection
+            photosSection
+            identitySection
+            appearanceSection
             accountSection
             if !viewModel.isLiveBackend {
                 debugSection
@@ -58,8 +63,60 @@ private struct ProfileContent: View {
         }
     }
 
-    private var profileSection: some View {
-        Section("Your profile") {
+    private var photosSection: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(viewModel.photoPaths.enumerated()), id: \.element) { index, path in
+                        LocalDepositImage(relativePath: path)
+                            .frame(width: 92, height: 122)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(alignment: .topTrailing) {
+                                Button {
+                                    viewModel.removePhoto(at: index)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(.white, .black.opacity(0.55))
+                                }
+                                .padding(5)
+                            }
+                            .transition(.scale(scale: 0.9).combined(with: .opacity))
+                    }
+                    if viewModel.canAddPhotos {
+                        PhotosPicker(
+                            selection: $viewModel.photoItems,
+                            maxSelectionCount: AuthValidation.maxProfilePhotos - viewModel.photoPaths.count,
+                            matching: .images
+                        ) {
+                            VStack(spacing: 6) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 20, weight: .semibold))
+                                Text("Add")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: 92, height: 122)
+                            .background(Theme.surfaceElevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [5]))
+                            )
+                        }
+                    }
+                }
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.photoPaths)
+            }
+            .listRowBackground(Theme.surface)
+        } header: {
+            Text("Profile photos")
+        } footer: {
+            Text("Up to 3 photos. Everyone you share a vault with can see them.")
+        }
+    }
+
+    private var identitySection: some View {
+        Section("Identity") {
             HStack(spacing: 14) {
                 AvatarView(
                     name: viewModel.displayName.isEmpty ? "?" : viewModel.displayName,
@@ -71,23 +128,26 @@ private struct ProfileContent: View {
             }
             .listRowBackground(Theme.surface)
 
-            HStack(spacing: 10) {
-                ForEach(AvatarPalette.hexes, id: \.self) { hex in
-                    Circle()
-                        .fill(Color(hex: hex))
-                        .frame(width: 26, height: 26)
-                        .overlay {
-                            if hex == viewModel.selectedColorHex {
-                                Circle().strokeBorder(.white, lineWidth: 2)
-                            }
+            VStack(alignment: .trailing, spacing: 4) {
+                TextField("A short bio…", text: $viewModel.bio, axis: .vertical)
+                    .font(.system(size: 15))
+                    .lineLimit(2...4)
+                    .onChange(of: viewModel.bio) { _, newValue in
+                        if newValue.count > AuthValidation.bioLimit {
+                            viewModel.bio = String(newValue.prefix(AuthValidation.bioLimit))
                         }
-                        .onTapGesture {
-                            viewModel.selectedColorHex = hex
-                            Haptics.light()
-                        }
+                    }
+                if viewModel.bio.count > AuthValidation.bioLimit - 30 {
+                    Text("\(viewModel.bioRemaining)")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
             .listRowBackground(Theme.surface)
+
+            ColorRampPicker(selection: $viewModel.selectedColorHex)
+                .padding(.vertical, 4)
+                .listRowBackground(Theme.surface)
 
             Button {
                 Task { await viewModel.saveProfile() }
@@ -104,6 +164,22 @@ private struct ProfileContent: View {
             }
             .disabled(viewModel.isWorking)
             .listRowBackground(Theme.surface)
+        }
+    }
+
+    private var appearanceSection: some View {
+        Section {
+            Picker("Appearance", selection: $viewModel.appearance) {
+                ForEach(AppearancePreference.allCases) { preference in
+                    Text(preference.label).tag(preference)
+                }
+            }
+            .pickerStyle(.segmented)
+            .listRowBackground(Theme.surface)
+        } header: {
+            Text("Appearance")
+        } footer: {
+            Text("System follows your device's light/dark setting.")
         }
     }
 
@@ -154,7 +230,7 @@ private struct ProfileContent: View {
             Label("DEBUG", systemImage: "wrench.and.screwdriver")
                 .foregroundStyle(Theme.accent)
         } footer: {
-            Text("Demo tools — none of this ships. Advancing the day shifts the injected clock so streak math can be exercised without waiting for midnight.")
+            Text("Demo tools — none of this ships. Advancing the day shifts the injected clock so streak math and the recovery window can be exercised without waiting for midnight.")
         }
     }
 
