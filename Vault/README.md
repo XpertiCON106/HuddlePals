@@ -38,7 +38,7 @@ Vault/
 │   │   ├── VaultService.swift          VaultServiceProtocol + MockVaultService + SkipLedger
 │   │   ├── DepositService.swift        DepositServiceProtocol + MockDepositService
 │   │   ├── MediaService.swift          MediaServiceProtocol + MockMediaService
-│   │   └── NotificationService.swift   NotificationServiceProtocol + MockNotificationService
+│   │   (notifications: see Support/DailyReminders.swift — per-user reminders)
 │   ├── Seeding/
 │   │   ├── SeedDataService.swift       First-launch world: 4 users, 30 days, mixed participation
 │   │   └── PlaceholderImageGenerator.swift  Gradient + SF Symbol via UIGraphicsImageRenderer
@@ -86,7 +86,7 @@ Vault/
 │        Service layer (mocks)        │   │         VaultEngine           │
 │ AuthService      VaultService       │   │  dayKey · reciprocity gate ·  │
 │ DepositService   MediaService       │   │  group streak · backfill ·    │
-│ NotificationService                 │   │  permanence + recovery        │
+│ (reminders: DailyReminders)         │   │  permanence + recovery        │
 │   // TODO: BACKEND → Supabase       │   │  (no SwiftData, no UIKit)     │
 └──────────┬──────────────────────────┘   └───────────────────────────────┘
            │
@@ -97,7 +97,7 @@ Vault/
 
 AppDependencies (composition root, in SwiftUI Environment)
   ├── ModelContainer          ├── VaultEngine        ├── AppDateProvider (mock clock)
-  ├── AppSession (@Observable)├── DebugSettings      └── all five services + seeder
+  ├── AppSession (@Observable)├── DebugSettings      └── four services + seeder + reminders
 ```
 
 Key decisions:
@@ -117,7 +117,7 @@ Each protocol gets a `Supabase*Service` sibling; `AppDependencies.makeMock()` ge
 | `VaultServiceProtocol` | SwiftData CRUD; invite-code lookup in store; `SkipLedger` in memory | `vaults`/`memberships` tables; join + create as RPCs (atomic code validation, 8-member cap, keeper reassignment); `skips` table; streak recompute as an edge function on deposit insert |
 | `DepositServiceProtocol` | SwiftData insert-only (permanence enforced) | `deposits` insert with unique `(vault_id, author_id, day_key)`; `reactions` toggle via delete-or-insert; `comments` |
 | `MediaServiceProtocol` | Writes JPEGs to `Documents/Media/` | Upload to Storage bucket `deposits`; local files become the offline cache; signed-URL download on cache miss |
-| `NotificationServiceProtocol` | No-op | `UNUserNotificationCenter` daily trigger at the vault's hour; later server-driven APNs ("everyone else has deposited") |
+| _(reminders)_ | Per-user local `UNUserNotificationCenter` reminders in `Support/DailyReminders.swift` (not a backend service) | later: server-driven APNs ("everyone else has deposited") |
 
 Other marked points: `CreateVaultViewModel.shareURL` (stub `vault://join/{code}` → universal link) and `VaultEngine.canBackfill` (MVP backfill doesn't repair broken streaks; repair becomes a server-side recompute).
 

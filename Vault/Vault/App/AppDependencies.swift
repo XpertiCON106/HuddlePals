@@ -51,9 +51,9 @@ final class AppDependencies {
     let vaultService: any VaultServiceProtocol
     let depositService: any DepositServiceProtocol
     let mediaService: any MediaServiceProtocol
-    let notificationService: any NotificationServiceProtocol
     let seeder: SeedDataService
     /// Per-user daily upload reminders (local notifications, backend-agnostic).
+    /// This is the app's single notification path.
     let reminders: ReminderCoordinator
 
     init(
@@ -68,7 +68,6 @@ final class AppDependencies {
         vaultService: any VaultServiceProtocol,
         depositService: any DepositServiceProtocol,
         mediaService: any MediaServiceProtocol,
-        notificationService: any NotificationServiceProtocol,
         seeder: SeedDataService,
         reminders: ReminderCoordinator
     ) {
@@ -83,7 +82,6 @@ final class AppDependencies {
         self.vaultService = vaultService
         self.depositService = depositService
         self.mediaService = mediaService
-        self.notificationService = notificationService
         self.seeder = seeder
         self.reminders = reminders
     }
@@ -107,7 +105,6 @@ final class AppDependencies {
             vaultService: MockVaultService(context: context, engine: engine, skipLedger: skipLedger),
             depositService: MockDepositService(context: context, engine: engine),
             mediaService: media,
-            notificationService: MockNotificationService(),
             seeder: SeedDataService(
                 context: context,
                 engine: engine,
@@ -151,7 +148,6 @@ final class AppDependencies {
             vaultService: LiveVaultService(client: client, store: store, engine: engine),
             depositService: LiveDepositService(client: client, store: store),
             mediaService: media,
-            notificationService: LiveNotificationService(),
             // Constructed but never invoked in live mode (RootViewModel
             // gates seeding on isLive).
             seeder: SeedDataService(

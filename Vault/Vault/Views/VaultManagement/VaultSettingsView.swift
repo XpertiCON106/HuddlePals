@@ -132,7 +132,7 @@ private struct SettingsContent: View {
         } header: {
             Text("Reminder")
         } footer: {
-            Text("Vault nudges everyone at this hour. Mock builds don’t schedule real notifications.")
+            Text("The vault's preferred time of day. Turn on your personal upload reminder in Profile to actually get notified.")
         }
     }
 

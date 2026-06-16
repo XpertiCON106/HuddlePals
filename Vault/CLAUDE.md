@@ -64,11 +64,16 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   `VaultApp.init`, injected via `.environment(...)`. Holds: ModelContainer,
   `VaultEngine`, `AppDateProvider` (injectable clock w/ debug `dayOffset`),
   `AppSession` (currentUser, pendingInviteCode, needsProfileSetup, isReady),
-  `DebugSettings`, `AppearanceSettings`, the five services, the seeder,
-  and `isLive`.
+  `DebugSettings`, `AppearanceSettings`, the four services, the seeder,
+  `reminders` (ReminderCoordinator), and `isLive`.
 - **Services (protocol → mock / live)**: `AuthServiceProtocol`,
-  `VaultServiceProtocol`, `DepositServiceProtocol`, `MediaServiceProtocol`,
-  `NotificationServiceProtocol`. All `@MainActor` except Media/Notification.
+  `VaultServiceProtocol`, `DepositServiceProtocol`, `MediaServiceProtocol`.
+  All `@MainActor` except Media. Notifications are NOT a service: the
+  single notification path is the backend-agnostic per-user
+  `ReminderCoordinator` (`Support/DailyReminders.swift`, on `deps.reminders`).
+  The old per-vault `NotificationService` was removed once the per-user
+  reminder superseded it — Vault Settings' hour picker now only stores the
+  vault's `notificationHour`, it doesn't schedule anything.
 - **Navigation (v2, multi-vault)**: two tabs — Vaults / Profile. The Vaults
   tab is one `NavigationStack` (`router.vaultsPath`): VaultListView →
   vaultHome(Vault) → archive/detail/settings/userProfile. Home, Archive,

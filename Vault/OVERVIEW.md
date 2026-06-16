@@ -146,7 +146,7 @@ flowchart TD
 
 Key decisions and why:
 
-- **`AppDependencies` is the composition root** ([App/AppDependencies.swift](Vault/App/AppDependencies.swift)). Built once in `VaultApp.init`, injected via SwiftUI Environment. It owns the ModelContainer, the engine, the injectable clock (`AppDateProvider`), the observable `AppSession` (current user, active vault, readiness), `DebugSettings`, and all five services. `makeMock()` and `makeLive(config:)` are the only two wirings.
+- **`AppDependencies` is the composition root** ([App/AppDependencies.swift](Vault/App/AppDependencies.swift)). Built once in `VaultApp.init`, injected via SwiftUI Environment. It owns the ModelContainer, the engine, the injectable clock (`AppDateProvider`), the observable `AppSession` (current user, active vault, readiness), `DebugSettings`, the four services, and the per-user reminder coordinator (`deps.reminders`). `makeMock()` and `makeLive(config:)` are the only two wirings.
 - **The engine is value-typed.** It consumes `DepositSnapshot` structs (id, vaultID, authorID, dayKey, createdAt) — never SwiftData models — plus an injected `Calendar` and explicit `now: Date`. That's what makes the math deterministic and testable.
 - **View models are `@MainActor @Observable` classes**, created by their views via `@State` and handed `deps` from the environment. SwiftUI re-renders automatically when their properties change — no manual refresh plumbing.
 - **Navigation** is a typed `Route` enum over per-tab `NavigationStack` paths, owned by an `@Observable AppRouter` ([App/AppRouter.swift](Vault/App/AppRouter.swift)). `@Model` classes are `Hashable` by identity, so models ride in the path directly.

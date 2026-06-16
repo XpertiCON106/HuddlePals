@@ -116,14 +116,13 @@ final class VaultSettingsViewModel {
         return line
     }
 
+    /// Persists the vault's preferred hour (shown here, used when seeding /
+    /// surfacing the vault's rhythm). Notification *delivery* is owned by
+    /// the per-user reminder in Profile (`deps.reminders`), so this no
+    /// longer schedules its own notification — that avoided a member in
+    /// several vaults getting one nudge per vault on top of the per-user one.
     func setNotificationHour(_ hour: Int) async {
         try? await deps.vaultService.updateNotificationHour(hour, for: vault)
-        _ = await deps.notificationService.requestAuthorization()
-        await deps.notificationService.scheduleDailyReminder(
-            vaultID: vault.id,
-            vaultName: vault.name,
-            hour: hour
-        )
     }
 
     func leaveVault() async {
