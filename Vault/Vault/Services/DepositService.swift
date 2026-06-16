@@ -37,12 +37,10 @@ protocol DepositServiceProtocol: AnyObject {
 final class MockDepositService: DepositServiceProtocol {
     private let context: ModelContext
     private let engine: VaultEngine
-    private let media: MediaServiceProtocol
 
-    init(context: ModelContext, engine: VaultEngine, media: MediaServiceProtocol) {
+    init(context: ModelContext, engine: VaultEngine) {
         self.context = context
         self.engine = engine
-        self.media = media
     }
 
     func deposits(in vault: Vault) async throws -> [Deposit] {

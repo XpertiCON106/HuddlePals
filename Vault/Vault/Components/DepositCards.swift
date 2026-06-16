@@ -122,7 +122,10 @@ struct BlurredDepositCard: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color(hex: deposit.author?.avatarColorHex ?? "555555").opacity(0.30),
+                                // `base(for:)` resolves gradient identity
+                                // tokens too — a plain Color(hex:) would fall
+                                // back to gray for "hex-hex" tokens.
+                                AvatarStyle.base(for: deposit.author?.avatarColorHex ?? "555555").opacity(0.30),
                                 Theme.surfaceElevated,
                             ],
                             startPoint: .topLeading,

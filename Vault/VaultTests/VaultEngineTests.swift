@@ -283,4 +283,17 @@ final class VaultEngineTests: XCTestCase {
             XCTAssertTrue(code.allSatisfy { $0.isLetter || $0.isNumber })
         }
     }
+
+    // MARK: Identity color tokens
+
+    /// Solid tokens are one color; "hex-hex" gradient tokens resolve to two.
+    /// `AvatarStyle.base(for:)` must return the first component for both —
+    /// it's what tints the locked card, where a plain `Color(hex:)` would
+    /// fall back to gray for gradient tokens.
+    func testAvatarStyleResolvesGradientTokens() {
+        XCTAssertEqual(AvatarStyle.components(of: "E5484D").count, 1)
+        XCTAssertEqual(AvatarStyle.components(of: "F76B15-E5484D").count, 2)
+        // Malformed input still yields a usable single color (no crash).
+        XCTAssertEqual(AvatarStyle.components(of: "").count, 1)
+    }
 }

@@ -159,28 +159,37 @@ private struct DetailContent: View {
     }
 
     private var commentBar: some View {
-        HStack(spacing: 10) {
-            TextField("Add a comment…", text: $viewModel.commentDraft)
-                .font(.system(size: 15))
-                .focused($commentFocused)
-                .submitLabel(.send)
-                .onSubmit { post() }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Theme.surface, in: Capsule())
-
-            Button {
-                post()
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(
-                        viewModel.commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? Theme.textSecondary.opacity(0.5)
-                            : Theme.accent
-                    )
+        VStack(spacing: 6) {
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.destructive)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .disabled(viewModel.isPosting)
+
+            HStack(spacing: 10) {
+                TextField("Add a comment…", text: $viewModel.commentDraft)
+                    .font(.system(size: 15))
+                    .focused($commentFocused)
+                    .submitLabel(.send)
+                    .onSubmit { post() }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Theme.surface, in: Capsule())
+
+                Button {
+                    post()
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(
+                            viewModel.commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? Theme.textSecondary.opacity(0.5)
+                                : Theme.accent
+                        )
+                }
+                .disabled(viewModel.isPosting)
+            }
         }
         .padding(.horizontal, Theme.screenPadding)
         .padding(.vertical, 10)

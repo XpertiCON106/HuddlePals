@@ -105,7 +105,7 @@ final class AppDependencies {
             debug: DebugSettings(),
             auth: MockAuthService(context: context),
             vaultService: MockVaultService(context: context, engine: engine, skipLedger: skipLedger),
-            depositService: MockDepositService(context: context, engine: engine, media: media),
+            depositService: MockDepositService(context: context, engine: engine),
             mediaService: media,
             notificationService: MockNotificationService(),
             seeder: SeedDataService(

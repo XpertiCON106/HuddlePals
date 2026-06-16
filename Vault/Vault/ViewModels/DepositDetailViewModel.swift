@@ -11,6 +11,7 @@ final class DepositDetailViewModel {
 
     var commentDraft = ""
     private(set) var isPosting = false
+    private(set) var errorMessage: String?
 
     init(deps: AppDependencies, deposit: Deposit) {
         self.deps = deps
@@ -40,12 +41,15 @@ final class DepositDetailViewModel {
         let text = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let user = deps.session.currentUser else { return }
         isPosting = true
+        errorMessage = nil
         defer { isPosting = false }
         do {
             try await deps.depositService.addComment(text, to: deposit, by: user)
             commentDraft = ""
         } catch {
-            // Mock path can't fail meaningfully; draft is preserved.
+            // The live path can fail (network); keep the draft so the user
+            // can retry, and surface why it didn't post.
+            errorMessage = error.localizedDescription
         }
     }
 }
