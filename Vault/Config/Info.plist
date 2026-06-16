@@ -4,6 +4,8 @@
 <dict>
 	<!-- Merged with the generated Info.plist (GENERATE_INFOPLIST_FILE).
 	     Registers the vault:// scheme for shareable invite links. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Vault uses your camera so you can capture today's photo in the moment.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

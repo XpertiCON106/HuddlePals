@@ -62,6 +62,7 @@ struct DepositCard: View {
                             AvatarView(
                                 name: deposit.author?.displayName ?? "?",
                                 colorHex: deposit.author?.avatarColorHex ?? "888888",
+                                imagePath: deposit.author?.profilePhotoPaths.first,
                                 size: 30
                             )
                             Text(deposit.author?.displayName ?? "Former member")
@@ -140,6 +141,7 @@ struct BlurredDepositCard: View {
                 AvatarView(
                     name: deposit.author?.displayName ?? "?",
                     colorHex: deposit.author?.avatarColorHex ?? "888888",
+                    imagePath: deposit.author?.profilePhotoPaths.first,
                     size: 22
                 )
                 Text(deposit.author?.displayName ?? "Member")

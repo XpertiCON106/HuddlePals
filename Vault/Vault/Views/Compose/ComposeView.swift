@@ -1,9 +1,9 @@
 import SwiftUI
-import PhotosUI
 
-/// The deposit sheet, in two stages: pick a photo, then face the
-/// permanence gate — "This is permanent — post it?" Once posted, the photo
-/// can never be deleted, edited, or replaced.
+/// The deposit sheet, in two stages: capture a photo with the camera, then
+/// face the permanence gate — "This is permanent — post it?" Camera-only:
+/// there is no way to import an existing photo into this flow. Once posted,
+/// the photo can never be deleted, edited, or replaced.
 struct ComposeView: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(\.dismiss) private var dismiss
@@ -14,13 +14,13 @@ struct ComposeView: View {
     var onComplete: (Bool) -> Void = { _ in }
 
     @State private var viewModel: ComposeViewModel?
-    @State private var showPicker = false
+    @State private var showCamera = false
 
     var body: some View {
         NavigationStack {
             Group {
                 if let viewModel {
-                    ComposeContent(viewModel: viewModel, showPicker: $showPicker) {
+                    ComposeContent(viewModel: viewModel, showCamera: $showCamera) {
                         dismiss()
                         onComplete(true)
                     }
@@ -41,11 +41,18 @@ struct ComposeView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image in
+                viewModel?.setCapturedImage(image)
+            }
+            .ignoresSafeArea()
+        }
         .onAppear {
             if viewModel == nil {
                 viewModel = ComposeViewModel(deps: deps, vault: vault, targetDayKey: targetDayKey)
-                // Friction killer: open the picker immediately.
-                showPicker = true
+                // Friction killer: open the camera immediately (when there
+                // is one — the Simulator has none).
+                showCamera = CameraPicker.isAvailable
             }
         }
     }
@@ -59,7 +66,7 @@ struct ComposeView: View {
 
 private struct ComposeContent: View {
     @Bindable var viewModel: ComposeViewModel
-    @Binding var showPicker: Bool
+    @Binding var showCamera: Bool
     let onSuccess: () -> Void
 
     @FocusState private var captionFocused: Bool
@@ -74,10 +81,9 @@ private struct ComposeContent: View {
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewModel.stage)
-        .photosPicker(isPresented: $showPicker, selection: $viewModel.photoItem, matching: .images)
     }
 
-    // MARK: Stage 1 — pick
+    // MARK: Stage 1 — capture
 
     private var pickStage: some View {
         VStack(spacing: 18) {
@@ -123,9 +129,9 @@ private struct ComposeContent: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
                     .overlay(alignment: .bottomTrailing) {
                         Button {
-                            showPicker = true
+                            showCamera = true
                         } label: {
-                            Image(systemName: "photo.on.rectangle")
+                            Image(systemName: "camera.rotate")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .padding(10)
@@ -134,39 +140,50 @@ private struct ComposeContent: View {
                         .padding(12)
                     }
             } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 42, weight: .light))
-                        .foregroundStyle(Theme.accent)
-                    Text("Pick the photo")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Theme.textSecondary)
-
-                    HStack(spacing: 14) {
-                        pickerChip(label: "Library", systemImage: "photo.on.rectangle")
-                        // Camera routes to the picker too — simulators have
-                        // no camera, and MVP keeps a single ingest path.
-                        pickerChip(label: "Camera", systemImage: "camera")
-                    }
-                }
+                emptyCapturePrompt
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
         .onTapGesture {
-            if viewModel.previewImage == nil { showPicker = true }
+            if viewModel.previewImage == nil, CameraPicker.isAvailable { showCamera = true }
         }
     }
 
-    private func pickerChip(label: String, systemImage: String) -> some View {
-        Button {
-            showPicker = true
-        } label: {
-            Label(label, systemImage: systemImage)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Theme.surfaceElevated, in: Capsule())
+    @ViewBuilder
+    private var emptyCapturePrompt: some View {
+        if CameraPicker.isAvailable {
+            VStack(spacing: 16) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 42, weight: .light))
+                    .foregroundStyle(Theme.accent)
+                Text("Take today's photo")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                Button {
+                    showCamera = true
+                } label: {
+                    Label("Open camera", systemImage: "camera")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Theme.surfaceElevated, in: Capsule())
+                }
+            }
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "camera.metering.unknown")
+                    .font(.system(size: 38, weight: .light))
+                    .foregroundStyle(Theme.textSecondary)
+                Text("No camera available")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Vault captures today's photo with your camera. Run this on a device to deposit.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
         }
     }
 

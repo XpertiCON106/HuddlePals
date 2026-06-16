@@ -111,13 +111,13 @@ flowchart TD
 | **Onboarding** | Three concept cards → sign-in method (Apple / email / phone) → 6-digit code → profile (name + avatar ink). Returning accounts skip the profile step. |
 | **Vaults shelf** | Every vault you belong to: emoji, name, member stack, streak, lock state, "N waiting for you". Tap to step inside; create/join from the toolbar. |
 | **Vault Home (Today)** | One vault's day. Serif vault name, member stack, streak badge, and — when a streak just broke — the 24h recovery banner with a live countdown. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards + "waiting on…" row. |
-| **Compose** (sheet) | Two stages: pick (photo opens immediately, caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
+| **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
 | **Archive** | Full history: month headers → day rows → horizontal photo strips. Today appears only once unlocked. Pull-to-refresh. Backfill banner when eligible. |
 | **Deposit Detail** | Framed photo, caption, author, date, 5-emoji reaction row (tap toggles yours), comment thread + input bar. |
 | **Create Vault** | Name + emoji picker → server-generated invite code → ShareLink with a working `vault://join/{code}` deep link (the app registers the scheme and prefills Join). |
 | **Join Vault** | 6-char code entry with error states (not found / already member / vault full). |
 | **Vault Settings** | Members with roles + skip tokens, streak detail, daily reminder hour (schedules a real local notification in live builds), invite code with copy, leave vault (destructive, confirmed). |
-| **Your profile** | Up to 3 profile photos, display name, 160-char bio, vibrant identity color (solids + gradients), light/dark appearance picker, sign out (confirmed) — and in mock mode only, the DEBUG section. |
+| **Your profile** | Up to 3 profile photos (the first is your profile picture/avatar — normal device upload), display name, 160-char bio, curated identity color (6 solids + 2 gradients), daily-reminder toggle + time, light/dark appearance picker, sign out (confirmed) — and in mock mode only, the DEBUG section. |
 | **Member profile** | Opened by tapping any name or avatar anywhere: swipeable photo pager, bio, and the vaults + streaks you share with them. |
 
 ## 4. Architecture

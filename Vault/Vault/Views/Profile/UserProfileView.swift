@@ -23,7 +23,12 @@ struct UserProfileView: View {
 
                 VStack(spacing: 10) {
                     HStack(spacing: 10) {
-                        AvatarView(name: user.displayName, colorHex: user.avatarColorHex, size: 40)
+                        AvatarView(
+                            name: user.displayName,
+                            colorHex: user.avatarColorHex,
+                            imagePath: user.profilePhotoPaths.first,
+                            size: 40
+                        )
                         Text(user.displayName)
                             .font(Theme.displayFont(26))
                             .foregroundStyle(Theme.textPrimary)

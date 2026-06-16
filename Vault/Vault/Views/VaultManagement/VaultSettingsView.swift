@@ -77,6 +77,7 @@ private struct SettingsContent: View {
                         AvatarView(
                             name: membership.user?.displayName ?? "?",
                             colorHex: membership.user?.avatarColorHex ?? "888888",
+                            imagePath: membership.user?.profilePhotoPaths.first,
                             size: 34
                         )
                         VStack(alignment: .leading, spacing: 2) {

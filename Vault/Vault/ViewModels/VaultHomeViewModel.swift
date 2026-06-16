@@ -88,6 +88,8 @@ final class VaultHomeViewModel {
         deps.debug.simulateNotPostedToday = false
         try? await deps.vaultService.recomputeStreak(for: vault, now: deps.dateProvider.now)
         await refresh()
+        // Uploading silences today's remaining reminders for this vault.
+        await deps.reminders.refresh()
         if wasLocked, isUnlocked {
             playUnlockReveal = true
             Haptics.unlock()

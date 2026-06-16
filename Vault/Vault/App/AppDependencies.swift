@@ -53,6 +53,8 @@ final class AppDependencies {
     let mediaService: any MediaServiceProtocol
     let notificationService: any NotificationServiceProtocol
     let seeder: SeedDataService
+    /// Per-user daily upload reminders (local notifications, backend-agnostic).
+    let reminders: ReminderCoordinator
 
     init(
         isLive: Bool = false,
@@ -67,7 +69,8 @@ final class AppDependencies {
         depositService: any DepositServiceProtocol,
         mediaService: any MediaServiceProtocol,
         notificationService: any NotificationServiceProtocol,
-        seeder: SeedDataService
+        seeder: SeedDataService,
+        reminders: ReminderCoordinator
     ) {
         self.isLive = isLive
         self.modelContainer = modelContainer
@@ -82,6 +85,7 @@ final class AppDependencies {
         self.mediaService = mediaService
         self.notificationService = notificationService
         self.seeder = seeder
+        self.reminders = reminders
     }
 
     static func makeMock(inMemory: Bool = false) -> AppDependencies {
@@ -91,12 +95,13 @@ final class AppDependencies {
         let dateProvider = AppDateProvider()
         let skipLedger = SkipLedger()
         let media = MockMediaService()
+        let session = AppSession()
 
         return AppDependencies(
             modelContainer: container,
             engine: engine,
             dateProvider: dateProvider,
-            session: AppSession(),
+            session: session,
             debug: DebugSettings(),
             auth: MockAuthService(context: context),
             vaultService: MockVaultService(context: context, engine: engine, skipLedger: skipLedger),
@@ -108,6 +113,13 @@ final class AppDependencies {
                 engine: engine,
                 media: media,
                 skipLedger: skipLedger,
+                dateProvider: dateProvider
+            ),
+            reminders: ReminderCoordinator(
+                settings: ReminderSettings(),
+                scheduler: DailyReminderScheduler(),
+                session: session,
+                engine: engine,
                 dateProvider: dateProvider
             )
         )
@@ -126,13 +138,14 @@ final class AppDependencies {
         let client = SupabaseClient(config: config)
         let store = SupabaseStore(context: context)
         let media = LiveMediaService(client: client)
+        let session = AppSession()
 
         return AppDependencies(
             isLive: true,
             modelContainer: container,
             engine: engine,
             dateProvider: dateProvider,
-            session: AppSession(),
+            session: session,
             debug: DebugSettings(),
             auth: LiveAuthService(client: client, store: store),
             vaultService: LiveVaultService(client: client, store: store, engine: engine),
@@ -146,6 +159,13 @@ final class AppDependencies {
                 engine: engine,
                 media: media,
                 skipLedger: SkipLedger(),
+                dateProvider: dateProvider
+            ),
+            reminders: ReminderCoordinator(
+                settings: ReminderSettings(),
+                scheduler: DailyReminderScheduler(),
+                session: session,
+                engine: engine,
                 dateProvider: dateProvider
             )
         )

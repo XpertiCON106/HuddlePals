@@ -1,12 +1,11 @@
 import Foundation
 import Observation
-import PhotosUI
-import SwiftUI
+import UIKit
 
 @MainActor
 @Observable
 final class ComposeViewModel {
-    /// Once-and-permanent flow: pick → confirm ("This is permanent —
+    /// Once-and-permanent flow: capture → confirm ("This is permanent —
     /// post it?") → posted. No retakes after confirmation.
     enum Stage: Equatable {
         case pick
@@ -23,9 +22,6 @@ final class ComposeViewModel {
 
     private(set) var stage: Stage = .pick
 
-    var photoItem: PhotosPickerItem? {
-        didSet { Task { await loadSelectedPhoto() } }
-    }
     private(set) var imageData: Data?
     private(set) var previewImage: UIImage?
     var caption = ""
@@ -42,20 +38,16 @@ final class ComposeViewModel {
         self.isBackfill = (targetDayKey ?? today) != today
     }
 
-    private func loadSelectedPhoto() async {
+    /// Camera-only: the live capture handed back from `CameraPicker`. There
+    /// is deliberately no path to import an existing photo into this flow.
+    func setCapturedImage(_ image: UIImage) {
         errorMessage = nil
-        guard let photoItem else { return }
-        do {
-            guard let data = try await photoItem.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else {
-                errorMessage = "Couldn't read that photo. Try another one."
-                return
-            }
-            imageData = data
-            previewImage = image
-        } catch {
-            errorMessage = "Couldn't load the photo: \(error.localizedDescription)"
+        guard let data = image.jpegData(compressionQuality: 0.9) else {
+            errorMessage = "Couldn't process that photo. Try again."
+            return
         }
+        previewImage = image
+        imageData = data
     }
 
     /// Pick → the permanence gate.

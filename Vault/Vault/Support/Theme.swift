@@ -177,26 +177,21 @@ enum AvatarStyle {
     }
 }
 
-/// Identity palette: bold saturated solids plus a few gradients. All dark
-/// enough for white initials, vivid in both light and dark mode.
+/// Identity palette: a small, curated set — six saturated solids plus two
+/// gradients (eight total). All dark enough for white initials, vivid in
+/// both light and dark mode.
 enum AvatarPalette {
     static let solids = [
         "E5484D", // coral red
         "F76B15", // tangerine
-        "FFB224", // amber
         "46A758", // leaf
-        "12A594", // teal
         "0091FF", // azure
         "6E56CF", // violet
         "D6409F", // magenta
-        "E93D82", // rose
-        "5B5BD6", // indigo
     ]
     static let gradients = [
         "F76B15-E5484D", // sunset
         "0091FF-6E56CF", // twilight
-        "12A594-46A758", // rainforest
-        "D6409F-FFB224", // pop
     ]
     static let hexes = solids + gradients
 }

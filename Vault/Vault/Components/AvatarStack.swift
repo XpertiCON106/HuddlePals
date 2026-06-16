@@ -1,9 +1,16 @@
 import SwiftUI
 
 struct AvatarView: View {
+    @Environment(AppDependencies.self) private var deps
     let name: String
     let colorHex: String
+    /// A user's profile picture (Documents-relative path). When present it
+    /// renders inside the avatar; otherwise the colored initials show.
+    var imagePath: String? = nil
     var size: CGFloat = 36
+
+    @State private var image: UIImage?
+    @State private var loadedPath: String?
 
     private var initials: String {
         let parts = name.split(separator: " ").prefix(2)
@@ -16,11 +23,24 @@ struct AvatarView: View {
             .fill(AvatarStyle.fill(for: colorHex))
             .frame(width: size, height: size)
             .overlay {
-                Text(initials)
-                    .font(.system(size: size * 0.4, weight: .semibold))
-                    .foregroundStyle(.white)
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Text(initials)
+                        .font(.system(size: size * 0.4, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
             }
+            .clipShape(Circle())
             .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+            .task(id: imagePath) {
+                guard let imagePath, loadedPath != imagePath else { return }
+                let data = await deps.mediaService.loadImageData(at: imagePath)
+                image = data.flatMap(UIImage.init(data:))
+                loadedPath = imagePath
+            }
     }
 }
 
@@ -33,9 +53,14 @@ struct AvatarStack: View {
     var body: some View {
         HStack(spacing: -size * 0.3) {
             ForEach(Array(users.prefix(maxVisible).enumerated()), id: \.element.id) { index, user in
-                AvatarView(name: user.displayName, colorHex: user.avatarColorHex, size: size)
-                    .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))
-                    .zIndex(Double(maxVisible - index))
+                AvatarView(
+                    name: user.displayName,
+                    colorHex: user.avatarColorHex,
+                    imagePath: user.profilePhotoPaths.first,
+                    size: size
+                )
+                .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))
+                .zIndex(Double(maxVisible - index))
             }
             if users.count > maxVisible {
                 Circle()

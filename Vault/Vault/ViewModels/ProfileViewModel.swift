@@ -34,6 +34,36 @@ final class ProfileViewModel {
         set { deps.appearance.preference = newValue }
     }
 
+    // MARK: Daily reminder surface
+
+    var reminderEnabled: Bool { deps.reminders.settings.isEnabled }
+    var reminderPermissionDenied: Bool { deps.reminders.permissionDenied }
+
+    /// The chosen daily reminder time as a `Date` for a time-only picker.
+    var reminderTime: Date {
+        var components = DateComponents()
+        components.hour = deps.reminders.settings.hour
+        components.minute = deps.reminders.settings.minute
+        return Calendar.current.date(from: components) ?? .now
+    }
+
+    /// Loads the current OS permission state so the UI can show a denial note.
+    func refreshReminderStatus() async {
+        await deps.reminders.updateAuthorizationStatus()
+    }
+
+    func setReminderEnabled(_ enabled: Bool) async {
+        await deps.reminders.setEnabled(enabled)
+    }
+
+    func setReminderTime(_ date: Date) async {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        await deps.reminders.updateTime(
+            hour: components.hour ?? 19,
+            minute: components.minute ?? 0
+        )
+    }
+
     // DEBUG bindings surface
     var simulateNotPostedToday: Bool {
         get { deps.debug.simulateNotPostedToday }

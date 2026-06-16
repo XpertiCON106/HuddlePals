@@ -55,6 +55,7 @@ private struct DetailContent: View {
                             AvatarView(
                                 name: deposit.author?.displayName ?? "?",
                                 colorHex: deposit.author?.avatarColorHex ?? "888888",
+                                imagePath: deposit.author?.profilePhotoPaths.first,
                                 size: 34
                             )
                             VStack(alignment: .leading, spacing: 1) {
@@ -134,6 +135,7 @@ private struct DetailContent: View {
                             AvatarView(
                                 name: comment.user?.displayName ?? "?",
                                 colorHex: comment.user?.avatarColorHex ?? "888888",
+                                imagePath: comment.user?.profilePhotoPaths.first,
                                 size: 26
                             )
                         }

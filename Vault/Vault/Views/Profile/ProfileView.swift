@@ -1,8 +1,10 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 
 /// Your own profile: up to 3 photos, display name, bio, identity color,
-/// appearance setting, account, and (mock only) the DEBUG tools.
+/// daily reminder, appearance setting, account, and (mock only) the DEBUG
+/// tools.
 struct ProfileView: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(AppRouter.self) private var router
@@ -37,6 +39,7 @@ private struct ProfileContent: View {
         List {
             photosSection
             identitySection
+            reminderSection
             appearanceSection
             accountSection
             if !viewModel.isLiveBackend {
@@ -46,6 +49,7 @@ private struct ProfileContent: View {
         }
         .scrollContentBackground(.hidden)
         .background(Theme.background)
+        .task { await viewModel.refreshReminderStatus() }
         .confirmationDialog(
             "Sign out?",
             isPresented: $showSignOutConfirmation,
@@ -111,7 +115,7 @@ private struct ProfileContent: View {
         } header: {
             Text("Profile photos")
         } footer: {
-            Text("Up to 3 photos. Everyone you share a vault with can see them.")
+            Text("Up to 3 photos — the first is your profile picture and appears as your avatar. Everyone you share a vault with can see them.")
         }
     }
 
@@ -121,6 +125,7 @@ private struct ProfileContent: View {
                 AvatarView(
                     name: viewModel.displayName.isEmpty ? "?" : viewModel.displayName,
                     colorHex: viewModel.selectedColorHex,
+                    imagePath: viewModel.photoPaths.first,
                     size: 52
                 )
                 TextField("Display name", text: $viewModel.displayName)
@@ -164,6 +169,55 @@ private struct ProfileContent: View {
             }
             .disabled(viewModel.isWorking)
             .listRowBackground(Theme.surface)
+        }
+    }
+
+    private var reminderSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { viewModel.reminderEnabled },
+                set: { newValue in Task { await viewModel.setReminderEnabled(newValue) } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Daily upload reminder")
+                    Text("A nudge to add today's photo, with a gentle follow-up if you forget.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .listRowBackground(Theme.surface)
+
+            if viewModel.reminderEnabled {
+                DatePicker(
+                    "Reminder time",
+                    selection: Binding(
+                        get: { viewModel.reminderTime },
+                        set: { newValue in Task { await viewModel.setReminderTime(newValue) } }
+                    ),
+                    displayedComponents: .hourAndMinute
+                )
+                .listRowBackground(Theme.surface)
+            }
+
+            if viewModel.reminderPermissionDenied {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Notifications are turned off", systemImage: "bell.slash")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.destructive)
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                }
+                .listRowBackground(Theme.surface)
+            }
+        } header: {
+            Text("Reminders")
+        } footer: {
+            Text("Reminders are sent only on days you haven't uploaded yet, and stop once you do.")
         }
     }
 

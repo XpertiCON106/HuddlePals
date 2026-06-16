@@ -3,6 +3,7 @@ import SwiftData
 
 @main
 struct VaultApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var dependencies: AppDependencies
     @State private var router = AppRouter()
 
@@ -27,6 +28,14 @@ struct VaultApp: App {
                 .tint(Theme.accent)
                 .onOpenURL { url in
                     handleDeepLink(url)
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    // Re-evaluate reminders on foreground: an upload made on
+                    // another device (or earlier today) should silence the
+                    // remaining nudges.
+                    if phase == .active {
+                        Task { await dependencies.reminders.refresh() }
+                    }
                 }
         }
     }

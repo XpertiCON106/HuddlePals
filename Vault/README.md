@@ -11,7 +11,7 @@ This is the **MVP architecture scaffold**: every service is a protocol with a mo
 1. Open `Vault.xcodeproj` in **Xcode 16**.
 2. Select the **Vault** scheme and any **iOS 17+** simulator.
 3. ⌘R. A vault-dial launch animation lands on the **Vaults** shelf: two seeded vaults ("The Crew" 🏔 and "Sunday Dinners" 🍝), both LOCKED — the other members deposited today; you haven't.
-4. Tap **Add today's memory**, pick any photo from the simulator library, deposit → the lock springs open and today is revealed.
+4. Tap **Add today's memory** → take a photo with the camera (deposits are camera-only; on the Simulator, which has no camera, Compose shows a "no camera" state — run on a device to deposit), confirm the permanence prompt → the lock springs open and today is revealed.
 5. ⌘U runs the `VaultEngine` unit tests.
 
 **Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.

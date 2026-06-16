@@ -100,6 +100,22 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   `DepositError.alreadyDepositedToday` on a second attempt; the DB has no
   update/delete policies on deposits at all. Compose has a mandatory
   confirmation stage ("This is permanent — post it?").
+- **Camera-only capture (v3)**: the main deposit flow accepts ONLY a live
+  camera capture (`CameraPicker`, a `UIImagePickerController` bridge locked
+  to `.camera`; `NSCameraUsageDescription` in `Config/Info.plist`). No
+  library/file import in Compose. Simulator has no camera → Compose shows a
+  "no camera" state. The profile-picture upload (below) is exempt and still
+  uses `PhotosPicker`.
+- **Daily reminders (v3)**: per-user local-notification reminders, fully
+  backend-agnostic (`Support/DailyReminders.swift`: `ReminderSettings`
+  persisted in UserDefaults, `DailyReminderScheduler` over
+  `UNUserNotificationCenter`, `ReminderCoordinator` on `deps.reminders`).
+  Opt-in toggle + time picker in Profile. Strategy: rolling 7-day window of
+  dated non-repeating notifications (1 main + 2 capped follow-ups/day),
+  fully rebuilt on each `reminders.refresh()` — called on launch
+  (RootViewModel), foreground (VaultApp scenePhase), after a deposit
+  (VaultHomeViewModel), and on settings change. Suppresses today once the
+  user has uploaded in every vault; respects denied permission.
 - **Recovery window (v2)**: when a day ends incomplete, the streak reads 0
   but `VaultEngine.recovery(...)` is non-nil until brokenDayStart+48h
   (== end of the following day). Home shows a live countdown; missing
@@ -199,9 +215,11 @@ fills use `Theme.onAccent`. Cards via `.cardSurface()` (hairline + soft
 shadow) work in both modes. Appearance: follows the system by default,
 with a System/Light/Dark picker in Profile (`AppearanceSettings`,
 persisted, applied via `.preferredColorScheme` in VaultApp — no forced
-scheme anymore). Identity colors (v2): vibrant solids + "hex-hex" gradient
-tokens in `AvatarPalette`, rendered by `AvatarStyle.fill/base`; chrome
-stays neutral — members and photos carry the color. Names/avatars are
+scheme anymore). Identity colors: a curated `AvatarPalette` (6 solids + 2
+"hex-hex" gradient tokens, v3 reduced from the larger v2 set), rendered by
+`AvatarStyle.fill/base`; chrome stays neutral — members and photos carry
+the color. `AvatarView` shows a user's `profilePhotoPaths.first` as the
+profile picture when present (v3), else colored initials. Names/avatars are
 tappable everywhere via `UserLink` → member profile (photo pager, bio,
 shared vaults). Launch: `LaunchRevealView` vault-dial animation in
 RootView (reduce-motion aware, waits for bootstrap + min dwell).
