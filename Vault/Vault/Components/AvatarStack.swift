@@ -106,13 +106,21 @@ struct ColorRampPicker: View {
     @Binding var selection: String
     var singleLine = false
 
-    /// The curated handful shown in single-line mode.
+    /// The curated base shown in single-line mode.
     static let compactTokens = Array(AvatarPalette.solids.prefix(5))
+
+    /// Always exactly five, and always including the current selection — so
+    /// an existing color (even a gradient) stays highlighted on the profile
+    /// editor.
+    private var compactRow: [String] {
+        if Self.compactTokens.contains(selection) { return Self.compactTokens }
+        return [selection] + Self.compactTokens.prefix(4)
+    }
 
     var body: some View {
         if singleLine {
             HStack(spacing: 18) {
-                ForEach(Self.compactTokens, id: \.self) { token in
+                ForEach(compactRow, id: \.self) { token in
                     swatch(token, size: 40)
                 }
             }

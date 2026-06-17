@@ -150,7 +150,7 @@ private struct ProfileContent: View {
             }
             .listRowBackground(Theme.surface)
 
-            ColorRampPicker(selection: $viewModel.selectedColorHex)
+            ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
                 .padding(.vertical, 4)
                 .listRowBackground(Theme.surface)
 
