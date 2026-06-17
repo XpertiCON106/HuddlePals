@@ -4,6 +4,9 @@
 -- with {{ .Token }}, Apple client id, optional Twilio for SMS), and
 -- Storage → create PRIVATE bucket named "deposits".
 
+-- pgcrypto provides gen_random_bytes() for crypto-strength invite codes.
+create extension if not exists pgcrypto;
+
 -- ============================================================ tables
 
 create table public.profiles (
@@ -128,13 +131,22 @@ create policy profiles_select on public.profiles for select
 create policy profiles_insert on public.profiles for insert
   with check (id = auth.uid());
 create policy profiles_update on public.profiles for update
-  using (id = auth.uid());
+  using (id = auth.uid()) with check (id = auth.uid());
 
 -- vaults: members read; keeper updates settings; create/join go through RPCs.
+-- Column grant (below) further limits the keeper to presentational fields —
+-- streak_count / invite_code are writable only by the SECURITY DEFINER RPCs.
 create policy vaults_select on public.vaults for select
   using (is_vault_member(id));
 create policy vaults_update on public.vaults for update
-  using (is_vault_keeper(id));
+  using (is_vault_keeper(id)) with check (is_vault_keeper(id));
+
+-- M1: RLS limits UPDATE to the keeper's own vault; this limits WHICH columns
+-- they may write. streak_count / last_streak_day / invite_code are then
+-- writable only by the SECURITY DEFINER RPCs (which run as the table owner
+-- and bypass column grants). Stops a keeper forging the streak via PATCH.
+revoke update on public.vaults from authenticated;
+grant update (name, emoji, notification_hour) on public.vaults to authenticated;
 
 -- memberships: visible to co-members; leaving deletes your own row.
 -- Inserts happen only inside the create_vault / join_vault RPCs.
@@ -193,8 +205,10 @@ begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
   loop
     v_code := '';
+    -- Crypto-strength source (not the predictable `random()` PRNG); the
+    -- small modulo bias over a 31-char alphabet is irrelevant for codes.
     for i in 1..6 loop
-      v_code := v_code || substr(alphabet, 1 + floor(random() * length(alphabet))::int, 1);
+      v_code := v_code || substr(alphabet, 1 + (get_byte(gen_random_bytes(1), 0) % length(alphabet)), 1);
     end loop;
     exit when not exists (select 1 from vaults where invite_code = v_code);
   end loop;
@@ -224,16 +238,19 @@ begin
   return next v_vault;
 end $$;
 
--- Decrements a member's token and records the skip, atomically.
+-- Decrements the CALLER's token and records their skip, atomically.
+-- `p_user` is accepted for signature stability but deliberately ignored:
+-- the action always targets auth.uid(), so a member can never spend or
+-- forge a skip on another member's behalf (was an IDOR).
 create or replace function public.spend_skip_token(p_vault uuid, p_user uuid, p_day_key text)
 returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not is_vault_member(p_vault) then raise exception 'not_a_member'; end if;
   update memberships set skip_tokens_remaining = skip_tokens_remaining - 1
-    where vault_id = p_vault and user_id = p_user and skip_tokens_remaining > 0;
+    where vault_id = p_vault and user_id = auth.uid() and skip_tokens_remaining > 0;
   if not found then raise exception 'no_tokens_remaining'; end if;
-  insert into skips (vault_id, user_id, day_key) values (p_vault, p_user, p_day_key)
+  insert into skips (vault_id, user_id, day_key) values (p_vault, auth.uid(), p_day_key)
     on conflict do nothing;
 end $$;
 
@@ -253,6 +270,12 @@ declare
   v_covered int;
 begin
   if not is_vault_member(p_vault) then raise exception 'not_a_member'; end if;
+  -- M1: don't trust an arbitrary client day. Clamp to ±1 day of server UTC
+  -- (±1 absorbs legitimate timezone skew) so a member can't pass a bogus far
+  -- date to grief the streak to 0.
+  if p_today::date < (now()::date - 1) or p_today::date > (now()::date + 1) then
+    raise exception 'invalid_day_key';
+  end if;
   select count(*) into v_members from memberships where vault_id = p_vault;
   v_cursor := p_today::date;
 
@@ -346,3 +369,16 @@ create policy deposits_storage_update on storage.objects for update
 --   drop policy if exists deposits_storage_insert on storage.objects;
 --   drop policy if exists deposits_storage_update on storage.objects;
 --   -- then re-run the "storage RLS" section above (and create try_uuid).
+
+-- ============================================ security hardening migration
+-- For a DB created before this hardening (H1/M1/M4/H2a), run:
+--   create extension if not exists pgcrypto;
+--   -- H1 + M1 + H2a: just re-run the create_vault, spend_skip_token, and
+--   -- recompute_streak function definitions above (CREATE OR REPLACE).
+--   -- M1 column grant:
+--   revoke update on public.vaults from authenticated;
+--   grant update (name, emoji, notification_hour) on public.vaults to authenticated;
+--   -- M4: re-create the two update policies with WITH CHECK:
+--   drop policy if exists profiles_update on public.profiles;
+--   drop policy if exists vaults_update   on public.vaults;
+--   -- then re-run the profiles_update / vaults_update policy statements above.

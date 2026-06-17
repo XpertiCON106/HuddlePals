@@ -17,12 +17,19 @@ final class SupabaseClient {
         case notAuthenticated
         case http(status: Int, message: String)
 
+        /// User-facing copy — deliberately generic so raw PostgREST/GoTrue
+        /// detail (constraint names, internals) never reaches the UI. The
+        /// raw `message` stays available as the associated value for the
+        /// services that map specific server errors to typed app errors.
         var errorDescription: String? {
             switch self {
             case .notAuthenticated:
                 return "Not signed in."
-            case .http(let status, let message):
-                return message.isEmpty ? "Server error (\(status))." : message
+            case .http(let status, _):
+                if status == 401 || status == 403 {
+                    return "Your session has expired. Please sign in again."
+                }
+                return "Something went wrong. Please try again."
             }
         }
     }

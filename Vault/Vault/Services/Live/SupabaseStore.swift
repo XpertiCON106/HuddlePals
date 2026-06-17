@@ -16,12 +16,19 @@ final class SupabaseStore {
 
     // MARK: - Lookups
 
+    // Predicate-filtered point lookups: these run inside per-row
+    // reconciliation loops, so fetching the whole table and scanning each
+    // time was O(n²). The id is unique, so fetchLimit 1 is exact.
     func user(id: UUID) throws -> User? {
-        try context.fetch(FetchDescriptor<User>()).first { $0.id == id }
+        var descriptor = FetchDescriptor<User>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
     }
 
     func vault(id: UUID) throws -> Vault? {
-        try context.fetch(FetchDescriptor<Vault>()).first { $0.id == id }
+        var descriptor = FetchDescriptor<Vault>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
     }
 
     // MARK: - Upserts

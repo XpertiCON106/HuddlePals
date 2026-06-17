@@ -158,7 +158,11 @@ final class MockAuthService: AuthServiceProtocol {
 
     func requestCode(to destination: OTPDestination) async throws {
         // TODO: BACKEND — the live service sends a real code via GoTrue.
+        // DEBUG only: never log the destination (PII) or code in a shipped
+        // build. The mock code is fixed and shown in the onboarding UI.
+        #if DEBUG
         print("[MockAuth] Verification code for \(destination.displayValue): \(Self.mockCode)")
+        #endif
     }
 
     func verifyCode(_ code: String, for destination: OTPDestination) async throws -> AuthSessionState {

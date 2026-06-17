@@ -20,7 +20,9 @@ struct BackendConfig {
             let anonKey = plist["SUPABASE_ANON_KEY"] as? String,
             !urlString.contains("YOUR-PROJECT"),
             !anonKey.isEmpty, !anonKey.contains("YOUR-ANON-KEY"),
-            let url = URL(string: urlString)
+            let url = URL(string: urlString),
+            // Defense in depth: never speak to the backend over cleartext.
+            url.scheme?.lowercased() == "https"
         else { return nil }
         return BackendConfig(url: url, anonKey: anonKey)
     }
