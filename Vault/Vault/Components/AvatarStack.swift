@@ -99,30 +99,44 @@ struct UserLink<Content: View>: View {
     }
 }
 
-/// Shared identity-color picker (onboarding + profile editing): solid
-/// swatches in a grid, gradient swatches in a row beneath.
+/// Shared identity-color picker. Default: solid swatches in a grid with
+/// gradients beneath (profile editing). `singleLine`: a curated five in one
+/// clean row (onboarding).
 struct ColorRampPicker: View {
     @Binding var selection: String
+    var singleLine = false
+
+    /// The curated handful shown in single-line mode.
+    static let compactTokens = Array(AvatarPalette.solids.prefix(5))
 
     var body: some View {
-        VStack(spacing: 14) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                ForEach(AvatarPalette.solids, id: \.self) { token in
-                    swatch(token)
+        if singleLine {
+            HStack(spacing: 18) {
+                ForEach(Self.compactTokens, id: \.self) { token in
+                    swatch(token, size: 40)
                 }
             }
-            HStack(spacing: 12) {
-                ForEach(AvatarPalette.gradients, id: \.self) { token in
-                    swatch(token)
+            .frame(maxWidth: .infinity)
+        } else {
+            VStack(spacing: 14) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+                    ForEach(AvatarPalette.solids, id: \.self) { token in
+                        swatch(token)
+                    }
+                }
+                HStack(spacing: 12) {
+                    ForEach(AvatarPalette.gradients, id: \.self) { token in
+                        swatch(token)
+                    }
                 }
             }
         }
     }
 
-    private func swatch(_ token: String) -> some View {
+    private func swatch(_ token: String, size: CGFloat = 34) -> some View {
         Circle()
             .fill(AvatarStyle.fill(for: token))
-            .frame(width: 34, height: 34)
+            .frame(width: size, height: size)
             .overlay {
                 if token == selection {
                     Circle().strokeBorder(.white, lineWidth: 2.5)

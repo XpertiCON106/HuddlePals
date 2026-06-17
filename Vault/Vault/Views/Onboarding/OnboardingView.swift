@@ -336,8 +336,9 @@ private struct ProfileStep: View {
                 )
                 .padding(.horizontal, 44)
 
-            ColorRampPicker(selection: $viewModel.selectedColorHex)
+            ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
                 .padding(.horizontal, Theme.screenPadding)
+                .padding(.top, 4)
 
             if let error = viewModel.errorMessage {
                 Text(error)
