@@ -52,8 +52,8 @@ final class LiveMediaService: MediaServiceProtocol {
     }
 
     func deleteImage(at relativePath: String) {
-        // Local cache only. Replaced deposits leave an orphaned object in
-        // Storage — harmless at this scale.
+        // Local cache only. Unreferenced uploads (e.g. a removed profile
+        // photo) leave an orphaned object in Storage — harmless at this scale.
         // TODO: BACKEND — clean up orphans with a scheduled edge function.
         localCache.deleteImage(at: relativePath)
     }

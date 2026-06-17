@@ -27,8 +27,8 @@ struct LocalDepositImage: View {
             .clipped()
         }
         .task(id: relativePath) {
-            // Reload when the path changes (same-day replacement keeps the
-            // deposit id but swaps the file); skip when already loaded.
+            // Reload when the path changes (remote sync can re-path a row);
+            // skip when already loaded.
             guard loadedPath != relativePath else { return }
             let loaded = await deps.mediaService.loadImageData(at: relativePath)
             image = loaded.flatMap(UIImage.init(data:))

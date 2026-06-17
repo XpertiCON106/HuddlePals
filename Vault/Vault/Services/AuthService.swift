@@ -146,8 +146,8 @@ final class MockAuthService: AuthServiceProtocol {
         if UserDefaults.standard.string(forKey: Self.pendingIdentityKey) != nil {
             return .needsProfile(suggestedName: nil)
         }
-        // Demo nicety: land signed-in as the seeded user — unless the user
-        // explicitly signed out, in which case the sign-in flow shows.
+        // Auto-sign-in the seeded user — unless they explicitly signed out,
+        // in which case the sign-in flow shows.
         if !UserDefaults.standard.bool(forKey: Self.signedOutKey),
            let seeded = users.first(where: { $0.displayName == SeedDataService.currentUserName }) {
             persist(seeded)

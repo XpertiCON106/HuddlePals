@@ -1,8 +1,8 @@
 import Foundation
 import Observation
 
-/// Owns app bootstrap: seed → restore session → pick active vault →
-/// recompute streak. RootView stays dumb.
+/// Owns app bootstrap: seed (mock only) → restore session → schedule
+/// reminders. RootView stays dumb.
 @MainActor
 @Observable
 final class RootViewModel {

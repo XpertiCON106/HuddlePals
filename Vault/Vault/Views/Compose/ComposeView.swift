@@ -50,8 +50,8 @@ struct ComposeView: View {
         .onAppear {
             if viewModel == nil {
                 viewModel = ComposeViewModel(deps: deps, vault: vault, targetDayKey: targetDayKey)
-                // Friction killer: open the camera immediately (when there
-                // is one — the Simulator has none).
+                // Open the camera immediately (when there is one — the
+                // Simulator has none).
                 showCamera = CameraPicker.isAvailable
             }
         }
