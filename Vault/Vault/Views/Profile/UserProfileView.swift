@@ -7,6 +7,9 @@ struct UserProfileView: View {
     @Environment(AppRouter.self) private var router
     let user: User
 
+    @State private var viewModel: UserProfileViewModel?
+    @State private var showBlockConfirmation = false
+
     private var sharedVaults: [Vault] {
         guard let me = deps.session.currentUser else { return [] }
         let mine = Set(me.memberships.compactMap { $0.vault?.id })
@@ -87,6 +90,42 @@ struct UserProfileView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.background, for: .navigationBar)
+        .onAppear {
+            if viewModel == nil { viewModel = UserProfileViewModel(deps: deps, user: user) }
+        }
+        .toolbar {
+            if let viewModel, !viewModel.isSelf {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(
+                            viewModel.isBlocked ? "Unblock \(user.displayName)" : "Block \(user.displayName)",
+                            systemImage: viewModel.isBlocked ? "hand.raised.slash" : "hand.raised",
+                            role: viewModel.isBlocked ? nil : .destructive
+                        ) {
+                            if viewModel.isBlocked {
+                                Task { await viewModel.toggleBlock() }
+                            } else {
+                                showBlockConfirmation = true
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Block \(user.displayName)?",
+            isPresented: $showBlockConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Block", role: .destructive) {
+                Task { await viewModel?.toggleBlock() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You won't see their photos or comments anymore. They won't be told.")
+        }
     }
 
     @ViewBuilder

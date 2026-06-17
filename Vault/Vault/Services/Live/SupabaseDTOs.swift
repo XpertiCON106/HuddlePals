@@ -66,6 +66,17 @@ struct SkipDTO: Codable {
     var dayKey: String
 }
 
+struct ReportDTO: Codable {
+    let id: UUID
+    let reporterId: UUID
+}
+
+struct BlockDTO: Codable {
+    let id: UUID
+    let blockerId: UUID
+    let blockedId: UUID
+}
+
 extension Array where Element == UUID {
     /// PostgREST `in.(a,b,c)` filter value.
     var postgrestInList: String {

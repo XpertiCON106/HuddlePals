@@ -33,11 +33,26 @@ seeded **mock** world. No code changes to switch.
 3. **Storage** → *New bucket* → name `deposits`, **Private** (not public).
    (Profile photos live in the same bucket under `avatars/…` — the schema's
    storage policies cover both namespaces; no second bucket needed.)
+   **Then set the bucket's limits** (bucket → settings): **file size limit
+   ~5 MB** and **allowed MIME types** `image/jpeg, image/heic`. Without this,
+   a malicious client can upload unbounded data and run up your bill.
 4. **SQL Editor** → *New query* → paste the entire contents of
-   [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates all
-   seven tables, every RLS policy, the storage policies, and four RPCs
-   (`create_vault`, `join_vault`, `spend_skip_token`, `recompute_streak`).
-5. **Settings → API**: copy the **Project URL** and the **anon public key**.
+   [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates the nine
+   tables (profiles, vaults, memberships, deposits, reactions, comments,
+   skips, **reports, blocks**), every RLS policy + column grant, the storage
+   policies, and four RPCs (`create_vault`, `join_vault`, `spend_skip_token`,
+   `recompute_streak`). The security hardening (skip-token auth, crypto
+   invite codes, streak-tamper protection) is baked in.
+5. **Deploy the account-deletion edge function** (required for App Review —
+   see "Account deletion" below): `supabase functions deploy delete-account`.
+   It revokes the user's Apple token, deletes their avatars, and deletes the
+   auth user (deposits stay as "Former member"). If you keep Sign in with
+   Apple, set the Apple secrets so revocation works:
+   `supabase secrets set APPLE_TEAM_ID=… APPLE_KEY_ID=… APPLE_SERVICE_ID=<bundle id> APPLE_PRIVATE_KEY="$(cat AuthKey_XXX.p8)"`.
+6. **Settings → API**: copy the **Project URL** and the **anon public key**.
+7. **Set up report monitoring**: the `reports` table fills when users flag
+   content — watch it (a saved dashboard query, or a Database Webhook to
+   email/Slack) and act within 24 h, as App Review requires.
 
 ## Phase 2 — Point the app at it (~5 minutes)
 
@@ -117,8 +132,17 @@ seeded **mock** world. No code changes to switch.
   trusts the client's "today" for streaks (RLS only clamps deposits to a
   48h window). Same-timezone groups: no issue. Split-timezone groups can
   see edge-of-day disagreements — a vault "home timezone" is the fix.
-- **Replaced photos orphan their old Storage object.** Harmless at this
-  scale; a cleanup edge function is the eventual fix.
+- **Account deletion (Model B).** "Delete account" in Profile removes the
+  account, login, name, and avatars and revokes the Apple token, but
+  **deposited photos stay in shared vaults as "Former member"** — the
+  archive is permanent (disclose this in your privacy policy; see
+  [PRIVACY.md](PRIVACY.md)). Deletion runs through the `delete-account` edge
+  function, which holds the `service_role` key — never put that key in the
+  app.
+- **Permanent storage grows forever.** Deposits are never deleted, so
+  storage cost only rises. Images are now downscaled before upload
+  (~1440px deposits, ~512px avatars) to keep that growth ~10× slower —
+  budget Supabase Pro for backups + headroom.
 - **Streak source of truth** is the `recompute_streak` RPC (server-side).
   The local `VaultEngine` math stays as the mock/test implementation —
   keep the two in sync if you change the rules.

@@ -63,11 +63,12 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   `makeLive(config:)` are the only two wirings; built once in
   `VaultApp.init`, injected via `.environment(...)`. Holds: ModelContainer,
   `VaultEngine`, `AppDateProvider` (injectable clock w/ debug `dayOffset`),
-  `AppSession` (currentUser, pendingInviteCode, needsProfileSetup, isReady),
-  `DebugSettings`, `AppearanceSettings`, the four services, the seeder,
-  `reminders` (ReminderCoordinator), and `isLive`.
+  `AppSession` (currentUser, blockedUserIDs, pendingInviteCode,
+  needsProfileSetup, isReady), `DebugSettings`, `AppearanceSettings`, the
+  five services, the seeder, `reminders` (ReminderCoordinator), and `isLive`.
 - **Services (protocol → mock / live)**: `AuthServiceProtocol`,
-  `VaultServiceProtocol`, `DepositServiceProtocol`, `MediaServiceProtocol`.
+  `VaultServiceProtocol`, `DepositServiceProtocol`, `MediaServiceProtocol`,
+  `ModerationServiceProtocol` (report/block, UGC safeguards).
   All `@MainActor` except Media. Notifications are NOT a service: the
   single notification path is the backend-agnostic per-user
   `ReminderCoordinator` (`Support/DailyReminders.swift`, on `deps.reminders`).
@@ -121,6 +122,33 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   (RootViewModel), foreground (VaultApp scenePhase), after a deposit
   (VaultHomeViewModel), and on settings change. Suppresses today once the
   user has uploaded in every vault; respects denied permission.
+- **Account deletion — Model B (v4)**: `AuthServiceProtocol.deleteAccount()`.
+  Live = the `supabase/functions/delete-account` edge function (revokes Apple
+  token, deletes avatar objects, `auth.admin.deleteUser`). Deposited photos
+  are PERMANENT and stay as "Former member" — this is why `deposits.author_id`
+  / `comments.user_id` are nullable + `ON DELETE SET NULL` (the app already
+  renders nil author/user as "Former member"). Required by App Store
+  5.1.1(v); reconciles with the permanence promise (account deletes, content
+  stays). UI: Profile → Delete account (confirmation states the deal).
+- **Moderation — report/block (v4, UGC req. 1.2)**: `ModerationServiceProtocol`
+  (+ Mock/Live). `reports` + `blocks` tables. Blocked ids live in
+  `session.blockedUserIDs` (loaded at sign-in/launch; mutated by block
+  actions). Filtering is PRESENTATIONAL only — VaultHome/Archive/DepositDetail
+  hide blocked authors' deposits/comments, but the gate/streak math uses the
+  UNFILTERED set (blocking never changes membership or streaks; that's why
+  VaultHomeViewModel keeps `todayDepositorIDs` separate). UI: "•••" menu on
+  DepositDetail (report + block) and UserProfileView (block/unblock).
+- **Image downscaling (v4)**: `Support/ImageDownscaler.swift` — deposits
+  ≤1440px, avatars ≤512px, JPEG 0.8, applied in ComposeViewModel +
+  ProfileViewModel before upload. Critical because storage is permanent and
+  only grows. Don't remove it.
+- **Backend security hardening (v4, in schema.sql — must be re-run on live)**:
+  `spend_skip_token` acts on `auth.uid()` only (was an IDOR); invite codes use
+  `gen_random_bytes` (pgcrypto); a column grant + `recompute_streak` p_today
+  clamp stop streak forgery; update policies have `WITH CHECK`. App side:
+  Keychain is `…ThisDeviceOnly`; `BackendConfig` requires https;
+  `ClientError.http.errorDescription` is generic (raw `message` kept for
+  service mapping); the mock OTP `print` is `#if DEBUG`.
 - **Recovery window (v2)**: when a day ends incomplete, the streak reads 0
   but `VaultEngine.recovery(...)` is non-nil until brokenDayStart+48h
   (== end of the following day). Home shows a live countdown; missing

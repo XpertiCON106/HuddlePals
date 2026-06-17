@@ -25,8 +25,11 @@ struct DepositDetailView: View {
 }
 
 private struct DetailContent: View {
+    @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: DepositDetailViewModel
     @FocusState private var commentFocused: Bool
+
+    @State private var showBlockConfirmation = false
 
     private var deposit: Deposit { viewModel.deposit }
 
@@ -85,6 +88,40 @@ private struct DetailContent: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.background, for: .navigationBar)
         .safeAreaInset(edge: .bottom) { commentBar }
+        .toolbar {
+            if let author = viewModel.reportableAuthor {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(viewModel.didReport ? "Reported" : "Report photo", systemImage: "flag") {
+                            Task { await viewModel.report() }
+                        }
+                        .disabled(viewModel.didReport)
+                        Button("Block \(author.displayName)", systemImage: "hand.raised", role: .destructive) {
+                            showBlockConfirmation = true
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            viewModel.reportableAuthor.map { "Block \($0.displayName)?" } ?? "Block?",
+            isPresented: $showBlockConfirmation,
+            titleVisibility: .visible
+        ) {
+            if let author = viewModel.reportableAuthor {
+                Button("Block", role: .destructive) {
+                    Task {
+                        await viewModel.block(author)
+                        dismiss() // their content is now hidden from you
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You won't see their photos or comments anymore. They won't be told.")
+        }
     }
 
     private var reactionRow: some View {

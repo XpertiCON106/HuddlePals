@@ -22,6 +22,7 @@ final class RootViewModel {
             switch try await deps.auth.currentState() {
             case .signedIn(let user):
                 deps.session.currentUser = user
+                deps.session.blockedUserIDs = (try? await deps.moderationService.blockedUserIDs()) ?? []
             case .needsProfile:
                 deps.session.needsProfileSetup = true
             case .signedOut:

@@ -48,7 +48,12 @@ final class ArchiveViewModel {
                 deposits: all.compactMap(\.snapshot),
                 now: now
             ) && !deps.debug.simulateNotPostedToday
-            let visible = all.filter { $0.dayKey != todayKey || unlocked }
+            // Hide today while locked, and hide blocked members' photos.
+            let blocked = deps.session.blockedUserIDs
+            let visible = all.filter {
+                ($0.dayKey != todayKey || unlocked)
+                    && !blocked.contains($0.author?.id ?? UUID())
+            }
 
             months = Self.group(visible, engine: engine)
 

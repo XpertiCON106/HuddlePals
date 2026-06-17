@@ -106,6 +106,14 @@ final class LiveAuthService: AuthServiceProtocol {
         await client.signOut()
     }
 
+    func deleteAccount() async throws {
+        // The edge function revokes the Apple token, deletes avatar objects,
+        // and deletes the auth user (cascades the profile; deposits/comments
+        // keep their rows as "Former member"). Then drop the local session.
+        try await client.invokeFunction("delete-account")
+        await client.signOut()
+    }
+
     /// Authenticated → signed in if the profile row exists, otherwise the
     /// onboarding profile step.
     private func state(

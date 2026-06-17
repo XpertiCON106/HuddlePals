@@ -34,6 +34,7 @@ private struct ProfileContent: View {
     let onSignOut: () -> Void
 
     @State private var showSignOutConfirmation = false
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         List {
@@ -64,6 +65,20 @@ private struct ProfileContent: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("You can sign back in any time with the same Apple ID, email, or phone number.")
+        }
+        .confirmationDialog(
+            "Delete your account?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete account", role: .destructive) {
+                Task {
+                    if await viewModel.deleteAccount() { onSignOut() }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your account, name, and profile photos are permanently removed and you're signed out. Photos you already deposited stay in your shared vaults as \"Former member\" — a vault's archive is permanent. This can't be undone.")
         }
     }
 
@@ -239,11 +254,20 @@ private struct ProfileContent: View {
 
     private var accountSection: some View {
         Section("Account") {
-            Button(role: .destructive) {
+            Button {
                 showSignOutConfirmation = true
             } label: {
                 Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                    .foregroundStyle(Theme.textPrimary)
             }
+            .listRowBackground(Theme.surface)
+
+            Button(role: .destructive) {
+                showDeleteConfirmation = true
+            } label: {
+                Label("Delete account", systemImage: "trash")
+            }
+            .disabled(viewModel.isWorking)
             .listRowBackground(Theme.surface)
         }
     }

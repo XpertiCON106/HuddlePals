@@ -44,7 +44,10 @@ create table public.memberships (
 create table public.deposits (
   id uuid primary key default gen_random_uuid(),
   vault_id uuid not null references public.vaults (id) on delete cascade,
-  author_id uuid not null references public.profiles (id) on delete cascade,
+  -- Nullable + SET NULL: deposited photos are permanent and stay in the
+  -- vault's shared archive after the author deletes their account; the row
+  -- survives with a null author, rendered as "Former member".
+  author_id uuid references public.profiles (id) on delete set null,
   storage_path text not null,
   caption text check (caption is null or char_length(caption) <= 80),
   day_key text not null check (day_key ~ '^\d{4}-\d{2}-\d{2}$'),
@@ -66,7 +69,9 @@ create table public.reactions (
 create table public.comments (
   id uuid primary key default gen_random_uuid(),
   deposit_id uuid not null references public.deposits (id) on delete cascade,
-  user_id uuid not null references public.profiles (id) on delete cascade,
+  -- SET NULL so a comment thread stays intact after its author deletes
+  -- their account (rendered "Former member"), consistent with deposits.
+  user_id uuid references public.profiles (id) on delete set null,
   body text not null check (char_length(body) between 1 and 500),
   created_at timestamptz not null default now()
 );
@@ -357,6 +362,45 @@ create policy deposits_storage_update on storage.objects for update
     and (storage.foldername(name))[2] = auth.uid()::text
   );
 
+-- ============================================ moderation (UGC safeguards)
+-- App Store guideline 1.2 requires user-generated-content apps to let users
+-- report objectionable content and block other users. Monitor `reports`
+-- (e.g. a dashboard query or email hook) and act within 24h.
+
+create table public.reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles (id) on delete cascade,
+  deposit_id uuid references public.deposits (id) on delete set null,
+  reported_user_id uuid references public.profiles (id) on delete set null,
+  reason text check (reason is null or char_length(reason) <= 300),
+  created_at timestamptz not null default now()
+);
+
+create table public.blocks (
+  id uuid primary key default gen_random_uuid(),
+  blocker_id uuid not null references public.profiles (id) on delete cascade,
+  blocked_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (blocker_id, blocked_id)
+);
+create index blocks_blocker on public.blocks (blocker_id);
+
+alter table public.reports enable row level security;
+alter table public.blocks  enable row level security;
+
+-- reports: file your own; you can't read others' (only the operator can,
+-- via the dashboard / service role).
+create policy reports_insert on public.reports for insert
+  with check (reporter_id = auth.uid());
+
+-- blocks: fully managed by the blocker.
+create policy blocks_select on public.blocks for select
+  using (blocker_id = auth.uid());
+create policy blocks_insert on public.blocks for insert
+  with check (blocker_id = auth.uid());
+create policy blocks_delete on public.blocks for delete
+  using (blocker_id = auth.uid());
+
 -- ============================================ already ran an older schema?
 -- Idempotent migration for databases created before profiles/permanence:
 --   alter table public.profiles add column if not exists bio text
@@ -382,3 +426,17 @@ create policy deposits_storage_update on storage.objects for update
 --   drop policy if exists profiles_update on public.profiles;
 --   drop policy if exists vaults_update   on public.vaults;
 --   -- then re-run the profiles_update / vaults_update policy statements above.
+
+-- ========================================== account-deletion migration
+-- For a DB created before "Former member" account deletion, repoint the FKs
+-- so deleting a profile keeps deposits/comments (SET NULL) instead of
+-- cascading them away:
+--   alter table public.deposits alter column author_id drop not null;
+--   alter table public.deposits drop constraint deposits_author_id_fkey,
+--     add constraint deposits_author_id_fkey
+--     foreign key (author_id) references public.profiles (id) on delete set null;
+--   alter table public.comments alter column user_id drop not null;
+--   alter table public.comments drop constraint comments_user_id_fkey,
+--     add constraint comments_user_id_fkey
+--     foreign key (user_id) references public.profiles (id) on delete set null;
+-- (Constraint names assume Postgres defaults — verify with \d before running.)

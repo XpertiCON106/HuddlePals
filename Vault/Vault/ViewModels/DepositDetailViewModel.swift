@@ -12,6 +12,7 @@ final class DepositDetailViewModel {
     var commentDraft = ""
     private(set) var isPosting = false
     private(set) var errorMessage: String?
+    private(set) var didReport = false
 
     init(deps: AppDependencies, deposit: Deposit) {
         self.deps = deps
@@ -19,7 +20,37 @@ final class DepositDetailViewModel {
     }
 
     var sortedComments: [Comment] {
-        deposit.comments.sorted { $0.createdAt < $1.createdAt }
+        let blocked = deps.session.blockedUserIDs
+        return deposit.comments
+            .filter { !blocked.contains($0.user?.id ?? UUID()) }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// The photo's author, when it isn't the current user (so the detail
+    /// view can offer report/block on someone else's deposit).
+    var reportableAuthor: User? {
+        guard let author = deposit.author, author.id != deps.session.currentUser?.id else { return nil }
+        return author
+    }
+
+    func report() async {
+        do {
+            try await deps.moderationService.report(deposit: deposit, reason: nil)
+            didReport = true
+            Haptics.success()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func block(_ user: User) async {
+        do {
+            try await deps.moderationService.block(user)
+            deps.session.blockedUserIDs.insert(user.id)
+            Haptics.success()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func reactionCount(for emoji: String) -> Int {

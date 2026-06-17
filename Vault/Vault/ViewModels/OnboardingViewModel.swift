@@ -292,6 +292,7 @@ final class OnboardingViewModel {
     private func finishSignIn(_ user: User) async {
         Haptics.success()
         deps.session.currentUser = user
+        deps.session.blockedUserIDs = (try? await deps.moderationService.blockedUserIDs()) ?? []
     }
 
     private func startResendCooldown() {

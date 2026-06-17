@@ -10,6 +10,9 @@ import SwiftData
 @Observable
 final class AppSession {
     var currentUser: User?
+    /// Ids the current user has blocked — their photos/comments are hidden
+    /// from the blocker's feed, archive, and detail views.
+    var blockedUserIDs: Set<UUID> = []
     /// Invite code arriving via a vault://join/<code> link, consumed by the
     /// Join screen.
     var pendingInviteCode: String?
@@ -51,6 +54,7 @@ final class AppDependencies {
     let vaultService: any VaultServiceProtocol
     let depositService: any DepositServiceProtocol
     let mediaService: any MediaServiceProtocol
+    let moderationService: any ModerationServiceProtocol
     let seeder: SeedDataService
     /// Per-user daily upload reminders (local notifications, backend-agnostic).
     /// This is the app's single notification path.
@@ -68,6 +72,7 @@ final class AppDependencies {
         vaultService: any VaultServiceProtocol,
         depositService: any DepositServiceProtocol,
         mediaService: any MediaServiceProtocol,
+        moderationService: any ModerationServiceProtocol,
         seeder: SeedDataService,
         reminders: ReminderCoordinator
     ) {
@@ -82,6 +87,7 @@ final class AppDependencies {
         self.vaultService = vaultService
         self.depositService = depositService
         self.mediaService = mediaService
+        self.moderationService = moderationService
         self.seeder = seeder
         self.reminders = reminders
     }
@@ -105,6 +111,7 @@ final class AppDependencies {
             vaultService: MockVaultService(context: context, engine: engine, skipLedger: skipLedger),
             depositService: MockDepositService(context: context, engine: engine),
             mediaService: media,
+            moderationService: MockModerationService(session: session),
             seeder: SeedDataService(
                 context: context,
                 engine: engine,
@@ -148,6 +155,7 @@ final class AppDependencies {
             vaultService: LiveVaultService(client: client, store: store, engine: engine),
             depositService: LiveDepositService(client: client, store: store),
             mediaService: media,
+            moderationService: LiveModerationService(client: client, session: session),
             // Constructed but never invoked in live mode (RootViewModel
             // gates seeding on isLive).
             seeder: SeedDataService(

@@ -27,9 +27,12 @@ final class VaultHomeViewModel {
     }
 
     /// Members who haven't deposited today — drives the "waiting on…" line.
+    /// Everyone who deposited today, computed from the *unfiltered* set so
+    /// blocking a member never makes them wrongly appear in `waitingOn`.
+    private(set) var todayDepositorIDs: Set<UUID> = []
+
     var waitingOn: [User] {
-        let depositedIDs = Set(todayDeposits.compactMap { $0.author?.id })
-        return members.filter { !depositedIDs.contains($0.id) }
+        members.filter { !todayDepositorIDs.contains($0.id) }
     }
 
     /// Members still missing from the broken day, resolved to users.
@@ -54,8 +57,13 @@ final class VaultHomeViewModel {
         do {
             let all = try await deps.depositService.deposits(in: vault)
             let key = todayKey
-            todayDeposits = all
-                .filter { $0.dayKey == key }
+            let todayAll = all.filter { $0.dayKey == key }
+            todayDepositorIDs = Set(todayAll.compactMap { $0.author?.id })
+            // Hide blocked members' photos from the feed (gate/streak below
+            // use the unfiltered set, so blocking is presentational only).
+            let blocked = deps.session.blockedUserIDs
+            todayDeposits = todayAll
+                .filter { !blocked.contains($0.author?.id ?? UUID()) }
                 .sorted { $0.createdAt < $1.createdAt }
             members = vault.members
 

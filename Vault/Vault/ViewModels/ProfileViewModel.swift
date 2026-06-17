@@ -95,9 +95,13 @@ final class ProfileViewModel {
         for item in items {
             guard photoPaths.count < AuthValidation.maxProfilePhotos else { break }
             guard let data = try? await item.loadTransferable(type: Data.self),
-                  UIImage(data: data) != nil else { continue }
+                  let image = UIImage(data: data),
+                  let scaled = ImageDownscaler.jpegData(
+                      from: image,
+                      maxDimension: ImageDownscaler.avatarMaxDimension
+                  ) else { continue }
             if let path = try? await deps.mediaService.saveImageData(
-                data,
+                scaled,
                 preferredName: "avatars/\(user.id.uuidString)/\(UUID().uuidString).jpg"
             ) {
                 photoPaths.append(path)
@@ -140,6 +144,21 @@ final class ProfileViewModel {
         try? await deps.auth.signOut()
         deps.session.currentUser = nil
         deps.session.needsProfileSetup = false
+    }
+
+    /// Returns true on success so the view can route back to onboarding.
+    func deleteAccount() async -> Bool {
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await deps.auth.deleteAccount()
+            deps.session.currentUser = nil
+            deps.session.needsProfileSetup = false
+            return true
+        } catch {
+            statusMessage = error.localizedDescription
+            return false
+        }
     }
 
     // MARK: DEBUG actions

@@ -167,6 +167,20 @@ final class SupabaseClient {
         clearSession()
     }
 
+    // MARK: - Edge functions
+
+    /// Invokes a deployed edge function with the current user's bearer token.
+    func invokeFunction(_ name: String, body: Data? = nil) async throws {
+        guard let session = try await validSession() else { throw ClientError.notAuthenticated }
+        let url = config.url.appendingPathComponent("functions/v1/\(name)")
+        var request = makeRequest(url: url, method: "POST")
+        request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body ?? Data("{}".utf8)
+        let (data, response) = try await urlSession.data(for: request)
+        try check(response, data: data)
+    }
+
     private func storeSession(from response: AuthResponse) -> Session {
         let new = Session(
             accessToken: response.accessToken,

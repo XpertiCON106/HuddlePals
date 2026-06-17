@@ -42,7 +42,11 @@ final class ComposeViewModel {
     /// is deliberately no path to import an existing photo into this flow.
     func setCapturedImage(_ image: UIImage) {
         errorMessage = nil
-        guard let data = image.jpegData(compressionQuality: 0.9) else {
+        // Downscale for upload; the preview keeps the full-res capture.
+        guard let data = ImageDownscaler.jpegData(
+            from: image,
+            maxDimension: ImageDownscaler.depositMaxDimension
+        ) else {
             errorMessage = "Couldn't process that photo. Try again."
             return
         }

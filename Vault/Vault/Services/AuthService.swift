@@ -88,6 +88,10 @@ protocol AuthServiceProtocol: AnyObject {
         photoPaths: [String]
     ) async throws
     func signOut() async throws
+    /// Permanently deletes the signed-in account. Deposited photos remain in
+    /// shared vaults as "Former member" (the archive is permanent); the
+    /// user's profile, avatar, and login are removed and they're signed out.
+    func deleteAccount() async throws
 }
 
 extension AuthValidation {
@@ -205,6 +209,21 @@ final class MockAuthService: AuthServiceProtocol {
     func signOut() async throws {
         UserDefaults.standard.removeObject(forKey: Self.currentUserIDKey)
         UserDefaults.standard.set(true, forKey: Self.signedOutKey)
+    }
+
+    func deleteAccount() async throws {
+        // No backend in mock mode: drop the session and the identity→user
+        // mappings for the current user so they can't sign back in as them.
+        // (Live mode removes the server account, avatars, and Apple token.)
+        let defaults = UserDefaults.standard
+        if let stored = defaults.string(forKey: Self.currentUserIDKey) {
+            for (key, value) in defaults.dictionaryRepresentation()
+            where key.hasPrefix(Self.identityPrefix) && (value as? String) == stored {
+                defaults.removeObject(forKey: key)
+            }
+        }
+        defaults.removeObject(forKey: Self.currentUserIDKey)
+        defaults.set(true, forKey: Self.signedOutKey)
     }
 
     // MARK: Internals
