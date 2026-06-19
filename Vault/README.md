@@ -1,6 +1,6 @@
 # Vault
 
-> **New here? Read [OVERVIEW.md](OVERVIEW.md)** — the complete guide with diagrams. [CLAUDE.md](CLAUDE.md) is the agent context; [DEPLOYMENT.md](DEPLOYMENT.md) is the go-live runbook.
+> **New here? Read [OVERVIEW.md](OVERVIEW.md)** — the complete guide with diagrams. [DEVELOPMENT.md](DEVELOPMENT.md) is the developer reference; [DEPLOYMENT.md](DEPLOYMENT.md) is the go-live runbook.
 
 A private, daily photo-sharing app for small groups (2–8 people). One photo per person per day goes into a shared vault. Today's photos from the others stay **blurred until you deposit your own** (the reciprocity gate). Streaks belong to the group, not the individual. Over time the vault becomes a permanent collective archive — the opposite of Instagram: private, permanent, small, daily.
 
