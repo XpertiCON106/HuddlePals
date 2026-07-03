@@ -92,7 +92,8 @@ private struct ProfileContent: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(Array(viewModel.photoPaths.enumerated()), id: \.element) { index, path in
-                        LocalDepositImage(relativePath: path)
+                        // 122pt tile → 380px covers @3x displays.
+                        LocalDepositImage(relativePath: path, maxPixelSize: 380)
                             .frame(width: 92, height: 122)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(alignment: .topTrailing) {

@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 
 // MARK: - Local image loading
@@ -9,6 +10,10 @@ import SwiftUI
 struct LocalDepositImage: View {
     @Environment(AppDependencies.self) private var deps
     let relativePath: String
+    /// Cap on the decoded bitmap's longest edge, in pixels. Thumbnail
+    /// contexts (archive tiles, profile strips) must set this: a full
+    /// 1440px deposit decodes to ~10 MB of RAM behind a 110pt tile.
+    var maxPixelSize: CGFloat? = nil
 
     @State private var image: UIImage?
     @State private var loadedPath: String?
@@ -31,9 +36,31 @@ struct LocalDepositImage: View {
             // skip when already loaded.
             guard loadedPath != relativePath else { return }
             let loaded = await deps.mediaService.loadImageData(at: relativePath)
-            image = loaded.flatMap(UIImage.init(data:))
+            if let maxPixelSize {
+                image = loaded.flatMap { Self.downsampled($0, maxPixelSize: maxPixelSize) }
+            } else {
+                image = loaded.flatMap(UIImage.init(data:))
+            }
             loadedPath = relativePath
         }
+    }
+
+    /// ImageIO thumbnail decode: never materializes the full-size bitmap.
+    private static func downsampled(_ data: Data, maxPixelSize: CGFloat) -> UIImage? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return UIImage(data: data)
+        }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
+            return UIImage(data: data)
+        }
+        return UIImage(cgImage: cgImage)
     }
 }
 
