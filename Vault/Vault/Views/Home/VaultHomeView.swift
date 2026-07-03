@@ -116,12 +116,14 @@ private struct HomeContent: View {
                     Image(systemName: "archivebox")
                         .foregroundStyle(Theme.textSecondary)
                 }
+                .accessibilityLabel("Archive")
                 Button {
                     router.vaultsPath.append(.vaultSettings(viewModel.vault))
                 } label: {
                     Image(systemName: "gearshape")
                         .foregroundStyle(Theme.textSecondary)
                 }
+                .accessibilityLabel("Vault settings")
             }
         }
     }

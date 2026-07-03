@@ -102,6 +102,7 @@ private struct DetailContent: View {
                     } label: {
                         Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
                     }
+                    .accessibilityLabel("More options")
                 }
             }
         }
@@ -154,6 +155,8 @@ private struct DetailContent: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(mine ? "Remove your \(emoji) reaction" : "React with \(emoji)")
+                .accessibilityValue(count > 0 ? "\(count)" : "")
             }
             Spacer()
         }
@@ -226,6 +229,7 @@ private struct DetailContent: View {
                         )
                 }
                 .disabled(viewModel.isPosting)
+                .accessibilityLabel("Send comment")
             }
         }
         .padding(.horizontal, Theme.screenPadding)

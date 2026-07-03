@@ -100,11 +100,15 @@ private struct ProfileContent: View {
                                 Button {
                                     viewModel.removePhoto(at: index)
                                 } label: {
+                                    // Padded inside the label so the tap
+                                    // target is ~44pt, not the 18pt glyph.
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.system(size: 18))
                                         .foregroundStyle(.white, .black.opacity(0.55))
+                                        .padding(12)
+                                        .contentShape(Rectangle())
                                 }
-                                .padding(5)
+                                .accessibilityLabel("Remove photo")
                             }
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }

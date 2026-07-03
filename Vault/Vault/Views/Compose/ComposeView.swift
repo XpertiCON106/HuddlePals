@@ -137,6 +137,7 @@ private struct ComposeContent: View {
                                 .padding(10)
                                 .background(.black.opacity(0.55), in: Circle())
                         }
+                        .accessibilityLabel("Retake photo")
                         .padding(12)
                     }
             } else {
