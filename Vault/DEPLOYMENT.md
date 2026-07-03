@@ -8,6 +8,11 @@ The app picks its backend at launch: if `Vault/Vault/Supabase.plist` exists
 with real values, it runs **live** against Supabase; otherwise it runs the
 seeded **mock** world. No code changes to switch.
 
+> **Release builds require the plist.** A build-phase guard fails any
+> Release build (including Archive) when `Supabase.plist` is missing or
+> still holds placeholder values, so the mock world can never reach
+> TestFlight or the App Store by accident. Debug builds are unaffected.
+
 ---
 
 ## Phase 1 — Supabase (~30 minutes, free tier)

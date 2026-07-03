@@ -66,7 +66,8 @@ final class ArchiveViewModel {
                 backfillDayKey = nil
             }
         } catch {
-            months = []
+            // Pull-based refresh: keep the last-known archive on a transient
+            // failure rather than collapsing to the misleading empty state.
         }
     }
 

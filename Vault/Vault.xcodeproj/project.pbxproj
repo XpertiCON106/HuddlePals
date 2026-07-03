@@ -72,6 +72,7 @@
 				AA0000000000000000000040 /* Sources */,
 				AA0000000000000000000041 /* Frameworks */,
 				AA0000000000000000000042 /* Resources */,
+				AA0000000000000000000070 /* Guard: Release requires live backend config */,
 			);
 			buildRules = (
 			);
@@ -165,6 +166,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AA0000000000000000000070 /* Guard: Release requires live backend config */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Vault/Supabase.plist",
+			);
+			name = "Guard: Release requires live backend config";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Release builds must ship the LIVE Supabase backend. Without a filled-in\n# Supabase.plist the app silently falls back to the seeded mock world —\n# which must never reach TestFlight or the App Store.\nif [ \"${CONFIGURATION}\" != \"Release\" ]; then exit 0; fi\nPLIST=\"${SRCROOT}/Vault/Supabase.plist\"\nif [ ! -f \"$PLIST\" ]; then\n  echo \"error: Release builds require the live backend. Copy supabase/Supabase.example.plist to Vault/Supabase.plist and fill in SUPABASE_URL / SUPABASE_ANON_KEY (see DEPLOYMENT.md). Debug builds run the mock world without it.\"\n  exit 1\nfi\nif grep -q \"YOUR-PROJECT\\|YOUR-ANON-KEY\" \"$PLIST\"; then\n  echo \"error: Vault/Supabase.plist still contains placeholder values — fill in the real SUPABASE_URL and SUPABASE_ANON_KEY before a Release build.\"\n  exit 1\nfi\nexit 0\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA0000000000000000000040 /* Sources */ = {

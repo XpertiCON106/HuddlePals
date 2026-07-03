@@ -134,7 +134,8 @@ private struct DayRow: View {
                             onTap(deposit)
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                LocalDepositImage(relativePath: deposit.localImagePath)
+                                // 146pt tile → 450px covers @3x displays.
+                                LocalDepositImage(relativePath: deposit.localImagePath, maxPixelSize: 450)
                                     .frame(width: 110, height: 146)
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .overlay(

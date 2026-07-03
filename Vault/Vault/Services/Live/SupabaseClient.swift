@@ -3,7 +3,9 @@ import Foundation
 /// Zero-dependency Supabase client over URLSession, speaking the stable
 /// REST surfaces directly: GoTrue (auth), PostgREST (rows + RPC), and
 /// Storage (objects). Covers exactly what Vault needs — not a general SDK.
-final class SupabaseClient {
+/// An actor: `session` is read and written from concurrent refresh flows
+/// (vault list, home, reminders), so access must be serialized.
+actor SupabaseClient {
     struct Session: Codable {
         let accessToken: String
         let refreshToken: String
@@ -15,6 +17,7 @@ final class SupabaseClient {
 
     enum ClientError: LocalizedError {
         case notAuthenticated
+        case invalidURL
         case http(status: Int, message: String)
 
         /// User-facing copy — deliberately generic so raw PostgREST/GoTrue
@@ -25,6 +28,8 @@ final class SupabaseClient {
             switch self {
             case .notAuthenticated:
                 return "Not signed in."
+            case .invalidURL:
+                return "Something went wrong. Please try again."
             case .http(let status, _):
                 if status == 401 || status == 403 {
                     return "Your session has expired. Please sign in again."
@@ -141,26 +146,42 @@ final class SupabaseClient {
         return storeSession(from: response)
     }
 
+    /// An in-flight token refresh, shared by concurrent callers — GoTrue
+    /// refresh tokens are single-use, so two parallel refreshes with the
+    /// same token would invalidate the session.
+    private var refreshTask: Task<Session?, Error>?
+
     /// Returns a valid session, transparently refreshing an expired token.
+    /// nil means definitively signed out; a transient failure (offline,
+    /// server error) throws instead, so callers never destroy a session
+    /// that would refresh fine once connectivity returns.
     func validSession() async throws -> Session? {
         guard let session else { return nil }
         guard session.isExpired else { return session }
-        do {
-            let response: AuthResponse = try await authRequest(
-                path: "token?grant_type=refresh_token",
-                body: ["refresh_token": session.refreshToken]
-            )
-            return storeSession(from: response)
-        } catch {
-            // Refresh token revoked/expired — surface as signed out.
-            clearSession()
-            return nil
+        if let refreshTask {
+            return try await refreshTask.value
         }
+        let task = Task<Session?, Error> { [refreshToken = session.refreshToken] in
+            do {
+                let response: AuthResponse = try await authRequest(
+                    path: "token?grant_type=refresh_token",
+                    body: ["refresh_token": refreshToken]
+                )
+                return storeSession(from: response)
+            } catch ClientError.http(let status, _) where (400..<500).contains(status) {
+                // Refresh token revoked/expired — surface as signed out.
+                clearSession()
+                return nil
+            }
+        }
+        refreshTask = task
+        defer { refreshTask = nil }
+        return try await task.value
     }
 
     func signOut() async {
-        if let session, !session.isExpired {
-            var request = makeRequest(url: authURL(path: "logout"), method: "POST")
+        if let session, !session.isExpired, let url = try? authURL(path: "logout") {
+            var request = makeRequest(url: url, method: "POST")
             request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
             _ = try? await urlSession.data(for: request)
         }
@@ -201,7 +222,7 @@ final class SupabaseClient {
     }
 
     private func authRequestVoid<B: Encodable>(path: String, body: B) async throws {
-        var request = makeRequest(url: authURL(path: path), method: "POST")
+        var request = makeRequest(url: try authURL(path: path), method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         let (data, response) = try await urlSession.data(for: request)
@@ -209,7 +230,7 @@ final class SupabaseClient {
     }
 
     private func authRequest<B: Encodable, R: Decodable>(path: String, body: B) async throws -> R {
-        var request = makeRequest(url: authURL(path: path), method: "POST")
+        var request = makeRequest(url: try authURL(path: path), method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         let (data, response) = try await urlSession.data(for: request)
@@ -217,8 +238,11 @@ final class SupabaseClient {
         return try decoder.decode(R.self, from: data)
     }
 
-    private func authURL(path: String) -> URL {
-        URL(string: "\(config.url.absoluteString)/auth/v1/\(path)")!
+    private func authURL(path: String) throws -> URL {
+        guard let url = URL(string: "\(config.url.absoluteString)/auth/v1/\(path)") else {
+            throw ClientError.invalidURL
+        }
+        return url
     }
 
     // MARK: - PostgREST
@@ -281,12 +305,13 @@ final class SupabaseClient {
         prefer: String? = nil
     ) async throws -> Data {
         guard let session = try await validSession() else { throw ClientError.notAuthenticated }
-        var components = URLComponents(
+        guard var components = URLComponents(
             url: config.url.appendingPathComponent("rest/v1/\(table)"),
             resolvingAgainstBaseURL: false
-        )!
+        ) else { throw ClientError.invalidURL }
         if !query.isEmpty { components.queryItems = query }
-        var request = makeRequest(url: components.url!, method: method)
+        guard let url = components.url else { throw ClientError.invalidURL }
+        var request = makeRequest(url: url, method: method)
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(prefer ?? "return=representation", forHTTPHeaderField: "Prefer")

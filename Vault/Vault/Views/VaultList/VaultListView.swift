@@ -80,6 +80,7 @@ private struct VaultListContent: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.accent)
                 }
+                .accessibilityLabel("Create or join a vault")
             }
         }
         .task { await viewModel.refresh() }

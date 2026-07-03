@@ -64,6 +64,7 @@ final class ProfileViewModel {
         )
     }
 
+    #if DEBUG
     // DEBUG bindings surface
     var simulateNotPostedToday: Bool {
         get { deps.debug.simulateNotPostedToday }
@@ -71,6 +72,7 @@ final class ProfileViewModel {
     }
 
     var mockDayOffset: Int { deps.dateProvider.dayOffset }
+    #endif
 
     /// Live builds hide the DEBUG tooling — those knobs only make sense
     /// against the mock world.
@@ -163,6 +165,7 @@ final class ProfileViewModel {
 
     // MARK: DEBUG actions
 
+    #if DEBUG
     /// Wipes the store and rebuilds the seed world behind the splash, then
     /// re-runs the launch flow so the UI lands back in the seeded state.
     func regenerateSeedData() async {
@@ -194,4 +197,5 @@ final class ProfileViewModel {
         deps.dateProvider.dayOffset += 1
         Haptics.light()
     }
+    #endif
 }

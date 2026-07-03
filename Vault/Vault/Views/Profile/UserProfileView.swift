@@ -111,6 +111,7 @@ struct UserProfileView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
                     }
+                    .accessibilityLabel("More options")
                 }
             }
         }

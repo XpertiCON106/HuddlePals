@@ -43,9 +43,14 @@ private struct ProfileContent: View {
             reminderSection
             appearanceSection
             accountSection
+            #if DEBUG
+            // Compile-time gated on top of the runtime backend check: the
+            // demo tooling must not exist in a Release binary at all, even
+            // one accidentally archived without a Supabase.plist.
             if !viewModel.isLiveBackend {
                 debugSection
             }
+            #endif
             aboutSection
         }
         .scrollContentBackground(.hidden)
@@ -87,18 +92,23 @@ private struct ProfileContent: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(Array(viewModel.photoPaths.enumerated()), id: \.element) { index, path in
-                        LocalDepositImage(relativePath: path)
+                        // 122pt tile → 380px covers @3x displays.
+                        LocalDepositImage(relativePath: path, maxPixelSize: 380)
                             .frame(width: 92, height: 122)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(alignment: .topTrailing) {
                                 Button {
                                     viewModel.removePhoto(at: index)
                                 } label: {
+                                    // Padded inside the label so the tap
+                                    // target is ~44pt, not the 18pt glyph.
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.system(size: 18))
                                         .foregroundStyle(.white, .black.opacity(0.55))
+                                        .padding(12)
+                                        .contentShape(Rectangle())
                                 }
-                                .padding(5)
+                                .accessibilityLabel("Remove photo")
                             }
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }
@@ -272,6 +282,7 @@ private struct ProfileContent: View {
         }
     }
 
+    #if DEBUG
     private var debugSection: some View {
         Section {
             Toggle(isOn: $viewModel.simulateNotPostedToday) {
@@ -311,6 +322,7 @@ private struct ProfileContent: View {
             Text("Demo tools — none of this ships. Advancing the day shifts the injected clock so streak math and the recovery window can be exercised without waiting for midnight.")
         }
     }
+    #endif
 
     private var aboutSection: some View {
         Section("About") {
