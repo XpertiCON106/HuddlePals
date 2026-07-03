@@ -43,9 +43,14 @@ private struct ProfileContent: View {
             reminderSection
             appearanceSection
             accountSection
+            #if DEBUG
+            // Compile-time gated on top of the runtime backend check: the
+            // demo tooling must not exist in a Release binary at all, even
+            // one accidentally archived without a Supabase.plist.
             if !viewModel.isLiveBackend {
                 debugSection
             }
+            #endif
             aboutSection
         }
         .scrollContentBackground(.hidden)
@@ -272,6 +277,7 @@ private struct ProfileContent: View {
         }
     }
 
+    #if DEBUG
     private var debugSection: some View {
         Section {
             Toggle(isOn: $viewModel.simulateNotPostedToday) {
@@ -311,6 +317,7 @@ private struct ProfileContent: View {
             Text("Demo tools — none of this ships. Advancing the day shifts the injected clock so streak math and the recovery window can be exercised without waiting for midnight.")
         }
     }
+    #endif
 
     private var aboutSection: some View {
         Section("About") {
