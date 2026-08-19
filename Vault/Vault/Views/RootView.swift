@@ -176,7 +176,7 @@ struct MainTabView: View {
 
     var body: some View {
         @Bindable var router = router
-        TabView(selection: $router.selectedTab) {
+        TabView(selection: tabSelection) {
             NavigationStack(path: $router.vaultsPath) {
                 VaultListView()
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
@@ -190,6 +190,16 @@ struct MainTabView: View {
             .tabItem { Label("Profile", systemImage: "person.crop.circle") }
             .tag(AppTab.profile)
         }
+    }
+
+    /// The router invokes the mounted profile editor's guard synchronously.
+    /// A rejected selection never changes `selectedTab`, so the destination
+    /// tab cannot render even briefly.
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { router.selectedTab },
+            set: { destination in router.selectTab(destination) }
+        )
     }
 }
 

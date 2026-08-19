@@ -57,7 +57,8 @@ Vault/
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
 │   │   ├── Detail/DepositDetailView.swift  Reactions + comments
 │   │   ├── VaultManagement/            CreateVaultView / JoinVaultView / VaultSettingsView
-│   │   └── Profile/ProfileView.swift   Profile + sign out + DEBUG tools
+│   │   └── Profile/ProfileView.swift   Draft editing + confirmed save,
+│   │                                   sign out + DEBUG tools
 │   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
 │   │                                   StreakBadge, EmptyVaultState, PrimaryButton,
 │   │                                   CaptionTextField (80-char enforcement)
