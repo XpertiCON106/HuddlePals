@@ -192,19 +192,13 @@ struct MainTabView: View {
         }
     }
 
-    /// Leaving the Profile tab is the only navigation exit supported by
-    /// the current root-level profile editor. Route the request through the
-    /// editor so it can resolve an unsaved draft before the tab changes.
+    /// The router invokes the mounted profile editor's guard synchronously.
+    /// A rejected selection never changes `selectedTab`, so the destination
+    /// tab cannot render even briefly.
     private var tabSelection: Binding<AppTab> {
         Binding(
             get: { router.selectedTab },
-            set: { destination in
-                if router.selectedTab == .profile, destination != .profile {
-                    router.requestProfileExit(to: destination)
-                } else {
-                    router.selectedTab = destination
-                }
-            }
+            set: { destination in router.selectTab(destination) }
         )
     }
 }

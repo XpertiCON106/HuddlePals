@@ -51,7 +51,7 @@ final class ProfileConfirmationTests: XCTestCase {
 
         viewModel.requestSaveConfirmation()
         XCTAssertFalse(viewModel.isSaveConfirmationPresented)
-        XCTAssertEqual(viewModel.requestExit(.switchTab(.vaults)), .switchTab(.vaults))
+        XCTAssertTrue(viewModel.requestNavigation())
         XCTAssertFalse(viewModel.isUnsavedChangesWarningPresented)
         XCTAssertEqual(auth.updateCalls, 0)
     }
@@ -62,14 +62,14 @@ final class ProfileConfirmationTests: XCTestCase {
 
         viewModel.requestSaveConfirmation()
         XCTAssertTrue(viewModel.isSaveConfirmationPresented)
-        XCTAssertNil(viewModel.cancelSaveConfirmation())
+        viewModel.cancelSaveConfirmation()
         XCTAssertEqual(viewModel.bio, "A confirmed bio")
         XCTAssertTrue(viewModel.hasUnsavedChanges)
         XCTAssertEqual(auth.updateCalls, 0)
 
         viewModel.requestSaveConfirmation()
         let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(nil))
+        XCTAssertEqual(result, .succeeded)
         XCTAssertEqual(auth.updateCalls, 1)
         XCTAssertEqual(auth.lastBio, "A confirmed bio")
         XCTAssertFalse(viewModel.hasUnsavedChanges)
@@ -82,13 +82,13 @@ final class ProfileConfirmationTests: XCTestCase {
 
         viewModel.bio = "  Original bio\n"
         XCTAssertFalse(viewModel.hasUnsavedChanges)
-        XCTAssertEqual(viewModel.requestExit(.switchTab(.vaults)), .switchTab(.vaults))
+        XCTAssertTrue(viewModel.requestNavigation())
     }
 
     func testAvatarChangeCannotPersistBeforeConfirmation() async {
         viewModel.selectedColorHex = "0091FF"
         viewModel.requestSaveConfirmation()
-        _ = viewModel.cancelSaveConfirmation()
+        viewModel.cancelSaveConfirmation()
 
         XCTAssertEqual(user.avatarColorHex, "E5484D")
         XCTAssertEqual(auth.updateCalls, 0)
@@ -96,7 +96,7 @@ final class ProfileConfirmationTests: XCTestCase {
 
         viewModel.requestSaveConfirmation()
         let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(nil))
+        XCTAssertEqual(result, .succeeded)
         XCTAssertEqual(auth.lastAvatarColorHex, "0091FF")
         XCTAssertEqual(user.avatarColorHex, "0091FF")
         XCTAssertFalse(viewModel.hasUnsavedChanges)
@@ -111,13 +111,13 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertEqual(auth.updateCalls, 0)
 
         viewModel.requestSaveConfirmation()
-        _ = viewModel.cancelSaveConfirmation()
+        viewModel.cancelSaveConfirmation()
         XCTAssertEqual(viewModel.draftPhotos.last?.previewData, stagedData)
         XCTAssertEqual(media.saveCalls, 0)
 
         viewModel.requestSaveConfirmation()
         let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(nil))
+        XCTAssertEqual(result, .succeeded)
         XCTAssertEqual(media.saveCalls, 1)
         XCTAssertEqual(auth.updateCalls, 1)
         XCTAssertEqual(auth.lastPhotoPaths?.count, 3)
@@ -132,7 +132,7 @@ final class ProfileConfirmationTests: XCTestCase {
         viewModel.stagePhotoData(Data("replacement".utf8))
         viewModel.requestSaveConfirmation()
         let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(nil))
+        XCTAssertEqual(result, .succeeded)
 
         XCTAssertEqual(auth.updateCalls, 1)
         XCTAssertEqual(media.saveCalls, 1)
@@ -148,7 +148,7 @@ final class ProfileConfirmationTests: XCTestCase {
 
         viewModel.requestSaveConfirmation()
         let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(nil))
+        XCTAssertEqual(result, .succeeded)
 
         XCTAssertEqual(auth.updateCalls, 1)
         XCTAssertEqual(auth.lastBio, "Everything changed")
@@ -156,46 +156,49 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertEqual(auth.lastPhotoPaths, ["Media/avatars/original-a.jpg"])
     }
 
-    func testUnsavedExitCanKeepEditingOrDiscardAndCompleteIntent() {
+    func testUnsavedNavigationCanKeepEditingOrDiscardWithoutLeaving() {
         viewModel.bio = "Unsaved"
-        XCTAssertNil(viewModel.requestExit(.switchTab(.vaults)))
+        XCTAssertFalse(viewModel.requestNavigation())
         XCTAssertTrue(viewModel.isUnsavedChangesWarningPresented)
 
-        XCTAssertEqual(viewModel.keepEditing(), .switchTab(.vaults))
+        viewModel.keepEditing()
+        XCTAssertFalse(viewModel.isUnsavedChangesWarningPresented)
         XCTAssertTrue(viewModel.hasUnsavedChanges)
         XCTAssertEqual(viewModel.bio, "Unsaved")
 
-        XCTAssertNil(viewModel.requestExit(.signOut))
-        XCTAssertEqual(viewModel.discardChangesAndContinue(), .signOut)
+        XCTAssertFalse(viewModel.requestNavigation())
+        viewModel.discardChanges()
+        XCTAssertFalse(viewModel.isUnsavedChangesWarningPresented)
         XCTAssertEqual(viewModel.bio, "Original bio")
         XCTAssertFalse(viewModel.hasUnsavedChanges)
+        XCTAssertTrue(viewModel.requestNavigation(), "a new attempt may proceed after discard")
     }
 
-    func testSaveFromUnsavedWarningStillRequiresConfirmationAndCompletesExit() async {
-        viewModel.bio = "Save then leave"
-        XCTAssertNil(viewModel.requestExit(.switchTab(.vaults)))
+    func testNormalSaveConfirmationStillWorksAfterBlockedNavigation() async {
+        viewModel.bio = "Save independently"
+        XCTAssertFalse(viewModel.requestNavigation())
+        viewModel.keepEditing()
 
-        viewModel.requestSaveBeforeExit()
+        viewModel.requestSaveConfirmation()
         XCTAssertFalse(viewModel.isUnsavedChangesWarningPresented)
         XCTAssertTrue(viewModel.isSaveConfirmationPresented)
         XCTAssertEqual(auth.updateCalls, 0)
 
         let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(.switchTab(.vaults)))
+        XCTAssertEqual(result, .succeeded)
         XCTAssertEqual(auth.updateCalls, 1)
         XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
-    func testCancelingExitSaveConfirmationCancelsNavigationAndKeepsDraft() {
-        viewModel.bio = "Stay here"
-        XCTAssertNil(viewModel.requestExit(.switchTab(.vaults)))
-        viewModel.requestSaveBeforeExit()
+    func testAccountExitIsNotQueuedAfterDiscard() {
+        viewModel.bio = "Unsaved"
+        XCTAssertNil(viewModel.requestExit(.signOut))
 
-        XCTAssertEqual(viewModel.cancelSaveConfirmation(), .switchTab(.vaults))
-        XCTAssertTrue(viewModel.hasUnsavedChanges)
-        XCTAssertEqual(viewModel.bio, "Stay here")
-        XCTAssertNil(viewModel.pendingExit)
-        XCTAssertEqual(auth.updateCalls, 0)
+        viewModel.discardChanges()
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+        // Discard did not return or execute Sign Out. Only this new explicit
+        // attempt yields an action for the view to perform.
+        XCTAssertEqual(viewModel.requestExit(.signOut), .signOut)
     }
 
     func testSaveFailurePreservesDraftDirtyStateAndAllowsRetry() async {
@@ -204,7 +207,7 @@ final class ProfileConfirmationTests: XCTestCase {
         viewModel.requestSaveConfirmation()
 
         let failedResult = await viewModel.confirmAndSave()
-        XCTAssertEqual(failedResult, .failed(nil))
+        XCTAssertEqual(failedResult, .failed)
         XCTAssertTrue(viewModel.hasUnsavedChanges)
         XCTAssertEqual(viewModel.bio, "Retry me")
         XCTAssertNotNil(viewModel.statusMessage)
@@ -212,7 +215,7 @@ final class ProfileConfirmationTests: XCTestCase {
 
         viewModel.requestSaveConfirmation()
         let retryResult = await viewModel.confirmAndSave()
-        XCTAssertEqual(retryResult, .succeeded(nil))
+        XCTAssertEqual(retryResult, .succeeded)
         XCTAssertEqual(auth.updateCalls, 2)
         XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
@@ -223,13 +226,13 @@ final class ProfileConfirmationTests: XCTestCase {
         viewModel.requestSaveConfirmation()
 
         let failedResult = await viewModel.confirmAndSave()
-        XCTAssertEqual(failedResult, .failed(nil))
+        XCTAssertEqual(failedResult, .failed)
         XCTAssertEqual(media.saveCalls, 1)
         XCTAssertTrue(viewModel.hasUnsavedChanges)
 
         viewModel.requestSaveConfirmation()
         let retryResult = await viewModel.confirmAndSave()
-        XCTAssertEqual(retryResult, .succeeded(nil))
+        XCTAssertEqual(retryResult, .succeeded)
         XCTAssertEqual(media.saveCalls, 1, "a staged upload is not duplicated on retry")
         XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
@@ -244,29 +247,13 @@ final class ProfileConfirmationTests: XCTestCase {
         viewModel.stagePhotoData(Data("late-photo".utf8))
 
         let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(nil))
+        XCTAssertEqual(result, .succeeded)
         XCTAssertEqual(auth.lastBio, "Confirmed bio")
         XCTAssertEqual(auth.lastPhotoPaths?.count, 2)
         XCTAssertEqual(media.saveCalls, 0)
         XCTAssertEqual(viewModel.bio, "Newer unconfirmed bio")
         XCTAssertEqual(viewModel.draftPhotos.count, 3)
         XCTAssertTrue(viewModel.hasUnsavedChanges)
-    }
-
-    func testPendingExitWaitsForDecisionOnChangeIntroducedAfterConfirmation() async {
-        viewModel.bio = "Confirmed before leaving"
-        XCTAssertNil(viewModel.requestExit(.switchTab(.vaults)))
-        viewModel.requestSaveBeforeExit()
-        viewModel.stagePhotoData(Data("late-photo".utf8))
-
-        let result = await viewModel.confirmAndSave()
-        XCTAssertEqual(result, .succeeded(nil))
-        XCTAssertEqual(viewModel.pendingExit, .switchTab(.vaults))
-        XCTAssertTrue(viewModel.isUnsavedChangesWarningPresented)
-        XCTAssertTrue(viewModel.hasUnsavedChanges)
-
-        XCTAssertEqual(viewModel.discardChangesAndContinue(), .switchTab(.vaults))
-        XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
     func testRepeatedRequestsCannotStackConfirmationsOrSaves() async {
@@ -283,21 +270,53 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
-    func testRouterPreservesOrCancelsProgrammaticDestination() {
+    func testRouterBlocksBeforeMutationAndNeverReplaysDestination() {
         let router = AppRouter()
-        router.selectedTab = .profile
-        router.requestProfileExit(to: .vaults, routeAfterExit: .joinVault)
+        XCTAssertTrue(router.selectTab(.profile))
+        var allowNavigation = false
+        var guardChecks = 0
+        let guardID = UUID()
+        router.installProfileNavigationGuard(id: guardID) {
+            guardChecks += 1
+            return allowNavigation
+        }
 
+        XCTAssertFalse(router.navigateToVaults(route: .joinVault))
         XCTAssertEqual(router.selectedTab, .profile)
-        XCTAssertEqual(router.profileExitRequest?.destination, .vaults)
-        router.cancelProfileExit()
+        XCTAssertTrue(router.vaultsPath.isEmpty, "the destination was never rendered")
+        XCTAssertEqual(guardChecks, 1)
+
+        // Resolving the warning cannot replay anything because the router did
+        // not retain the destination.
+        allowNavigation = true
         XCTAssertEqual(router.selectedTab, .profile)
         XCTAssertTrue(router.vaultsPath.isEmpty)
 
-        router.requestProfileExit(to: .vaults, routeAfterExit: .joinVault)
-        router.completeProfileExit(to: .vaults)
+        XCTAssertTrue(router.navigateToVaults(route: .joinVault))
         XCTAssertEqual(router.selectedTab, .vaults)
         XCTAssertEqual(router.vaultsPath, [.joinVault])
+    }
+
+    func testRepeatedNavigationAttemptsCannotStackOrBypassWarning() {
+        let router = AppRouter()
+        XCTAssertTrue(router.selectTab(.profile))
+        let guardID = UUID()
+        router.installProfileNavigationGuard(id: guardID) { [weak viewModel] in
+            viewModel?.requestNavigation() ?? true
+        }
+        viewModel.bio = "Dirty"
+
+        XCTAssertFalse(router.selectTab(.vaults))
+        XCTAssertFalse(router.selectTab(.vaults))
+        XCTAssertFalse(router.navigateToVaults(route: .joinVault))
+        XCTAssertEqual(router.selectedTab, .profile)
+        XCTAssertTrue(router.vaultsPath.isEmpty)
+        XCTAssertTrue(viewModel.isUnsavedChangesWarningPresented)
+
+        viewModel.keepEditing()
+        XCTAssertEqual(router.selectedTab, .profile)
+        XCTAssertTrue(viewModel.hasUnsavedChanges)
+        XCTAssertTrue(router.vaultsPath.isEmpty)
     }
 }
 

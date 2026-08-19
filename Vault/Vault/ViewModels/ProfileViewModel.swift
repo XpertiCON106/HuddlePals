@@ -70,15 +70,14 @@ struct ProfilePhotoDraft: Identifiable, Equatable {
 @MainActor
 @Observable
 final class ProfileViewModel {
-    enum PendingExit: Equatable {
-        case switchTab(AppTab)
+    enum ExitAction: Equatable {
         case signOut
         case deleteAccount
     }
 
     enum SaveCompletion: Equatable {
-        case succeeded(PendingExit?)
-        case failed(PendingExit?)
+        case succeeded
+        case failed
     }
 
     private struct CanonicalProfileState: Equatable {
@@ -122,7 +121,6 @@ final class ProfileViewModel {
     var isSaveConfirmationPresented = false
     var isUnsavedChangesWarningPresented = false
     private var confirmedDraft: ConfirmedDraft?
-    private(set) var pendingExit: PendingExit?
 
     var isWorking: Bool {
         isLoading || isSaving || isProcessingPhotos || isPerformingAccountAction
@@ -146,10 +144,6 @@ final class ProfileViewModel {
             && !isWorking
             && !isSaveConfirmationPresented
             && !isUnsavedChangesWarningPresented
-    }
-
-    var canOfferSaveFromUnsavedWarning: Bool {
-        hasUnsavedChanges && isDraftValid && !isWorking
     }
 
     var appVersion: String {
@@ -287,22 +281,18 @@ final class ProfileViewModel {
         isSaveConfirmationPresented = true
     }
 
-    /// Cancel preserves the complete working draft. If this confirmation
-    /// came from an attempted exit, that navigation is canceled as well.
-    @discardableResult
-    func cancelSaveConfirmation() -> PendingExit? {
-        let canceledExit = pendingExit
-        pendingExit = nil
+    /// Cancel preserves the complete working draft. Navigation attempts are
+    /// never retained by this view model, so there is nothing to replay.
+    func cancelSaveConfirmation() {
         confirmedDraft = nil
         isSaveConfirmationPresented = false
-        return canceledExit
     }
 
     /// Persists the captured draft once, after explicit confirmation.
     /// Uploads may finish before the profile-row update; their returned paths
     /// are retained in the draft on failure so a retry does not re-upload.
     func confirmAndSave() async -> SaveCompletion {
-        guard let confirmedDraft, !isSaving else { return .failed(nil) }
+        guard let confirmedDraft, !isSaving else { return .failed }
         isSaveConfirmationPresented = false
         isSaving = true
         statusMessage = nil
@@ -347,70 +337,43 @@ final class ProfileViewModel {
             statusMessage = hasUnsavedChanges ? "Confirmed changes saved" : "Saved"
             Haptics.success()
 
-            if hasUnsavedChanges, pendingExit != nil {
-                // The user asked to leave after saving, but the draft now has
-                // newer changes that were not part of that confirmation.
-                // Preserve the original exit intent and require a decision
-                // for the newer draft before navigating.
-                isUnsavedChangesWarningPresented = true
-                return .succeeded(nil)
-            }
-
-            let completedExit = pendingExit
-            pendingExit = nil
-            return .succeeded(completedExit)
+            return .succeeded
         } catch {
             statusMessage = error.localizedDescription
             self.confirmedDraft = nil
-            // A failed save cancels the attempted navigation. The original
-            // snapshot remains untouched and the full draft stays dirty.
-            let canceledExit = pendingExit
-            pendingExit = nil
-            return .failed(canceledExit)
+            // The original snapshot remains untouched and the full draft
+            // stays dirty. No navigation intent exists to resume.
+            return .failed
         }
     }
 
     // MARK: Unsaved-change exits
 
-    /// Returns the action immediately when the draft is clean. Otherwise it
-    /// parks the user's intent and presents the native unsaved warning.
-    func requestExit(_ action: PendingExit) -> PendingExit? {
-        if isSaving {
-            pendingExit = action
-            return nil
-        }
-        guard hasUnsavedChanges else { return action }
-        pendingExit = action
+    /// Synchronously decides whether navigation may begin. A dirty draft
+    /// blocks the attempt before router state changes and only presents the
+    /// warning; no destination or completion closure is stored.
+    func requestNavigation() -> Bool {
+        guard hasUnsavedChanges else { return true }
+        guard !isWorking else { return false }
         if !isUnsavedChangesWarningPresented, !isSaveConfirmationPresented {
             isUnsavedChangesWarningPresented = true
         }
-        return nil
+        return false
     }
 
-    @discardableResult
-    func keepEditing() -> PendingExit? {
-        let canceledExit = pendingExit
-        pendingExit = nil
+    /// Account actions use the same synchronous guard, but the action is
+    /// returned only for immediate execution when the draft is already clean.
+    func requestExit(_ action: ExitAction) -> ExitAction? {
+        requestNavigation() ? action : nil
+    }
+
+    func keepEditing() {
         isUnsavedChangesWarningPresented = false
-        return canceledExit
     }
 
-    func discardChangesAndContinue() -> PendingExit? {
-        guard let pendingExit else { return nil }
+    func discardChanges() {
         restoreOriginalDraft()
-        self.pendingExit = nil
         isUnsavedChangesWarningPresented = false
-        return pendingExit
-    }
-
-    /// The optional Save action in the unsaved warning still goes through
-    /// the mandatory Confirm Changes alert. The pending exit is completed
-    /// only after that confirmed save succeeds.
-    func requestSaveBeforeExit() {
-        guard canOfferSaveFromUnsavedWarning else { return }
-        isUnsavedChangesWarningPresented = false
-        confirmedDraft = makeConfirmedDraft()
-        isSaveConfirmationPresented = true
     }
 
     // MARK: Account actions

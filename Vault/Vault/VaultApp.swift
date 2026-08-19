@@ -46,18 +46,15 @@ struct VaultApp: App {
         guard url.scheme == "vault", url.host == "join" else { return }
         let code = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (4...8).contains(code.count) else { return }
-        dependencies.session.pendingInviteCode = code.uppercased()
         if dependencies.session.currentUser != nil {
-            if router.selectedTab == .profile {
-                // The profile editor must resolve an unsaved draft before a
-                // programmatic deep link can move the user to Join.
-                router.requestProfileExit(to: .vaults, routeAfterExit: .joinVault)
-            } else {
-                router.selectedTab = .vaults
-                if router.vaultsPath.last != .joinVault {
-                    router.vaultsPath.append(.joinVault)
-                }
+            // `navigateToVaults` consults the profile guard before mutating
+            // either tab selection or path. A blocked link is canceled; its
+            // code is deliberately not queued for replay after the warning.
+            if router.navigateToVaults(route: .joinVault) {
+                dependencies.session.pendingInviteCode = code.uppercased()
             }
+        } else {
+            dependencies.session.pendingInviteCode = code.uppercased()
         }
     }
 }

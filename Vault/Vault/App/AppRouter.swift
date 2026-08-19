@@ -6,15 +6,6 @@ enum AppTab: Hashable {
     case profile
 }
 
-/// A tab change requested while the profile editor is visible. The profile
-/// screen owns the unsaved-draft decision, so the router parks the requested
-/// destination until the editor explicitly completes or cancels it.
-struct ProfileExitRequest: Identifiable, Equatable {
-    let id = UUID()
-    let destination: AppTab
-    let routeAfterExit: Route?
-}
-
 /// Typed navigation destinations. @Model classes are Hashable via identity,
 /// so they can ride along in the path.
 enum Route: Hashable {
@@ -30,12 +21,53 @@ enum Route: Hashable {
 @MainActor
 @Observable
 final class AppRouter {
-    var selectedTab: AppTab = .vaults
+    private(set) var selectedTab: AppTab = .vaults
     /// Single stack for the Vaults tab: list → vault home → deeper screens.
     var vaultsPath: [Route] = []
-    private(set) var profileExitRequest: ProfileExitRequest?
+
+    /// The mounted profile editor installs a synchronous guard. It returns
+    /// before any router state is mutated, so a dirty editor can present its
+    /// warning without the requested destination ever becoming active.
+    /// Neither a destination nor a navigation closure is retained.
+    @ObservationIgnored private var profileNavigationGuardID: UUID?
+    @ObservationIgnored private var profileNavigationGuard: (() -> Bool)?
+
+    func installProfileNavigationGuard(id: UUID, handler: @escaping () -> Bool) {
+        profileNavigationGuardID = id
+        profileNavigationGuard = handler
+    }
+
+    func removeProfileNavigationGuard(id: UUID) {
+        guard profileNavigationGuardID == id else { return }
+        profileNavigationGuardID = nil
+        profileNavigationGuard = nil
+    }
+
+    /// Returns false without changing selection or path when the mounted
+    /// profile editor blocks the attempt.
+    @discardableResult
+    func selectTab(_ destination: AppTab) -> Bool {
+        guard destination != selectedTab else { return true }
+        guard canNavigateAwayFromProfile(to: destination) else { return false }
+        selectedTab = destination
+        return true
+    }
+
+    /// Atomically guards both the tab change and the destination route. This
+    /// prevents a deep link from mutating the navigation path before the
+    /// profile editor has approved leaving.
+    @discardableResult
+    func navigateToVaults(route: Route? = nil) -> Bool {
+        guard canNavigateAwayFromProfile(to: .vaults) else { return false }
+        selectedTab = .vaults
+        if let route, vaultsPath.last != route {
+            vaultsPath.append(route)
+        }
+        return true
+    }
 
     func openVault(_ vault: Vault) {
+        guard canNavigateAwayFromProfile(to: .vaults) else { return }
         selectedTab = .vaults
         vaultsPath = [.vaultHome(vault)]
     }
@@ -44,31 +76,15 @@ final class AppRouter {
         vaultsPath.removeAll()
     }
 
-    func requestProfileExit(to destination: AppTab, routeAfterExit: Route? = nil) {
-        guard destination != .profile, profileExitRequest == nil else { return }
-        profileExitRequest = ProfileExitRequest(
-            destination: destination,
-            routeAfterExit: routeAfterExit
-        )
-    }
-
-    func completeProfileExit(to destination: AppTab) {
-        let routeAfterExit = profileExitRequest?.routeAfterExit
-        profileExitRequest = nil
-        selectedTab = destination
-        if destination == .vaults, let routeAfterExit,
-           vaultsPath.last != routeAfterExit {
-            vaultsPath.append(routeAfterExit)
-        }
-    }
-
-    func cancelProfileExit() {
-        profileExitRequest = nil
+    private func canNavigateAwayFromProfile(to destination: AppTab) -> Bool {
+        guard selectedTab == .profile, destination != .profile else { return true }
+        return profileNavigationGuard?() ?? true
     }
 
     func resetAll() {
         vaultsPath.removeAll()
-        profileExitRequest = nil
+        profileNavigationGuardID = nil
+        profileNavigationGuard = nil
         selectedTab = .vaults
     }
 }

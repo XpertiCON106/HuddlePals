@@ -9,14 +9,14 @@ struct ProfileView: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(AppRouter.self) private var router
     @State private var viewModel: ProfileViewModel?
+    @State private var navigationGuardID = UUID()
 
     var body: some View {
         Group {
             if let viewModel {
                 ProfileContent(
                     viewModel: viewModel,
-                    onCompleteExit: { completeExit($0, using: viewModel) },
-                    onCancelExit: cancelExit
+                    onCompleteExit: { completeExit($0, using: viewModel) }
                 )
             } else {
                 Color.clear
@@ -26,28 +26,26 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .toolbarBackground(Theme.background, for: .navigationBar)
         .onAppear {
-            if viewModel == nil { viewModel = ProfileViewModel(deps: deps) }
-            handlePendingTabExit()
+            installNavigationGuard()
         }
-        .onChange(of: router.profileExitRequest?.id) {
-            handlePendingTabExit()
+        .onDisappear {
+            router.removeProfileNavigationGuard(id: navigationGuardID)
         }
     }
 
-    private func handlePendingTabExit() {
-        guard let request = router.profileExitRequest, let viewModel else { return }
-        if let action = viewModel.requestExit(.switchTab(request.destination)) {
-            completeExit(action, using: viewModel)
+    private func installNavigationGuard() {
+        let model = viewModel ?? ProfileViewModel(deps: deps)
+        viewModel = model
+        router.installProfileNavigationGuard(id: navigationGuardID) { [weak model] in
+            model?.requestNavigation() ?? true
         }
     }
 
     private func completeExit(
-        _ action: ProfileViewModel.PendingExit,
+        _ action: ProfileViewModel.ExitAction,
         using viewModel: ProfileViewModel
     ) {
         switch action {
-        case .switchTab(let destination):
-            router.completeProfileExit(to: destination)
         case .signOut:
             Task {
                 await viewModel.signOut()
@@ -59,17 +57,11 @@ struct ProfileView: View {
             }
         }
     }
-
-    private func cancelExit(_ action: ProfileViewModel.PendingExit?) {
-        guard let action, case .switchTab = action else { return }
-        router.cancelProfileExit()
-    }
 }
 
 private struct ProfileContent: View {
     @Bindable var viewModel: ProfileViewModel
-    let onCompleteExit: (ProfileViewModel.PendingExit) -> Void
-    let onCancelExit: (ProfileViewModel.PendingExit?) -> Void
+    let onCompleteExit: (ProfileViewModel.ExitAction) -> Void
 
     @State private var showSignOutConfirmation = false
     @State private var showDeleteConfirmation = false
@@ -111,7 +103,7 @@ private struct ProfileContent: View {
                 saveConfirmedDraft()
             }
             Button("Cancel", role: .cancel) {
-                onCancelExit(viewModel.cancelSaveConfirmation())
+                viewModel.cancelSaveConfirmation()
             }
         } message: {
             Text("Are you sure you want to save these changes to your profile?")
@@ -121,18 +113,11 @@ private struct ProfileContent: View {
             isPresented: $viewModel.isUnsavedChangesWarningPresented,
             titleVisibility: .visible
         ) {
-            if viewModel.canOfferSaveFromUnsavedWarning {
-                Button("Save Changes") {
-                    viewModel.requestSaveBeforeExit()
-                }
-            }
             Button("Discard Changes", role: .destructive) {
-                if let action = viewModel.discardChangesAndContinue() {
-                    onCompleteExit(action)
-                }
+                viewModel.discardChanges()
             }
             Button("Keep Editing", role: .cancel) {
-                onCancelExit(viewModel.keepEditing())
+                viewModel.keepEditing()
             }
         } message: {
             Text("You have changes that haven’t been saved. What would you like to do?")
@@ -169,12 +154,7 @@ private struct ProfileContent: View {
 
     private func saveConfirmedDraft() {
         Task {
-            switch await viewModel.confirmAndSave() {
-            case .succeeded(let action):
-                if let action { onCompleteExit(action) }
-            case .failed(let canceledAction):
-                onCancelExit(canceledAction)
-            }
+            _ = await viewModel.confirmAndSave()
         }
     }
 
