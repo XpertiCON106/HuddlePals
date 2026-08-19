@@ -48,9 +48,15 @@ struct VaultApp: App {
         guard (4...8).contains(code.count) else { return }
         dependencies.session.pendingInviteCode = code.uppercased()
         if dependencies.session.currentUser != nil {
-            router.selectedTab = .vaults
-            if router.vaultsPath.last != .joinVault {
-                router.vaultsPath.append(.joinVault)
+            if router.selectedTab == .profile {
+                // The profile editor must resolve an unsaved draft before a
+                // programmatic deep link can move the user to Join.
+                router.requestProfileExit(to: .vaults, routeAfterExit: .joinVault)
+            } else {
+                router.selectedTab = .vaults
+                if router.vaultsPath.last != .joinVault {
+                    router.vaultsPath.append(.joinVault)
+                }
             }
         }
     }

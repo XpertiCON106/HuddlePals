@@ -1,23 +1,156 @@
+import CryptoKit
 import Foundation
 import Observation
 import PhotosUI
 import SwiftUI
 
+/// One photo in the profile editor's working draft. Existing photos keep
+/// their stable backend path; newly picked photos are compared by a SHA-256
+/// fingerprint of the downscaled JPEG bytes and remain in memory until a
+/// confirmed save uploads them.
+struct ProfilePhotoDraft: Identifiable, Equatable {
+    enum Source: Equatable {
+        case persisted(path: String)
+        case staged(data: Data, fingerprint: String, uploadedPath: String?)
+    }
+
+    let id: UUID
+    var source: Source
+
+    init(id: UUID = UUID(), persistedPath: String) {
+        self.id = id
+        self.source = .persisted(path: persistedPath)
+    }
+
+    init(id: UUID = UUID(), stagedData: Data) {
+        self.id = id
+        self.source = .staged(
+            data: stagedData,
+            fingerprint: Self.fingerprint(for: stagedData),
+            uploadedPath: nil
+        )
+    }
+
+    var previewData: Data? {
+        guard case .staged(let data, _, _) = source else { return nil }
+        return data
+    }
+
+    var persistedPath: String? {
+        guard case .persisted(let path) = source else { return nil }
+        return path
+    }
+
+    var stagedUploadPath: String? {
+        guard case .staged(_, _, let path) = source else { return nil }
+        return path
+    }
+
+    /// Canonical comparison value. Upload bookkeeping is deliberately not
+    /// included: uploading a staged asset does not make the profile saved.
+    var canonicalReference: String {
+        switch source {
+        case .persisted(let path):
+            return "persisted:\(path)"
+        case .staged(_, let fingerprint, _):
+            return "staged:\(fingerprint)"
+        }
+    }
+
+    mutating func recordUploadedPath(_ path: String) {
+        guard case .staged(let data, let fingerprint, _) = source else { return }
+        source = .staged(data: data, fingerprint: fingerprint, uploadedPath: path)
+    }
+
+    private static func fingerprint(for data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
 @MainActor
 @Observable
 final class ProfileViewModel {
+    enum PendingExit: Equatable {
+        case switchTab(AppTab)
+        case signOut
+        case deleteAccount
+    }
+
+    enum SaveCompletion: Equatable {
+        case succeeded(PendingExit?)
+        case failed(PendingExit?)
+    }
+
+    private struct CanonicalProfileState: Equatable {
+        let displayName: String
+        let avatarColorHex: String
+        let bio: String?
+        let photoReferences: [String]
+    }
+
+    private struct ConfirmedDraft {
+        let displayName: String
+        let avatarColorHex: String
+        let bio: String?
+        let photos: [ProfilePhotoDraft]
+    }
+
     private let deps: AppDependencies
+
+    // MARK: Original snapshot + working draft
+
+    /// Immutable until a complete profile update succeeds.
+    private var originalState: CanonicalProfileState?
 
     var displayName = ""
     var selectedColorHex = AvatarPalette.hexes[0]
     var bio = ""
-    private(set) var photoPaths: [String] = []
-    /// New picks pending upload, replacing/extending photoPaths on save.
+    private(set) var draftPhotos: [ProfilePhotoDraft] = []
+
+    /// Raw picker results are converted to downscaled, in-memory staged
+    /// photos. No upload or profile update happens in this callback.
     var photoItems: [PhotosPickerItem] = [] {
         didSet { Task { await ingestPickedPhotos() } }
     }
-    private(set) var isWorking = false
+
+    private(set) var isLoading = true
+    private(set) var isSaving = false
+    private(set) var isProcessingPhotos = false
+    private(set) var isPerformingAccountAction = false
     private(set) var statusMessage: String?
+
+    var isSaveConfirmationPresented = false
+    var isUnsavedChangesWarningPresented = false
+    private var confirmedDraft: ConfirmedDraft?
+    private(set) var pendingExit: PendingExit?
+
+    var isWorking: Bool {
+        isLoading || isSaving || isProcessingPhotos || isPerformingAccountAction
+    }
+
+    var hasUnsavedChanges: Bool {
+        guard let originalState else { return false }
+        return currentCanonicalState != originalState
+    }
+
+    var isDraftValid: Bool {
+        let name = normalizedDisplayName
+        return (1...40).contains(name.count)
+            && bio.count <= AuthValidation.bioLimit
+            && draftPhotos.count <= AuthValidation.maxProfilePhotos
+    }
+
+    var canSaveChanges: Bool {
+        hasUnsavedChanges
+            && isDraftValid
+            && !isWorking
+            && !isSaveConfirmationPresented
+            && !isUnsavedChangesWarningPresented
+    }
+
+    var canOfferSaveFromUnsavedWarning: Bool {
+        hasUnsavedChanges && isDraftValid && !isWorking
+    }
 
     var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -26,7 +159,9 @@ final class ProfileViewModel {
     }
 
     var bioRemaining: Int { AuthValidation.bioLimit - bio.count }
-    var canAddPhotos: Bool { photoPaths.count < AuthValidation.maxProfilePhotos }
+    var canAddPhotos: Bool {
+        draftPhotos.count < AuthValidation.maxProfilePhotos && !isWorking
+    }
 
     // Appearance (dark mode) preference surface
     var appearance: AppearancePreference {
@@ -80,67 +215,205 @@ final class ProfileViewModel {
 
     init(deps: AppDependencies) {
         self.deps = deps
-        if let user = deps.session.currentUser {
-            displayName = user.displayName
-            selectedColorHex = user.avatarColorHex
-            bio = user.bio ?? ""
-            photoPaths = user.profilePhotoPaths
-        }
     }
 
+    /// Captures the original profile exactly once for this editing session.
+    /// Later model reconciliation cannot silently overwrite an in-progress
+    /// draft. A successful save deliberately replaces the snapshot.
+    func loadInitialState() async {
+        guard originalState == nil else {
+            isLoading = false
+            return
+        }
+        guard let user = deps.session.currentUser else {
+            statusMessage = "Your profile couldn't be loaded. Please try again."
+            isLoading = false
+            return
+        }
+        applyPersistedState(
+            displayName: user.displayName,
+            avatarColorHex: user.avatarColorHex,
+            bio: user.bio,
+            photoPaths: user.profilePhotoPaths
+        )
+        isLoading = false
+    }
+
+    // MARK: Draft photos
+
     private func ingestPickedPhotos() async {
-        guard !photoItems.isEmpty, let user = deps.session.currentUser else { return }
+        guard !photoItems.isEmpty, !isSaving else { return }
         let items = photoItems
         photoItems = []
-        isWorking = true
-        defer { isWorking = false }
+        isProcessingPhotos = true
+        defer { isProcessingPhotos = false }
+
         for item in items {
-            guard photoPaths.count < AuthValidation.maxProfilePhotos else { break }
+            guard draftPhotos.count < AuthValidation.maxProfilePhotos else { break }
             guard let data = try? await item.loadTransferable(type: Data.self),
                   let image = UIImage(data: data),
                   let scaled = ImageDownscaler.jpegData(
                       from: image,
                       maxDimension: ImageDownscaler.avatarMaxDimension
                   ) else { continue }
-            if let path = try? await deps.mediaService.saveImageData(
-                scaled,
-                preferredName: "avatars/\(user.id.uuidString)/\(UUID().uuidString).jpg"
-            ) {
-                photoPaths.append(path)
-            }
+            stagePhotoData(scaled)
         }
-        await persistProfile(status: "Photos updated")
+    }
+
+    /// Adds already-validated/downscaled JPEG bytes to the working draft.
+    /// Kept as a separate operation so image staging and dirty comparison
+    /// are testable without driving the system photo picker.
+    func stagePhotoData(_ data: Data) {
+        guard draftPhotos.count < AuthValidation.maxProfilePhotos, !data.isEmpty else { return }
+        draftPhotos.append(ProfilePhotoDraft(stagedData: data))
+        statusMessage = nil
     }
 
     func removePhoto(at index: Int) {
-        guard photoPaths.indices.contains(index) else { return }
-        photoPaths.remove(at: index)
+        guard draftPhotos.indices.contains(index), !isWorking else { return }
+        let removed = draftPhotos.remove(at: index)
+        cleanupStagedAsset(removed)
         Haptics.light()
-        Task { await persistProfile(status: "Photos updated") }
     }
 
-    func saveProfile() async {
-        await persistProfile(status: "Saved")
-        Haptics.success()
+    // MARK: Confirmed save
+
+    /// Takes an immutable copy of exactly what the confirmation describes.
+    /// Nothing is uploaded or persisted until `confirmAndSave()` is called.
+    func requestSaveConfirmation() {
+        guard canSaveChanges else { return }
+        confirmedDraft = makeConfirmedDraft()
+        statusMessage = nil
+        isSaveConfirmationPresented = true
     }
 
-    private func persistProfile(status: String) async {
-        guard let user = deps.session.currentUser else { return }
-        isWorking = true
-        defer { isWorking = false }
+    /// Cancel preserves the complete working draft. If this confirmation
+    /// came from an attempted exit, that navigation is canceled as well.
+    @discardableResult
+    func cancelSaveConfirmation() -> PendingExit? {
+        let canceledExit = pendingExit
+        pendingExit = nil
+        confirmedDraft = nil
+        isSaveConfirmationPresented = false
+        return canceledExit
+    }
+
+    /// Persists the captured draft once, after explicit confirmation.
+    /// Uploads may finish before the profile-row update; their returned paths
+    /// are retained in the draft on failure so a retry does not re-upload.
+    func confirmAndSave() async -> SaveCompletion {
+        guard let confirmedDraft, !isSaving else { return .failed(nil) }
+        isSaveConfirmationPresented = false
+        isSaving = true
+        statusMessage = nil
+        defer { isSaving = false }
+
         do {
+            guard let user = deps.session.currentUser else { throw AuthError.notAuthenticated }
+            var savedPaths: [String] = []
+            for photo in confirmedDraft.photos {
+                switch photo.source {
+                case .persisted(let path):
+                    savedPaths.append(path)
+                case .staged(let data, _, let uploadedPath):
+                    if let uploadedPath {
+                        savedPaths.append(uploadedPath)
+                    } else {
+                        let path = try await deps.mediaService.saveImageData(
+                            data,
+                            preferredName: "avatars/\(user.id.uuidString)/\(UUID().uuidString).jpg"
+                        )
+                        savedPaths.append(path)
+                        recordUploadedPath(path, for: photo.id)
+                    }
+                }
+            }
+
             try await deps.auth.updateProfile(
                 user: user,
-                displayName: displayName,
-                avatarColorHex: selectedColorHex,
-                bio: bio,
-                photoPaths: photoPaths
+                displayName: confirmedDraft.displayName,
+                avatarColorHex: confirmedDraft.avatarColorHex,
+                bio: confirmedDraft.bio,
+                photoPaths: savedPaths
             )
-            statusMessage = status
+
+            // Only a fully successful profile update advances the immutable
+            // original snapshot. Reconcile by stable draft-photo IDs instead
+            // of replacing the working draft: a picker callback or other
+            // local edit that arrived after confirmation must remain visible
+            // and dirty rather than being silently discarded.
+            reconcileDraftAfterSuccessfulSave(confirmedDraft, savedPaths: savedPaths)
+            self.confirmedDraft = nil
+            statusMessage = hasUnsavedChanges ? "Confirmed changes saved" : "Saved"
+            Haptics.success()
+
+            if hasUnsavedChanges, pendingExit != nil {
+                // The user asked to leave after saving, but the draft now has
+                // newer changes that were not part of that confirmation.
+                // Preserve the original exit intent and require a decision
+                // for the newer draft before navigating.
+                isUnsavedChangesWarningPresented = true
+                return .succeeded(nil)
+            }
+
+            let completedExit = pendingExit
+            pendingExit = nil
+            return .succeeded(completedExit)
         } catch {
             statusMessage = error.localizedDescription
+            self.confirmedDraft = nil
+            // A failed save cancels the attempted navigation. The original
+            // snapshot remains untouched and the full draft stays dirty.
+            let canceledExit = pendingExit
+            pendingExit = nil
+            return .failed(canceledExit)
         }
     }
+
+    // MARK: Unsaved-change exits
+
+    /// Returns the action immediately when the draft is clean. Otherwise it
+    /// parks the user's intent and presents the native unsaved warning.
+    func requestExit(_ action: PendingExit) -> PendingExit? {
+        if isSaving {
+            pendingExit = action
+            return nil
+        }
+        guard hasUnsavedChanges else { return action }
+        pendingExit = action
+        if !isUnsavedChangesWarningPresented, !isSaveConfirmationPresented {
+            isUnsavedChangesWarningPresented = true
+        }
+        return nil
+    }
+
+    @discardableResult
+    func keepEditing() -> PendingExit? {
+        let canceledExit = pendingExit
+        pendingExit = nil
+        isUnsavedChangesWarningPresented = false
+        return canceledExit
+    }
+
+    func discardChangesAndContinue() -> PendingExit? {
+        guard let pendingExit else { return nil }
+        restoreOriginalDraft()
+        self.pendingExit = nil
+        isUnsavedChangesWarningPresented = false
+        return pendingExit
+    }
+
+    /// The optional Save action in the unsaved warning still goes through
+    /// the mandatory Confirm Changes alert. The pending exit is completed
+    /// only after that confirmed save succeeds.
+    func requestSaveBeforeExit() {
+        guard canOfferSaveFromUnsavedWarning else { return }
+        isUnsavedChangesWarningPresented = false
+        confirmedDraft = makeConfirmedDraft()
+        isSaveConfirmationPresented = true
+    }
+
+    // MARK: Account actions
 
     func signOut() async {
         try? await deps.auth.signOut()
@@ -150,8 +423,8 @@ final class ProfileViewModel {
 
     /// Returns true on success so the view can route back to onboarding.
     func deleteAccount() async -> Bool {
-        isWorking = true
-        defer { isWorking = false }
+        isPerformingAccountAction = true
+        defer { isPerformingAccountAction = false }
         do {
             try await deps.auth.deleteAccount()
             deps.session.currentUser = nil
@@ -163,17 +436,114 @@ final class ProfileViewModel {
         }
     }
 
+    // MARK: State helpers
+
+    private var normalizedDisplayName: String {
+        displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var currentCanonicalState: CanonicalProfileState {
+        CanonicalProfileState(
+            displayName: normalizedDisplayName,
+            avatarColorHex: selectedColorHex,
+            bio: AuthValidation.sanitizedBio(bio),
+            photoReferences: draftPhotos.map(\.canonicalReference)
+        )
+    }
+
+    private func makeConfirmedDraft() -> ConfirmedDraft {
+        ConfirmedDraft(
+            displayName: normalizedDisplayName,
+            avatarColorHex: selectedColorHex,
+            bio: AuthValidation.sanitizedBio(bio),
+            photos: draftPhotos
+        )
+    }
+
+    private func applyPersistedState(
+        displayName: String,
+        avatarColorHex: String,
+        bio: String?,
+        photoPaths: [String]
+    ) {
+        let normalizedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBio = AuthValidation.sanitizedBio(bio)
+        self.displayName = normalizedName
+        selectedColorHex = avatarColorHex
+        self.bio = normalizedBio ?? ""
+        draftPhotos = photoPaths.map { ProfilePhotoDraft(persistedPath: $0) }
+        originalState = CanonicalProfileState(
+            displayName: normalizedName,
+            avatarColorHex: avatarColorHex,
+            bio: normalizedBio,
+            photoReferences: draftPhotos.map(\.canonicalReference)
+        )
+    }
+
+    private func reconcileDraftAfterSuccessfulSave(
+        _ savedDraft: ConfirmedDraft,
+        savedPaths: [String]
+    ) {
+        let persistedPathsByDraftID = Dictionary(
+            uniqueKeysWithValues: zip(savedDraft.photos.map(\.id), savedPaths)
+        )
+
+        draftPhotos = draftPhotos.map { photo in
+            guard let savedPath = persistedPathsByDraftID[photo.id] else { return photo }
+            return ProfilePhotoDraft(id: photo.id, persistedPath: savedPath)
+        }
+
+        originalState = CanonicalProfileState(
+            displayName: savedDraft.displayName,
+            avatarColorHex: savedDraft.avatarColorHex,
+            bio: savedDraft.bio,
+            photoReferences: savedPaths.map { "persisted:\($0)" }
+        )
+    }
+
+    private func restoreOriginalDraft() {
+        guard let originalState else { return }
+        cleanupAllStagedAssets()
+        displayName = originalState.displayName
+        selectedColorHex = originalState.avatarColorHex
+        bio = originalState.bio ?? ""
+        draftPhotos = originalState.photoReferences.compactMap { reference in
+            let prefix = "persisted:"
+            guard reference.hasPrefix(prefix) else { return nil }
+            return ProfilePhotoDraft(persistedPath: String(reference.dropFirst(prefix.count)))
+        }
+        statusMessage = nil
+    }
+
+    private func recordUploadedPath(_ path: String, for id: UUID) {
+        guard let index = draftPhotos.firstIndex(where: { $0.id == id }) else { return }
+        draftPhotos[index].recordUploadedPath(path)
+    }
+
+    private func cleanupStagedAsset(_ photo: ProfilePhotoDraft) {
+        if let path = photo.stagedUploadPath {
+            // LiveMediaService can remove the local staged cache today; its
+            // documented orphan-cleanup job will eventually remove an upload
+            // that never became referenced by a profile row.
+            deps.mediaService.deleteImage(at: path)
+        }
+    }
+
+    private func cleanupAllStagedAssets() {
+        draftPhotos.forEach(cleanupStagedAsset)
+    }
+
     // MARK: DEBUG actions
 
     #if DEBUG
     /// Wipes the store and rebuilds the seed world behind the splash, then
     /// re-runs the launch flow so the UI lands back in the seeded state.
     func regenerateSeedData() async {
-        isWorking = true
+        isPerformingAccountAction = true
         deps.session.isReady = false
         defer {
             deps.session.isReady = true
-            isWorking = false
+            isPerformingAccountAction = false
         }
         do {
             deps.dateProvider.reset()
@@ -185,6 +555,9 @@ final class ProfileViewModel {
             if case .signedIn(let user) = try await deps.auth.currentState() {
                 deps.session.currentUser = user
             }
+            originalState = nil
+            isLoading = true
+            await loadInitialState()
             statusMessage = "Seed data regenerated"
         } catch {
             statusMessage = "Regenerate failed: \(error.localizedDescription)"

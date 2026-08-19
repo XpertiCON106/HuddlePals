@@ -7,6 +7,9 @@ struct AvatarView: View {
     /// A user's profile picture (Documents-relative path). When present it
     /// renders inside the avatar; otherwise the colored initials show.
     var imagePath: String? = nil
+    /// In-memory draft preview used by the profile editor before a confirmed
+    /// save uploads and commits the new first photo.
+    var imageData: Data? = nil
     var size: CGFloat = 36
 
     @State private var image: UIImage?
@@ -35,12 +38,27 @@ struct AvatarView: View {
             }
             .clipShape(Circle())
             .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
-            .task(id: imagePath) {
-                guard let imagePath, loadedPath != imagePath else { return }
+            .task(id: imageLoadID) {
+                if let imageData {
+                    image = UIImage(data: imageData)
+                    loadedPath = nil
+                    return
+                }
+                guard let imagePath else {
+                    image = nil
+                    loadedPath = nil
+                    return
+                }
+                guard loadedPath != imagePath else { return }
                 let data = await deps.mediaService.loadImageData(at: imagePath)
                 image = data.flatMap(UIImage.init(data:))
                 loadedPath = imagePath
             }
+    }
+
+    private var imageLoadID: String {
+        if let imageData { return "draft:\(imageData.hashValue)" }
+        return "persisted:\(imagePath ?? "none")"
     }
 }
 

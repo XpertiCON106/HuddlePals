@@ -13,9 +13,11 @@ struct ProfileView: View {
     var body: some View {
         Group {
             if let viewModel {
-                ProfileContent(viewModel: viewModel) {
-                    router.resetAll()
-                }
+                ProfileContent(
+                    viewModel: viewModel,
+                    onCompleteExit: { completeExit($0, using: viewModel) },
+                    onCancelExit: cancelExit
+                )
             } else {
                 Color.clear
             }
@@ -25,13 +27,49 @@ struct ProfileView: View {
         .toolbarBackground(Theme.background, for: .navigationBar)
         .onAppear {
             if viewModel == nil { viewModel = ProfileViewModel(deps: deps) }
+            handlePendingTabExit()
         }
+        .onChange(of: router.profileExitRequest?.id) {
+            handlePendingTabExit()
+        }
+    }
+
+    private func handlePendingTabExit() {
+        guard let request = router.profileExitRequest, let viewModel else { return }
+        if let action = viewModel.requestExit(.switchTab(request.destination)) {
+            completeExit(action, using: viewModel)
+        }
+    }
+
+    private func completeExit(
+        _ action: ProfileViewModel.PendingExit,
+        using viewModel: ProfileViewModel
+    ) {
+        switch action {
+        case .switchTab(let destination):
+            router.completeProfileExit(to: destination)
+        case .signOut:
+            Task {
+                await viewModel.signOut()
+                router.resetAll()
+            }
+        case .deleteAccount:
+            Task {
+                if await viewModel.deleteAccount() { router.resetAll() }
+            }
+        }
+    }
+
+    private func cancelExit(_ action: ProfileViewModel.PendingExit?) {
+        guard let action, case .switchTab = action else { return }
+        router.cancelProfileExit()
     }
 }
 
 private struct ProfileContent: View {
     @Bindable var viewModel: ProfileViewModel
-    let onSignOut: () -> Void
+    let onCompleteExit: (ProfileViewModel.PendingExit) -> Void
+    let onCancelExit: (ProfileViewModel.PendingExit?) -> Void
 
     @State private var showSignOutConfirmation = false
     @State private var showDeleteConfirmation = false
@@ -55,16 +93,58 @@ private struct ProfileContent: View {
         }
         .scrollContentBackground(.hidden)
         .background(Theme.background)
-        .task { await viewModel.refreshReminderStatus() }
+        .overlay {
+            if viewModel.isLoading {
+                ProgressView()
+                    .accessibilityLabel("Loading profile")
+            }
+        }
+        .task {
+            await viewModel.loadInitialState()
+            await viewModel.refreshReminderStatus()
+        }
+        .alert(
+            "Confirm Changes",
+            isPresented: $viewModel.isSaveConfirmationPresented
+        ) {
+            Button("Save Changes") {
+                saveConfirmedDraft()
+            }
+            Button("Cancel", role: .cancel) {
+                onCancelExit(viewModel.cancelSaveConfirmation())
+            }
+        } message: {
+            Text("Are you sure you want to save these changes to your profile?")
+        }
+        .confirmationDialog(
+            "Unsaved Changes",
+            isPresented: $viewModel.isUnsavedChangesWarningPresented,
+            titleVisibility: .visible
+        ) {
+            if viewModel.canOfferSaveFromUnsavedWarning {
+                Button("Save Changes") {
+                    viewModel.requestSaveBeforeExit()
+                }
+            }
+            Button("Discard Changes", role: .destructive) {
+                if let action = viewModel.discardChangesAndContinue() {
+                    onCompleteExit(action)
+                }
+            }
+            Button("Keep Editing", role: .cancel) {
+                onCancelExit(viewModel.keepEditing())
+            }
+        } message: {
+            Text("You have changes that haven’t been saved. What would you like to do?")
+        }
         .confirmationDialog(
             "Sign out?",
             isPresented: $showSignOutConfirmation,
             titleVisibility: .visible
         ) {
             Button("Sign out", role: .destructive) {
-                Task {
-                    await viewModel.signOut()
-                    onSignOut()
+                if let action = viewModel.requestExit(.signOut) {
+                    onCompleteExit(action)
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -77,8 +157,8 @@ private struct ProfileContent: View {
             titleVisibility: .visible
         ) {
             Button("Delete account", role: .destructive) {
-                Task {
-                    if await viewModel.deleteAccount() { onSignOut() }
+                if let action = viewModel.requestExit(.deleteAccount) {
+                    onCompleteExit(action)
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -87,13 +167,24 @@ private struct ProfileContent: View {
         }
     }
 
+    private func saveConfirmedDraft() {
+        Task {
+            switch await viewModel.confirmAndSave() {
+            case .succeeded(let action):
+                if let action { onCompleteExit(action) }
+            case .failed(let canceledAction):
+                onCancelExit(canceledAction)
+            }
+        }
+    }
+
     private var photosSection: some View {
         Section {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(Array(viewModel.photoPaths.enumerated()), id: \.element) { index, path in
+                    ForEach(Array(viewModel.draftPhotos.enumerated()), id: \.element.id) { index, photo in
                         // 122pt tile → 380px covers @3x displays.
-                        LocalDepositImage(relativePath: path, maxPixelSize: 380)
+                        ProfileDraftPhotoImage(photo: photo)
                             .frame(width: 92, height: 122)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(alignment: .topTrailing) {
@@ -109,13 +200,14 @@ private struct ProfileContent: View {
                                         .contentShape(Rectangle())
                                 }
                                 .accessibilityLabel("Remove photo")
+                                .disabled(viewModel.isWorking)
                             }
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }
                     if viewModel.canAddPhotos {
                         PhotosPicker(
                             selection: $viewModel.photoItems,
-                            maxSelectionCount: AuthValidation.maxProfilePhotos - viewModel.photoPaths.count,
+                            maxSelectionCount: AuthValidation.maxProfilePhotos - viewModel.draftPhotos.count,
                             matching: .images
                         ) {
                             VStack(spacing: 6) {
@@ -132,9 +224,13 @@ private struct ProfileContent: View {
                                     .strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [5]))
                             )
                         }
+                        .disabled(viewModel.isWorking)
                     }
                 }
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.photoPaths)
+                .animation(
+                    .spring(response: 0.35, dampingFraction: 0.8),
+                    value: viewModel.draftPhotos.map(\.canonicalReference)
+                )
             }
             .listRowBackground(Theme.surface)
         } header: {
@@ -150,11 +246,13 @@ private struct ProfileContent: View {
                 AvatarView(
                     name: viewModel.displayName.isEmpty ? "?" : viewModel.displayName,
                     colorHex: viewModel.selectedColorHex,
-                    imagePath: viewModel.photoPaths.first,
+                    imagePath: viewModel.draftPhotos.first?.persistedPath,
+                    imageData: viewModel.draftPhotos.first?.previewData,
                     size: 52
                 )
                 TextField("Display name", text: $viewModel.displayName)
                     .font(.system(size: 17, weight: .medium))
+                    .disabled(viewModel.isWorking)
             }
             .listRowBackground(Theme.surface)
 
@@ -162,6 +260,7 @@ private struct ProfileContent: View {
                 TextField("A short bio…", text: $viewModel.bio, axis: .vertical)
                     .font(.system(size: 15))
                     .lineLimit(2...4)
+                    .disabled(viewModel.isWorking)
                     .onChange(of: viewModel.bio) { _, newValue in
                         if newValue.count > AuthValidation.bioLimit {
                             viewModel.bio = String(newValue.prefix(AuthValidation.bioLimit))
@@ -177,10 +276,12 @@ private struct ProfileContent: View {
 
             ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
                 .padding(.vertical, 4)
+                .allowsHitTesting(!viewModel.isWorking)
+                .opacity(viewModel.isWorking ? 0.6 : 1)
                 .listRowBackground(Theme.surface)
 
             Button {
-                Task { await viewModel.saveProfile() }
+                viewModel.requestSaveConfirmation()
             } label: {
                 HStack {
                     Text("Save changes")
@@ -192,7 +293,12 @@ private struct ProfileContent: View {
                     }
                 }
             }
-            .disabled(viewModel.isWorking)
+            .disabled(!viewModel.canSaveChanges)
+            .accessibilityHint(
+                viewModel.hasUnsavedChanges
+                    ? "Presents a confirmation before saving your profile."
+                    : "Make a profile change to enable this button."
+            )
             .listRowBackground(Theme.surface)
         }
     }
@@ -334,5 +440,32 @@ private struct ProfileContent: View {
             }
             .listRowBackground(Theme.surface)
         }
+    }
+}
+
+/// Draft-aware profile tile. Persisted photos retain the existing cache-first
+/// loader; staged photos render directly from memory and therefore cannot be
+/// mistaken for an already-committed profile update.
+private struct ProfileDraftPhotoImage: View {
+    let photo: ProfilePhotoDraft
+
+    var body: some View {
+        Group {
+            if let data = photo.previewData, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if let path = photo.persistedPath {
+                LocalDepositImage(relativePath: path, maxPixelSize: 380)
+            } else {
+                Theme.surfaceElevated
+                    .overlay {
+                        Image(systemName: "photo")
+                            .foregroundStyle(Theme.textSecondary)
+                            .accessibilityHidden(true)
+                    }
+            }
+        }
+        .clipped()
     }
 }

@@ -176,7 +176,7 @@ struct MainTabView: View {
 
     var body: some View {
         @Bindable var router = router
-        TabView(selection: $router.selectedTab) {
+        TabView(selection: tabSelection) {
             NavigationStack(path: $router.vaultsPath) {
                 VaultListView()
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
@@ -190,6 +190,22 @@ struct MainTabView: View {
             .tabItem { Label("Profile", systemImage: "person.crop.circle") }
             .tag(AppTab.profile)
         }
+    }
+
+    /// Leaving the Profile tab is the only navigation exit supported by
+    /// the current root-level profile editor. Route the request through the
+    /// editor so it can resolve an unsaved draft before the tab changes.
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { router.selectedTab },
+            set: { destination in
+                if router.selectedTab == .profile, destination != .profile {
+                    router.requestProfileExit(to: destination)
+                } else {
+                    router.selectedTab = destination
+                }
+            }
+        )
     }
 }
 

@@ -117,7 +117,7 @@ flowchart TD
 | **Create Vault** | Name + emoji picker → server-generated invite code → ShareLink with a working `vault://join/{code}` deep link (the app registers the scheme and prefills Join). |
 | **Join Vault** | 6-char code entry with error states (not found / already member / vault full). |
 | **Vault Settings** | Members with roles + skip tokens, streak detail, daily reminder hour (schedules a real local notification in live builds), invite code with copy, leave vault (destructive, confirmed). |
-| **Your profile** | Up to 3 profile photos (the first is your profile picture/avatar — normal device upload), display name, 160-char bio, curated identity color (6 solids + 2 gradients), daily-reminder toggle + time, light/dark appearance picker, sign out, **delete account** (both confirmed) — and in mock mode only, the DEBUG section. |
+| **Your profile** | Up to 3 profile photos (the first is your profile picture/avatar), display name, 160-char bio, curated identity color (6 solids + 2 gradients), daily-reminder toggle + time, light/dark appearance picker, sign out, **delete account** (both confirmed) — and in mock mode only, the DEBUG section. Profile photos, avatar color, name, and bio stay in a local draft until the user confirms **Save Changes**; leaving with a dirty draft requires Save, Discard, or Keep Editing. |
 | **Report / block** | Any photo's "•••" menu (Deposit Detail) and any member's profile offer **report** and **block**; blocking hides that person's photos/comments from you (presentational only — never changes the vault or streak). UGC safeguards for App Review. |
 | **Member profile** | Opened by tapping any name or avatar anywhere: swipeable photo pager, bio, and the vaults + streaks you share with them. |
 

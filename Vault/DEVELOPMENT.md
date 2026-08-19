@@ -142,6 +142,15 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   ≤1440px, avatars ≤512px, JPEG 0.8, applied in ComposeViewModel +
   ProfileViewModel before upload. Critical because storage is permanent and
   only grows. Don't remove it.
+- **Confirmed profile drafts**: `ProfileViewModel` owns an immutable
+  normalized original snapshot plus a separate working draft for name, bio,
+  avatar color, and ordered profile photos. New photos are downscaled and
+  fingerprinted in memory but are not uploaded until the native **Confirm
+  Changes** alert is accepted. A failed save retains the draft (and any
+  staged upload path for retry); a successful full profile update alone
+  advances the original snapshot. Leaving the Profile tab, signing out,
+  deleting the account, or following a deep link is intercepted while dirty
+  and preserves the pending action through Save / Discard / Keep Editing.
 - **Backend security hardening (v4, in schema.sql — must be re-run on live)**:
   `spend_skip_token` acts on `auth.uid()` only (was an IDOR); invite codes use
   `gen_random_bytes` (pgcrypto); a column grant + `recompute_streak` p_today
