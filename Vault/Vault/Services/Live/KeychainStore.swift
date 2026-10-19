@@ -4,7 +4,7 @@ import Security
 /// Minimal Keychain wrapper for the Supabase session. Tokens never go in
 /// UserDefaults.
 enum KeychainStore {
-    private static let service = "com.vaultapp.Vault.session"
+    private static let service = "com.vaultphotos.app.session"
 
     static func save(_ data: Data, key: String) {
         let query: [String: Any] = [

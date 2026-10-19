@@ -213,7 +213,7 @@ begin
     -- Crypto-strength source (not the predictable `random()` PRNG); the
     -- small modulo bias over a 31-char alphabet is irrelevant for codes.
     for i in 1..6 loop
-      v_code := v_code || substr(alphabet, 1 + (get_byte(gen_random_bytes(1), 0) % length(alphabet)), 1);
+      v_code := v_code || substr(alphabet, 1 + (get_byte(extensions.gen_random_bytes(1), 0) % length(alphabet)), 1);
     end loop;
     exit when not exists (select 1 from vaults where invite_code = v_code);
   end loop;
@@ -392,6 +392,7 @@ alter table public.blocks  enable row level security;
 -- via the dashboard / service role).
 create policy reports_insert on public.reports for insert
   with check (reporter_id = auth.uid());
+create policy reports_select_own on public.reports for select using (reporter_id = auth.uid());
 
 -- blocks: fully managed by the blocker.
 create policy blocks_select on public.blocks for select

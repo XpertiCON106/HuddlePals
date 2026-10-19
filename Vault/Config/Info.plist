@@ -10,7 +10,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.vaultapp.Vault.invites</string>
+			<string>com.vaultphotos.app.invites</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>vault</string>

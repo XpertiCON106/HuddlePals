@@ -33,7 +33,7 @@ seeded **mock** world. No code changes to switch.
      app's Phone tab will return the provider's error; Apple + email work
      without it.
    - **Apple**: *Sign In / Up → Apple* → enable, and add your app's bundle
-     id (default `com.vaultapp.Vault`) to **Client IDs**. The native iOS
+     id (default `com.vaultphotos.app`) to **Client IDs**. The native iOS
      flow needs no secret key.
 3. **Storage** → *New bucket* → name `deposits`, **Private** (not public).
    (Profile photos live in the same bucket under `avatars/…` — the schema's
@@ -76,7 +76,7 @@ seeded **mock** world. No code changes to switch.
 1. Enroll at [developer.apple.com](https://developer.apple.com/programs/)
    ($99/year). Approval is usually same-day.
 2. In Xcode, select the **Vault** target → *Signing & Capabilities* →
-   choose your **Team**. Change the bundle id from `com.vaultapp.Vault` to
+   choose your **Team**. Change the bundle id from `com.vaultphotos.app` to
    something you own (e.g. `com.yourname.vault`) in *Build Settings* if
    Xcode reports a collision. The **Sign in with Apple** entitlement is
    already in the project (`Vault.entitlements`); with automatic signing,

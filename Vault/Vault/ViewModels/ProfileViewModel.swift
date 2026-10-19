@@ -311,7 +311,7 @@ final class ProfileViewModel {
                     } else {
                         let path = try await deps.mediaService.saveImageData(
                             data,
-                            preferredName: "avatars/\(user.id.uuidString)/\(UUID().uuidString).jpg"
+                            preferredName: "avatars/\(user.id.uuidString.lowercased())/\(UUID().uuidString).jpg"
                         )
                         savedPaths.append(path)
                         recordUploadedPath(path, for: photo.id)
