@@ -4,6 +4,8 @@ import Security
 /// Minimal Keychain wrapper for the Supabase session. Tokens never go in
 /// UserDefaults.
 enum KeychainStore {
+    // Keeps the pre-rename "vaultphotos" prefix on purpose: changing it
+    // signs every installed device out.
     private static let service = "com.vaultphotos.app.session"
 
     static func save(_ data: Data, key: String) {
