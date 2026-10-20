@@ -152,6 +152,9 @@ final class ProfileViewModel {
         return "\(version) (\(build))"
     }
 
+    /// When this device agreed to the current Terms of Service.
+    var termsAcceptedAt: Date? { deps.terms.acceptedAt }
+
     var bioRemaining: Int { AuthValidation.bioLimit - bio.count }
     var canAddPhotos: Bool {
         draftPhotos.count < AuthValidation.maxProfilePhotos && !isWorking

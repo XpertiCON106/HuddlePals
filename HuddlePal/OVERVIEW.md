@@ -90,7 +90,7 @@ A subtle consequence, verified by test: if yesterday broke the streak but *today
 
 ```mermaid
 flowchart TD
-    Root[RootView<br>launch reveal → route] --> OB[Onboarding<br>4 steps]
+    Root[RootView<br>launch reveal → route] --> OB[Onboarding<br>Terms gate + 4 steps]
     Root --> Tabs{{Tab bar}}
     Tabs --> List[1. Huddles shelf]
     Tabs --> Prof[2. Your profile]
@@ -108,7 +108,7 @@ flowchart TD
 
 | Screen | What it does |
 |---|---|
-| **Onboarding** | Three concept cards → sign-in method (Apple / email / phone) → verification code → profile (name + avatar ink). Returning accounts skip the profile step. |
+| **Onboarding** | Terms of Service first: the full text with Agree / Decline; Agree unlocks only after scrolling to the end. Decline returns to the first concept card, and nothing past the cards opens until Agree (re-asked whenever `TermsOfService.version` changes). Then three concept cards → sign-in method (Apple / email / phone) → verification code → profile (name + avatar ink). Returning accounts skip the profile step. |
 | **Huddles shelf** | Every huddle you belong to: emoji, name, member stack, streak, lock state, "N waiting for you". Tap to step inside; create/join from the toolbar. |
 | **Huddle Home (Today)** | One huddle's day. Serif huddle name, member stack, streak badge, and — when a streak just broke — the 24h recovery banner with a live countdown. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards + "waiting on…" row. |
 | **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
@@ -402,6 +402,7 @@ Run everything with ⌘U (or `xcodebuild test`, see DEVELOPMENT.md):
 - [`HuddlePalTests/AuthInputTests.swift`](HuddlePalTests/AuthInputTests.swift) — the Keychain session round-trips (including one saved by the earlier build), US/Canada phone numbers without +1, as-you-type phone formatting, and code lengths read from `Supabase.plist`.
 - [`HuddlePalTests/ProfileConfirmationTests.swift`](HuddlePalTests/ProfileConfirmationTests.swift) — the profile editor's confirmed-draft rules: nothing persists before **Save Changes**, failures keep the draft, dirty exits are blocked and never replayed.
 - [`HuddlePalTests/PhotoEncryptionTests.swift`](HuddlePalTests/PhotoEncryptionTests.swift) — the E2EE crypto: huddle-key wrap/unwrap (and refusal for another identity, huddle, or member), photo seal/open, wrong keys and tampered files failing cleanly, a report's key opening only its own photo, wire formats matching the DB checks, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
+- [`HuddlePalTests/TermsAgreementTests.swift`](HuddlePalTests/TermsAgreementTests.swift) — the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end (again after each Decline), Decline returns to the first welcome card, "Get started" re-asks until Agree, an interrupted sign-up resumes at the profile, agreement survives a relaunch and is re-asked for a new version, and the bundled text has all 15 sections, no placeholders, and a "Last updated" date matching `TermsOfService.version`.
 - What tests can't cover: the live wire formats against the real Supabase project — exercise those by hand (DEPLOYMENT.md lists the spots).
 
 ## 14. File map
@@ -438,13 +439,14 @@ HuddlePal/
 │   ├── Views/                 RootView + 9 screens in feature folders
 │   ├── Components/            AvatarStack, DepositCards, StreakBadge, PrimaryButton,
 │   │                          CaptionTextField, CodeEntryField, CameraPicker,
-│   │                          EmptyHuddleState
+│   │                          EmptyHuddleState, TermsDocumentView
 │   ├── Support/               Theme, Haptics, DateProviding, AppleSignInNonce,
-│   │                          DailyReminders, ImageDownscaler
+│   │                          DailyReminders, ImageDownscaler, TermsOfService
+│   ├── Legal/TermsOfService.md  The Terms of Service shown in-app (host the same text publicly)
 │   └── Assets.xcassets        App icon + ink accent color
 └── HuddlePalTests/                HuddleEngineTests, CriticalFlowTests, LiveSyncTests,
                                AuthInputTests, ProfileConfirmationTests,
-                               PhotoEncryptionTests
+                               PhotoEncryptionTests, TermsAgreementTests
 ```
 
 ## 15. Project configuration

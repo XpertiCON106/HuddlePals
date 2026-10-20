@@ -6,6 +6,7 @@ import Observation
 @Observable
 final class OnboardingViewModel {
     enum Step: Equatable {
+        case terms
         case welcome
         case method
         case code
@@ -47,6 +48,11 @@ final class OnboardingViewModel {
 
     var step: Step = .welcome
     var pageIndex = 0
+    /// Where tapping Agree on the Terms leads.
+    private var stepAfterTerms: Step = .welcome
+    /// Agree stays disabled until the reader scrolls to the end of the
+    /// Terms, every time the Terms are shown.
+    private(set) var hasReachedEndOfTerms = false
 
     // Method step
     var channel: Channel = .email
@@ -105,17 +111,51 @@ final class OnboardingViewModel {
     init(deps: AppDependencies) {
         self.deps = deps
         // Authenticated on a previous run but never finished the profile.
-        if deps.session.needsProfileSetup {
-            step = .profile
+        let start: Step = deps.session.needsProfileSetup ? .profile : .welcome
+        if deps.terms.hasAcceptedCurrentVersion {
+            step = start
+        } else {
+            // The Terms are the first screen anyone sees.
+            stepAfterTerms = start
+            step = .terms
         }
     }
 
     func advanceWelcome() {
-        if isLastWelcomePage {
+        guard isLastWelcomePage else {
+            pageIndex += 1
+            return
+        }
+        if deps.terms.hasAcceptedCurrentVersion {
             step = .method
         } else {
-            pageIndex += 1
+            // Declined earlier: nothing past the welcome cards until Agree.
+            stepAfterTerms = deps.session.needsProfileSetup ? .profile : .method
+            step = .terms
         }
+    }
+
+    // MARK: - Terms of Service
+
+    /// Called repeatedly while the end of the Terms is on screen.
+    func termsReachedEnd() {
+        guard !hasReachedEndOfTerms else { return }
+        hasReachedEndOfTerms = true
+    }
+
+    func agreeToTerms() {
+        guard hasReachedEndOfTerms else { return }
+        deps.terms.accept(at: .now)
+        step = stepAfterTerms
+        Haptics.light()
+    }
+
+    /// Back to the first welcome card. "Get started" brings the Terms back,
+    /// to be read to the end again.
+    func declineTerms() {
+        hasReachedEndOfTerms = false
+        pageIndex = 0
+        step = .welcome
     }
 
     // MARK: - Email / phone code flow

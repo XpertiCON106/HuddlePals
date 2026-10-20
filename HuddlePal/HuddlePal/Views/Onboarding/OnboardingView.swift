@@ -1,7 +1,8 @@
 import AuthenticationServices
 import SwiftUI
 
-/// Four-step onboarding: concept cards → sign-in method (Apple; email /
+/// Onboarding: the Terms of Service (Agree required; Decline returns to the
+/// first concept card) → concept cards → sign-in method (Apple; email /
 /// phone only when `FeatureFlags.emailAndPhoneSignInEnabled`) → code →
 /// profile (name + avatar). Returning accounts skip the profile step
 /// automatically.
@@ -30,6 +31,7 @@ private struct OnboardingContent: View {
     var body: some View {
         Group {
             switch viewModel.step {
+            case .terms: TermsStep(viewModel: viewModel)
             case .welcome: WelcomeStep(viewModel: viewModel)
             case .method: MethodStep(viewModel: viewModel)
             case .code:
@@ -45,6 +47,66 @@ private struct OnboardingContent: View {
         }
         .background(Theme.background)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewModel.step)
+    }
+}
+
+// MARK: - Terms of Service
+
+/// The full Terms with Agree and Decline. Agree unlocks only once the
+/// reader has scrolled to the end, and only Agree goes further.
+private struct TermsStep: View {
+    @Bindable var viewModel: OnboardingViewModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 8) {
+                Text("Terms of Service")
+                    .font(Theme.displayFont(28))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Please read and agree to the HuddlePals Terms of Service to continue.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, 20)
+            .padding(.bottom, 14)
+            .padding(.horizontal, Theme.screenPadding)
+
+            TermsDocumentView(onReachedEnd: viewModel.termsReachedEnd)
+                .background(Theme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
+                .padding(.horizontal, Theme.screenPadding)
+
+            VStack(spacing: 8) {
+                Group {
+                    if viewModel.hasReachedEndOfTerms {
+                        Text("By tapping Agree, you accept these Terms, including binding individual arbitration and a class action waiver (Section 12).")
+                    } else {
+                        Label("Scroll to the end of the Terms to enable Agree.", systemImage: "arrow.down")
+                    }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 4)
+                PrimaryButton(title: "Agree", systemImage: "checkmark", isEnabled: viewModel.hasReachedEndOfTerms) {
+                    withAnimation { viewModel.agreeToTerms() }
+                }
+                Button("Decline") {
+                    withAnimation { viewModel.declineTerms() }
+                }
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+            .padding(.horizontal, Theme.screenPadding)
+        }
     }
 }
 

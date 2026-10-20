@@ -109,7 +109,13 @@ seeded **mock** world. No code changes to switch.
    in the project. The photo end-to-end encryption uses only Apple's
    CryptoKit, i.e. encryption within the operating system — keep the flag
    unless you add your own or bundled crypto; see "Export compliance"
-   below.)
+   below.) Users must agree to the Terms of Service in-app before they
+   can sign in (`HuddlePal/Legal/TermsOfService.md`). Publish that same
+   text at https://huddlepals.com/terms and PRIVACY.md at
+   https://huddlepals.com/privacy, the URLs the Terms cite. Then paste
+   the Terms into the app record's **License Agreement** field (App
+   Information), replacing Apple's standard EULA; they already include
+   Apple's required minimum terms (Section 14).
 4. Xcode: select **Any iOS Device (arm64)** → *Product → Archive* →
    *Distribute App → App Store Connect → Upload*.
 5. App Store Connect → your app → **TestFlight** tab:

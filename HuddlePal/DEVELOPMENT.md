@@ -243,7 +243,23 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   `requestCode(to: OTPDestination)` (email/phone); `verifyCode`;
   `signInWithApple(idToken:nonce:suggestedName:)`; `completeProfile`;
   `updateProfile`; `signOut`.
-- Onboarding is a 4-step state machine in `OnboardingViewModel`:
+- **Terms of Service gate (v6)**: the first screen anyone sees is the full
+  Terms (`Legal/TermsOfService.md`, bundled, rendered by
+  `TermsDocumentView`) with Agree / Decline. Agree stays disabled until the
+  reader scrolls to the end (an end marker measured inside the ScrollView,
+  so the text is a plain VStack, not lazy; required again each time the
+  Terms are shown). Agree records the version
+  (`TermsOfService.version`, the Terms' effective date) and a wall-clock
+  timestamp in UserDefaults (`TermsAcceptance` on `deps.terms`). Decline
+  returns to the first welcome card, and "Get started" brings the Terms back,
+  so nothing past the welcome cards opens without Agree. RootView also
+  withholds `MainTabView` from a restored session until the current version
+  is accepted. Any material edit to the Terms must bump
+  `TermsOfService.version` (a test checks it against "Last updated") so
+  everyone agrees again; host the same text at huddlepals.com/terms.
+  Profile → About → Terms of Service shows it read-only, with the agreement
+  date. Acceptance is device-local, not yet recorded on the server.
+- Onboarding is a 5-step state machine in `OnboardingViewModel`: Terms →
   welcome cards → method (Apple button / email / phone segmented; phone
   defaults to +1 — `AuthValidation.normalizedPhone` / `formattedPhoneInput`,
   "+…" for other countries) → verification code (`CodeEntryField`: hidden

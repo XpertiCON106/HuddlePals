@@ -1,0 +1,148 @@
+import Foundation
+import XCTest
+
+@testable import HuddlePal
+
+/// The Terms of Service gate: the Terms come first, Agree works only after
+/// scrolling to the end, Decline returns to the first welcome card, nothing
+/// past the welcome cards opens until Agree, and the agreement is remembered
+/// per Terms version. Uses its own defaults
+/// suite so the test host's real acceptance is never touched.
+@MainActor
+final class TermsAgreementTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        suiteName = "TermsAgreementTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
+
+    override func tearDown() async throws {
+        defaults.removePersistentDomain(forName: suiteName)
+        try await super.tearDown()
+    }
+
+    private func makeDeps() -> AppDependencies {
+        AppDependencies.makeMock(inMemory: true, terms: TermsAcceptance(defaults: defaults))
+    }
+
+    /// Scrolls to the end, then taps Agree.
+    private func readAndAgree(_ onboarding: OnboardingViewModel) {
+        onboarding.termsReachedEnd()
+        onboarding.agreeToTerms()
+    }
+
+    // MARK: Gate
+
+    func testTermsAreTheFirstScreenUntilAgreed() {
+        XCTAssertEqual(OnboardingViewModel(deps: makeDeps()).step, .terms)
+    }
+
+    func testDeclineReturnsToTheFirstWelcomeCardWithoutAgreeing() {
+        let deps = makeDeps()
+        let onboarding = OnboardingViewModel(deps: deps)
+        onboarding.pageIndex = 2
+        onboarding.declineTerms()
+        XCTAssertEqual(onboarding.step, .welcome)
+        XCTAssertEqual(onboarding.pageIndex, 0, "back to \"One photo a day\"")
+        XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
+    }
+
+    func testGetStartedAfterDecliningAsksAgainThenContinuesToSignIn() {
+        let onboarding = OnboardingViewModel(deps: makeDeps())
+        onboarding.declineTerms()
+        onboarding.pageIndex = OnboardingViewModel.cards.count - 1
+        onboarding.advanceWelcome()
+        XCTAssertEqual(onboarding.step, .terms, "no way past the welcome cards without Agree")
+        readAndAgree(onboarding)
+        XCTAssertEqual(onboarding.step, .method)
+    }
+
+    func testAgreeingFirstShowsTheWelcomeCards() {
+        let onboarding = OnboardingViewModel(deps: makeDeps())
+        readAndAgree(onboarding)
+        XCTAssertEqual(onboarding.step, .welcome)
+    }
+
+    // MARK: Scroll to the end
+
+    func testAgreeDoesNothingUntilTheTermsAreScrolledToTheEnd() {
+        let deps = makeDeps()
+        let onboarding = OnboardingViewModel(deps: deps)
+        XCTAssertFalse(onboarding.hasReachedEndOfTerms, "Agree starts disabled")
+        onboarding.agreeToTerms()
+        XCTAssertEqual(onboarding.step, .terms)
+        XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
+
+        onboarding.termsReachedEnd()
+        XCTAssertTrue(onboarding.hasReachedEndOfTerms, "Agree enabled at the end")
+        onboarding.agreeToTerms()
+        XCTAssertTrue(deps.terms.hasAcceptedCurrentVersion)
+    }
+
+    func testDecliningMeansScrollingToTheEndAgain() {
+        let onboarding = OnboardingViewModel(deps: makeDeps())
+        onboarding.termsReachedEnd()
+        onboarding.declineTerms()
+        onboarding.pageIndex = OnboardingViewModel.cards.count - 1
+        onboarding.advanceWelcome()
+        XCTAssertEqual(onboarding.step, .terms)
+        XCTAssertFalse(onboarding.hasReachedEndOfTerms)
+        onboarding.agreeToTerms()
+        XCTAssertEqual(onboarding.step, .terms, "the earlier scroll doesn't count")
+    }
+
+    func testAnInterruptedSignUpResumesAtTheProfileAfterAgreeing() {
+        let deps = makeDeps()
+        deps.session.needsProfileSetup = true
+        let onboarding = OnboardingViewModel(deps: deps)
+        XCTAssertEqual(onboarding.step, .terms)
+        readAndAgree(onboarding)
+        XCTAssertEqual(onboarding.step, .profile)
+    }
+
+    // MARK: Persistence
+
+    func testAgreementIsRememberedAcrossLaunches() throws {
+        let deps = makeDeps()
+        let before = Date()
+        readAndAgree(OnboardingViewModel(deps: deps))
+
+        let relaunched = TermsAcceptance(defaults: defaults)
+        XCTAssertTrue(relaunched.hasAcceptedCurrentVersion)
+        XCTAssertEqual(relaunched.acceptedVersion, TermsOfService.version)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(relaunched.acceptedAt), before.addingTimeInterval(-1))
+        XCTAssertEqual(OnboardingViewModel(deps: makeDeps()).step, .welcome, "agreed once, not asked again")
+    }
+
+    func testAgreementToAnEarlierVersionAsksAgain() {
+        defaults.set("2000-01-01", forKey: "huddlepal.terms.acceptedVersion")
+        XCTAssertFalse(TermsAcceptance(defaults: defaults).hasAcceptedCurrentVersion)
+        XCTAssertEqual(OnboardingViewModel(deps: makeDeps()).step, .terms)
+    }
+
+    // MARK: Bundled text
+
+    func testBundledTermsHaveEverySectionAndNoPlaceholders() throws {
+        let terms = try XCTUnwrap(TermsOfService.current, "Legal/TermsOfService.md must be in the app bundle")
+        XCTAssertEqual(terms.blocks.filter { $0.kind == .heading }.count, 15)
+        let text = terms.blocks.map { String($0.text.characters) }.joined(separator: "\n")
+        XCTAssertFalse(text.contains("["), "unfilled placeholder")
+        XCTAssertFalse(text.contains("Drafting Notes"))
+    }
+
+    /// Editing the Terms without bumping `TermsOfService.version` would let
+    /// existing users skip agreeing to the new text.
+    func testVersionMatchesTheTermsLastUpdatedDate() throws {
+        let terms = try XCTUnwrap(TermsOfService.current)
+        let line = try XCTUnwrap(terms.blocks.lazy.map { String($0.text.characters) }.first { $0.hasPrefix("Last updated: ") })
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.dateFormat = "MMMM d, yyyy"
+        let date = try XCTUnwrap(parser.date(from: String(line.dropFirst("Last updated: ".count))))
+        parser.dateFormat = "yyyy-MM-dd"
+        XCTAssertEqual(parser.string(from: date), TermsOfService.version)
+    }
+}

@@ -10,7 +10,7 @@ Every service is a protocol with two implementations — a seeded offline **mock
 
 1. Open `HuddlePal.xcodeproj` in **Xcode 16**.
 2. Select the **HuddlePal** scheme and any **iOS 17+** simulator.
-3. ⌘R. A hug-mark launch animation lands on the **Huddles** shelf: two seeded huddles ("The Crew" 🏔 and "Sunday Dinners" 🍝), both LOCKED — the other members deposited today; you haven't.
+3. ⌘R. A hug-mark launch animation, then the **Terms of Service** (first launch, or after the Terms' version changes): scroll to the end, then tap **Agree** to continue (Decline returns to the welcome cards). It lands on the **Huddles** shelf: two seeded huddles ("The Crew" 🏔 and "Sunday Dinners" 🍝), both LOCKED — the other members deposited today; you haven't.
 4. Tap **Add today's memory** → take a photo with the camera (deposits are camera-only; on the Simulator, which has no camera, Compose shows a "no camera" state — run on a device to deposit), confirm the permanence prompt → the lock springs open and today is revealed.
 5. ⌘U runs the test suite (engine rules, critical mock flows, live sync reconciliation, sign-in input, profile editor, photo encryption).
 
@@ -55,20 +55,22 @@ HuddlePal/
 │   │   └── ProfileViewModel.swift
 │   ├── Views/
 │   │   ├── RootView.swift              Splash → Onboarding → MainTabView router
-│   │   ├── Onboarding/OnboardingView.swift
+│   │   ├── Onboarding/OnboardingView.swift  Terms of Service gate (Agree required) + sign-in steps
 │   │   ├── Home/HuddleHomeView.swift    LOCKED grid / UNLOCKED feed + unlock reveal
 │   │   ├── Compose/ComposeView.swift   Camera capture + caption + permanence confirm
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
 │   │   ├── Detail/DepositDetailView.swift  Reactions + comments
 │   │   ├── HuddleManagement/            CreateHuddleView / JoinHuddleView / HuddleSettingsView
 │   │   └── Profile/ProfileView.swift   Draft editing + confirmed save,
-│   │                                   sign out + DEBUG tools
+│   │                                   sign out + DEBUG tools; TermsReaderView
 │   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,
 │   │                                   CaptionTextField (80-char enforcement),
-│   │                                   CodeEntryField, CameraPicker
+│   │                                   CodeEntryField, CameraPicker, TermsDocumentView
 │   ├── Support/                        Theme, Haptics, DateProviding (injectable clock),
-│   │                                   DailyReminders, ImageDownscaler, AppleSignInNonce
+│   │                                   DailyReminders, ImageDownscaler, AppleSignInNonce,
+│   │                                   TermsOfService (bundled text + TermsAcceptance)
+│   ├── Legal/TermsOfService.md         The Terms of Service shown in-app; host it at huddlepals.com/terms
 │   └── Assets.xcassets
 └── HuddlePalTests/
     ├── HuddleEngineTests.swift          Deterministic engine tests (pinned calendar + clock)
@@ -76,7 +78,8 @@ HuddlePal/
     ├── LiveSyncTests.swift             SupabaseStore reconciliation, incl. Former member
     ├── AuthInputTests.swift            Session persistence, phone input, code length
     ├── ProfileConfirmationTests.swift  Profile editor's confirmed-draft rules
-    └── PhotoEncryptionTests.swift      E2EE: key wrap, photo seal/open, report disclosure
+    ├── PhotoEncryptionTests.swift      E2EE: key wrap, photo seal/open, report disclosure
+    └── TermsAgreementTests.swift       Terms gate: first screen, Decline, re-ask per version
 ```
 
 Next to the app: `supabase/` (schema.sql, `scripts/reset_database.sql`, the
@@ -152,7 +155,7 @@ Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (
 
 ## Testing
 
-⌘U runs six suites:
+⌘U runs seven suites:
 
 - `HuddleEngineTests` pins the calendar to `America/Los_Angeles` and feeds explicit dates, covering: perfect-day increment, missing-member reset, incomplete-today preservation, skip-token preservation, joining mid-streak, once-and-permanent, the recovery window (opens / restores / expires), dayKey boundary (23:59 / 00:01 gate flip), backfill window (yesterday ✓ / 2 days ✗ / today ✗ / future ✗), backfill repairing a streak on recompute, gate semantics, caption sanitization, and invite-code shape.
 - `CriticalFlowTests` drives the assembled mock stack: launch into two locked huddles, deposit → unlock → repeat refused, create/join, sign-out, and the huddle list's "who posted today" read.
@@ -160,3 +163,4 @@ Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (
 - `AuthInputTests` covers sign-in plumbing: the Keychain session surviving a relaunch, phone numbers without +1, and code lengths from `Supabase.plist`.
 - `ProfileConfirmationTests` covers the profile editor's confirmed-draft and dirty-exit rules.
 - `PhotoEncryptionTests` covers the E2EE crypto: huddle-key wrap/unwrap, photo seal/open, wrong keys failing cleanly, a report's key opening only that photo, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
+- `TermsAgreementTests` covers the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end, Decline returns to the first welcome card, nothing past the cards opens without Agree, and agreement persists per `TermsOfService.version` (which must match the Terms' "Last updated" date).

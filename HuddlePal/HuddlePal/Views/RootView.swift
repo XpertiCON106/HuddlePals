@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Root router: launch reveal while bootstrapping → onboarding when signed
-/// out → the main tab UI once a session exists.
+/// out or the current Terms aren't agreed to yet → the main tab UI once a
+/// session exists and the Terms are accepted.
 struct RootView: View {
     @Environment(AppDependencies.self) private var deps
     @State private var viewModel: RootViewModel?
@@ -11,7 +12,9 @@ struct RootView: View {
         ZStack {
             Group {
                 if viewModel != nil, deps.session.isReady {
-                    if deps.session.currentUser == nil {
+                    // Even a restored session waits on the Terms: no one
+                    // reaches the app without tapping Agree.
+                    if deps.session.currentUser == nil || !deps.terms.hasAcceptedCurrentVersion {
                         OnboardingView()
                     } else {
                         MainTabView()

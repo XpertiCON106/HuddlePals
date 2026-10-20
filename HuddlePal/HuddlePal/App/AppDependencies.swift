@@ -54,6 +54,9 @@ final class AppDependencies {
     let session: AppSession
     let debug: DebugSettings
     let appearance: AppearanceSettings
+    /// Agreement to the Terms of Service — required before anything past
+    /// the welcome cards (RootView, OnboardingViewModel).
+    let terms: TermsAcceptance
 
     let auth: any AuthServiceProtocol
     let huddleService: any HuddleServiceProtocol
@@ -73,6 +76,7 @@ final class AppDependencies {
         session: AppSession,
         debug: DebugSettings,
         appearance: AppearanceSettings = AppearanceSettings(),
+        terms: TermsAcceptance = TermsAcceptance(),
         auth: any AuthServiceProtocol,
         huddleService: any HuddleServiceProtocol,
         depositService: any DepositServiceProtocol,
@@ -88,6 +92,7 @@ final class AppDependencies {
         self.session = session
         self.debug = debug
         self.appearance = appearance
+        self.terms = terms
         self.auth = auth
         self.huddleService = huddleService
         self.depositService = depositService
@@ -97,7 +102,7 @@ final class AppDependencies {
         self.reminders = reminders
     }
 
-    static func makeMock(inMemory: Bool = false) -> AppDependencies {
+    static func makeMock(inMemory: Bool = false, terms: TermsAcceptance = TermsAcceptance()) -> AppDependencies {
         let container = Self.makeContainer(inMemory: inMemory)
         let context = container.mainContext
         let engine = HuddleEngine()
@@ -112,6 +117,7 @@ final class AppDependencies {
             dateProvider: dateProvider,
             session: session,
             debug: DebugSettings(),
+            terms: terms,
             auth: MockAuthService(context: context),
             huddleService: MockHuddleService(
                 context: context, engine: engine, skipLedger: skipLedger, dateProvider: dateProvider

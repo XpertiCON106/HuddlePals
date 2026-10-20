@@ -423,6 +423,13 @@ private struct ProfileContent: View {
                     .foregroundStyle(Theme.textSecondary)
             }
             .listRowBackground(Theme.surface)
+
+            NavigationLink {
+                TermsReaderView(acceptedAt: viewModel.termsAcceptedAt)
+            } label: {
+                Text("Terms of Service")
+            }
+            .listRowBackground(Theme.surface)
         }
     }
 }
