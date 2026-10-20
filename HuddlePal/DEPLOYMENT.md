@@ -36,7 +36,7 @@ seeded **mock** world. No code changes to switch.
      app's Phone tab will return the provider's error; Apple + email work
      without it.
    - **Apple**: *Sign In / Up → Apple* → enable, and add your app's bundle
-     id (`com.huddlepals.app`) to **Client IDs**. The native iOS
+     id (`com.huddlepals.ios`) to **Client IDs**. The native iOS
      flow needs no secret key.
 3. **Storage** → *New bucket* → name `deposits`, **Private** (not public).
    (Profile photos live in the same bucket under `avatars/…` — the schema's
@@ -96,7 +96,7 @@ seeded **mock** world. No code changes to switch.
 1. Enroll at [developer.apple.com](https://developer.apple.com/programs/)
    ($99/year). Approval is usually same-day.
 2. In Xcode, select the **HuddlePal** target → *Signing & Capabilities* →
-   choose your **Team**. The bundle id is `com.huddlepals.app`; change it in
+   choose your **Team**. The bundle id is `com.huddlepals.ios`; change it in
    *Build Settings* only if Xcode reports a collision. The **Sign in with Apple** entitlement is
    already in the project (`HuddlePal.entitlements`); with automatic signing,
    Xcode registers the capability on your App ID — this requires the paid

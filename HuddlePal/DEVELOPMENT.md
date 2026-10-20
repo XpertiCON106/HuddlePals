@@ -18,7 +18,7 @@ behind identical service protocols — the app picks at launch based on whether
 `HuddlePal/HuddlePal/Supabase.plist` exists with real values.
 
 **Project status (as of 2026-10-19):** v1.0 (build 1), bundle id
-`com.huddlepals.app`, heading to TestFlight from the `test-flight` branch.
+`com.huddlepals.ios`, heading to TestFlight from the `test-flight` branch.
 Builds and passes its XCTests in Xcode 26.1.1. A real Supabase project now
 exists and is being exercised by hand; fixes from that so far include
 lowercase avatar paths, the reports select policy, and the
@@ -147,7 +147,7 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
 - **End-to-end encrypted photos (v5, live only)**: the operator must not
   be able to view deposits. `Services/Live/PhotoCrypto.swift` (CryptoKit
   only): per-user Curve25519 identity key (private half in the Keychain,
-  `IdentityKeychain`, service `com.huddlepals.app.identity`,
+  `IdentityKeychain`, service `com.huddlepals.ios.identity`,
   synchronizable + AfterFirstUnlock, one item per user; deleted only on
   account deletion, never sign-out; public half in `user_keys`) → per-huddle
   256-bit huddle key, stored per member in `huddle_keys` wrapped to their
