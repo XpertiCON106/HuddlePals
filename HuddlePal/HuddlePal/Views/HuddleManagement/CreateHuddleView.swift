@@ -125,7 +125,7 @@ private struct CreateHuddleContent: View {
                 )
 
             if let url = viewModel.shareURL {
-                ShareLink(item: url, message: Text("Join our huddle \"\(huddle.name)\" on HuddlePal")) {
+                ShareLink(item: url, message: Text("Join our huddle \"\(huddle.name)\" on HuddlePals")) {
                     Label("Share invite link", systemImage: "square.and.arrow.up")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.background)

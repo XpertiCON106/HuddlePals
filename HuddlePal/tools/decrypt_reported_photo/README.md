@@ -1,6 +1,6 @@
 # decrypt_reported_photo
 
-HuddlePal photos are end-to-end encrypted, so the Supabase dashboard only ever
+HuddlePals photos are end-to-end encrypted, so the Supabase dashboard only ever
 shows ciphertext. When a member reports a photo, their device attaches that
 one photo's key to the report (`reports.photo_key`). This script turns the
 reported photo's Storage object back into a JPEG for review. The key opens

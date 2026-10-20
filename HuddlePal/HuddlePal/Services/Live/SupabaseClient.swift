@@ -2,7 +2,7 @@ import Foundation
 
 /// Zero-dependency Supabase client over URLSession, speaking the stable
 /// REST surfaces directly: GoTrue (auth), PostgREST (rows + RPC), and
-/// Storage (objects). Covers exactly what HuddlePal needs — not a general SDK.
+/// Storage (objects). Covers exactly what HuddlePals needs — not a general SDK.
 /// An actor: `session` is read and written from concurrent refresh flows
 /// (huddle list, home, reminders), so access must be serialized.
 actor SupabaseClient {

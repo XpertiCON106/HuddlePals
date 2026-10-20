@@ -88,7 +88,7 @@ private struct LaunchRevealView: View {
                         .scaleEffect(spokesVisible ? 1 : 0.01)
                 }
 
-                Text("HuddlePal")
+                Text("HuddlePals")
                     .font(Theme.displayFont(30))
                     .foregroundStyle(Theme.textPrimary)
                     .opacity(wordmarkVisible ? 1 : 0)

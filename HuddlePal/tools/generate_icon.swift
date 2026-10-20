@@ -1,4 +1,4 @@
-// Renders the HuddlePal app icon: warm paper field with an
+// Renders the HuddlePals app icon: warm paper field with an
 // ink huddle dial, drawn with vector paths (no SF Symbols — Apple's
 // symbol license excludes app icons).
 //

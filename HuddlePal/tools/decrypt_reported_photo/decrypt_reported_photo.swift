@@ -1,6 +1,6 @@
 // Decrypts ONE reported huddle photo for moderation review.
 //
-// HuddlePal photos are end-to-end encrypted: the Storage object is an AES-GCM
+// HuddlePals photos are end-to-end encrypted: the Storage object is an AES-GCM
 // "combined" box (12-byte nonce ‖ ciphertext ‖ 16-byte tag) under a per-photo
 // key that only the huddle's members hold. When a member reports a photo,
 // their device attaches that photo's key (reports.photo_key, base64). That key
@@ -39,7 +39,7 @@ do {
     let box = try AES.GCM.SealedBox(combined: ciphertext)
     jpeg = try AES.GCM.open(box, using: SymmetricKey(data: keyData))
 } catch {
-    fail("decryption failed — wrong key for this file, or not a HuddlePal photo object (\(error))")
+    fail("decryption failed — wrong key for this file, or not a HuddlePals photo object (\(error))")
 }
 
 guard FileManager.default.createFile(atPath: outputPath, contents: jpeg) else {

@@ -179,7 +179,7 @@ private struct ComposeContent: View {
                 Text("No camera available")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.textPrimary)
-                Text("HuddlePal captures today's photo with your camera. Run this on a device to deposit.")
+                Text("HuddlePals captures today's photo with your camera. Run this on a device to deposit.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)

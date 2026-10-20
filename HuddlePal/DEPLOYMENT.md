@@ -1,4 +1,4 @@
-# HuddlePal — Go-Live Runbook
+# HuddlePals — Go-Live Runbook
 
 Everything code-side is already in this repo. This file is the ordered
 checklist of the account-side steps only you can do. Total hands-on time:
@@ -22,7 +22,7 @@ seeded **mock** world. No code changes to switch.
 2. **Auth providers** (Dashboard → Authentication):
    - **Email** (on by default): under *Emails → Templates*, edit the
      **Magic Link** template so its body contains `{{ .Token }}` — e.g.
-     "Your HuddlePal code is {{ .Token }}. It expires in one hour." — so users
+     "Your HuddlePals code is {{ .Token }}. It expires in one hour." — so users
      receive a code instead of a link. Then check **Email OTP Length**
      (Authentication → Email): the app expects 6 digits unless you set
      `EMAIL_OTP_LENGTH` in `Supabase.plist` to the same number — otherwise
@@ -248,7 +248,7 @@ a device before TestFlight:
 
 App Store Connect asks about encryption on every build unless
 `ITSAppUsesNonExemptEncryption` is set (it is, to `NO`, in the build
-settings). HuddlePal's encryption is HTTPS (URLSession) plus Apple's CryptoKit
+settings). HuddlePals' encryption is HTTPS (URLSession) plus Apple's CryptoKit
 for the photo end-to-end encryption: standard algorithms (AES-GCM, X25519,
 HKDF-SHA256) used through the operating system, with no proprietary or
 bundled crypto. Apple treats encryption "within Apple's operating system"

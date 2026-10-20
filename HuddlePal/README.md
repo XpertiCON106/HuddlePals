@@ -1,4 +1,4 @@
-# HuddlePal
+# HuddlePals
 
 > **New here? Read [OVERVIEW.md](OVERVIEW.md)** — the complete guide with diagrams. [DEVELOPMENT.md](DEVELOPMENT.md) is the developer reference; [DEPLOYMENT.md](DEPLOYMENT.md) is the go-live runbook.
 

@@ -1,13 +1,13 @@
-# HuddlePal — Privacy Policy
+# HuddlePals — Privacy Policy
 
 _Last updated: 2026-10-19_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
 
-## What HuddlePal is
+## What HuddlePals is
 
-HuddlePal is a private, invite-only photo-sharing app for small groups. Each
+HuddlePals is a private, invite-only photo-sharing app for small groups. Each
 member deposits one photo per day into a shared "huddle." Photos are
 end-to-end encrypted and can be viewed only by the members of that huddle.
 
@@ -52,7 +52,7 @@ are visible to us as the operator.
 
 ## Permanence of deposited content
 
-HuddlePal is built around a promise: **a photo deposited into a huddle is
+HuddlePals is built around a promise: **a photo deposited into a huddle is
 permanent.** It becomes part of that group's shared archive and **cannot be
 edited or deleted**, even by the person who posted it. Please only deposit
 photos you are comfortable making a permanent part of your group's record.
@@ -85,7 +85,7 @@ only to review the report.
 
 ## Children
 
-HuddlePal is not directed to children under 13 (or the minimum age in your
+HuddlePals is not directed to children under 13 (or the minimum age in your
 country). Do not use the app if you are under that age.
 
 ## Legal basis and your rights

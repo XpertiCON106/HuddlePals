@@ -8,7 +8,7 @@ enum PhotoKeyError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .huddleKeyUnavailable:
-            "This huddle's key hasn't reached this device yet. It's shared automatically when another member opens HuddlePal — try again soon."
+            "This huddle's key hasn't reached this device yet. It's shared automatically when another member opens HuddlePals — try again soon."
         case .photoTooLarge:
             "That photo is too large to upload."
         }

@@ -1,4 +1,4 @@
--- HuddlePal — Supabase schema, RLS, and RPCs.
+-- HuddlePals — Supabase schema, RLS, and RPCs.
 -- Run this whole file once in the Supabase SQL editor (Dashboard → SQL → New query).
 -- Prereqs (Dashboard): Auth providers per DEPLOYMENT.md (email template
 -- with {{ .Token }}, Apple client id, optional Twilio for SMS), and

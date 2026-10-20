@@ -1,4 +1,4 @@
-# HuddlePal — Deployment Readiness Report
+# HuddlePals — Deployment Readiness Report
 
 _Audit date: 2026-07-03 · Branch: `release-readiness` · Auditor: automated pre-submission audit (Claude Code)_
 

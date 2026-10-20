@@ -4,7 +4,7 @@ import UIKit
 /// lever on upload size, egress, and — because deposits are permanent —
 /// storage cost that only ever grows: a full-resolution camera frame
 /// (~3–6 MB) becomes a few hundred KB with no visible quality loss at the
-/// sizes HuddlePal displays.
+/// sizes HuddlePals displays.
 enum ImageDownscaler {
     /// Deposit photos are shown full-bleed; 1440px on the long edge is plenty.
     static let depositMaxDimension: CGFloat = 1440
