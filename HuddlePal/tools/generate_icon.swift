@@ -1,6 +1,8 @@
-// Renders the HuddlePals app icon: warm paper field with an
-// ink huddle dial, drawn with vector paths (no SF Symbols — Apple's
-// symbol license excludes app icons).
+// Renders the HuddlePals app icon: warm paper field with the hug mark —
+// three pals (tangerine, coral, magenta) held together by one ink arm —
+// drawn with vector paths (no SF Symbols — Apple's symbol license excludes
+// app icons). The launch reveal in Views/RootView.swift (`HugMark`) draws
+// the same mark; keep the two geometries in sync.
 //
 // Renders into an explicit 1024×1024 *opaque* bitmap: App Store Connect
 // rejects icons with an alpha channel, and NSImage.lockFocus would render
@@ -29,13 +31,25 @@ NSGraphicsContext.current = nsContext
 let paperTop = NSColor(srgbRed: 0.985, green: 0.983, blue: 0.978, alpha: 1)
 let paperBottom = NSColor(srgbRed: 0.925, green: 0.922, blue: 0.912, alpha: 1)
 let ink = NSColor(srgbRed: 0.102, green: 0.102, blue: 0.094, alpha: 1)
-let inkSoft = NSColor(srgbRed: 0.310, green: 0.308, blue: 0.295, alpha: 1)
+
+/// Avatar palette solids (AvatarPalette in Support/Theme.swift).
+func hex(_ value: UInt32) -> NSColor {
+    NSColor(
+        srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+        green: CGFloat((value >> 8) & 0xFF) / 255,
+        blue: CGFloat(value & 0xFF) / 255,
+        alpha: 1
+    )
+}
+let tangerine = hex(0xF76B15)
+let coral = hex(0xE5484D)
+let magenta = hex(0xD6409F)
 
 // Background: vertical paper gradient.
 let background = NSGradient(starting: paperTop, ending: paperBottom)!
 background.draw(in: NSRect(x: 0, y: 0, width: size, height: size), angle: -90)
 
-// Faint vignette behind the dial.
+// Faint vignette behind the mark.
 let glowColors = [
     ink.withAlphaComponent(0.05).cgColor,
     ink.withAlphaComponent(0.0).cgColor,
@@ -49,69 +63,32 @@ if let glow = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: glo
     )
 }
 
-let center = CGPoint(x: size / 2, y: size / 2)
+// Geometry in unit coordinates, y up. The mark spans x 0.18…0.82 and is
+// vertically centered (y 0.275…0.725).
 
-func strokeCircle(radius: CGFloat, width: CGFloat, color: NSColor) {
-    let rect = CGRect(
-        x: center.x - radius, y: center.y - radius,
-        width: radius * 2, height: radius * 2
-    )
-    let path = NSBezierPath(ovalIn: rect)
-    path.lineWidth = width
-    color.setStroke()
-    path.stroke()
-}
+// The arm: a thick round-capped arc cradling the heads from below.
+let arm = NSBezierPath()
+arm.appendArc(
+    withCenter: NSPoint(x: size * 0.5, y: size * 0.603),
+    radius: size * 0.285,
+    startAngle: 194.4, // 1.08π
+    endAngle: 345.6,   // 1.92π, sweeping through the bottom
+    clockwise: false
+)
+arm.lineWidth = size * 0.085
+arm.lineCapStyle = .round
+ink.setStroke()
+arm.stroke()
 
-// Huddle door rings.
-strokeCircle(radius: size * 0.330, width: size * 0.030, color: inkSoft)
-strokeCircle(radius: size * 0.295, width: size * 0.014, color: ink.withAlphaComponent(0.5))
-
-// Dial spokes (5, like a bank-huddle wheel).
-let spokeCount = 5
-let innerR = size * 0.085
-let outerR = size * 0.225
-for i in 0..<spokeCount {
-    let angle = CGFloat(i) * (2 * .pi / CGFloat(spokeCount)) + .pi / 2
-    let path = NSBezierPath()
-    path.move(to: NSPoint(
-        x: center.x + cos(angle) * innerR,
-        y: center.y + sin(angle) * innerR
-    ))
-    path.line(to: NSPoint(
-        x: center.x + cos(angle) * outerR,
-        y: center.y + sin(angle) * outerR
-    ))
-    path.lineWidth = size * 0.034
-    path.lineCapStyle = .round
-    ink.setStroke()
-    path.stroke()
-
-    // Spoke end knob.
-    let knobR = size * 0.030
-    let knobCenter = CGPoint(
-        x: center.x + cos(angle) * outerR,
-        y: center.y + sin(angle) * outerR
-    )
-    ink.setFill()
+// The three pals, the middle one a little higher.
+let headRadius = size * 0.076
+for (x, y, color) in [(0.335, 0.598, tangerine), (0.5, 0.648, coral), (0.665, 0.598, magenta)] {
+    color.setFill()
     NSBezierPath(ovalIn: CGRect(
-        x: knobCenter.x - knobR, y: knobCenter.y - knobR,
-        width: knobR * 2, height: knobR * 2
+        x: size * x - headRadius, y: size * y - headRadius,
+        width: headRadius * 2, height: headRadius * 2
     )).fill()
 }
-
-// Hub.
-ink.setFill()
-let hubR = size * 0.062
-NSBezierPath(ovalIn: CGRect(
-    x: center.x - hubR, y: center.y - hubR,
-    width: hubR * 2, height: hubR * 2
-)).fill()
-paperBottom.setFill()
-let hubInnerR = size * 0.026
-NSBezierPath(ovalIn: CGRect(
-    x: center.x - hubInnerR, y: center.y - hubInnerR,
-    width: hubInnerR * 2, height: hubInnerR * 2
-)).fill()
 
 NSGraphicsContext.current = nil
 

@@ -10,7 +10,7 @@ Every service is a protocol with two implementations — a seeded offline **mock
 
 1. Open `HuddlePal.xcodeproj` in **Xcode 16**.
 2. Select the **HuddlePal** scheme and any **iOS 17+** simulator.
-3. ⌘R. A huddle-dial launch animation lands on the **Huddles** shelf: two seeded huddles ("The Crew" 🏔 and "Sunday Dinners" 🍝), both LOCKED — the other members deposited today; you haven't.
+3. ⌘R. A hug-mark launch animation lands on the **Huddles** shelf: two seeded huddles ("The Crew" 🏔 and "Sunday Dinners" 🍝), both LOCKED — the other members deposited today; you haven't.
 4. Tap **Add today's memory** → take a photo with the camera (deposits are camera-only; on the Simulator, which has no camera, Compose shows a "no camera" state — run on a device to deposit), confirm the permanence prompt → the lock springs open and today is revealed.
 5. ⌘U runs the test suite (engine rules, critical mock flows, live sync reconciliation, sign-in input, profile editor, photo encryption).
 
