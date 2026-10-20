@@ -1,4 +1,4 @@
-# Vault — Deployment Readiness Report
+# HuddlePal — Deployment Readiness Report
 
 _Audit date: 2026-07-03 · Branch: `release-readiness` · Auditor: automated pre-submission audit (Claude Code)_
 
@@ -7,9 +7,9 @@ current submission floor (since **April 28, 2026** uploads must be built with Xc
 per [Apple's upcoming requirements](https://developer.apple.com/news/upcoming-requirements/)).
 
 **Proof of green:** Release build succeeds (`xcodebuild -configuration Release`, zero warnings) and
-the full test suite passes — 20/20 (16 `VaultEngineTests` + 4 new `CriticalFlowTests`). A clean
+the full test suite passes — 20/20 (16 `HuddleEngineTests` + 4 new `CriticalFlowTests`). A clean
 install of the Debug build was launched on an iPhone 17 Pro simulator and lands correctly on the
-seeded Vaults shelf with no crash.
+seeded Huddles shelf with no crash.
 
 ---
 
@@ -36,24 +36,24 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
 - ✅ **DEBUG demo tools compiled out of Release** (`b001769`) — the Profile DEBUG section (force
   gate shut, advance mock day, regenerate seed data) was only runtime-gated on backend mode; a
   Release binary built without `Supabase.plist` would have shipped a visible DEBUG menu.
-  Now `#if DEBUG` in [ProfileView.swift](Vault/Vault/Views/Profile/ProfileView.swift) and
-  [ProfileViewModel.swift](Vault/Vault/ViewModels/ProfileViewModel.swift).
+  Now `#if DEBUG` in [ProfileView.swift](HuddlePal/HuddlePal/Views/Profile/ProfileView.swift) and
+  [ProfileViewModel.swift](HuddlePal/HuddlePal/ViewModels/ProfileViewModel.swift).
 - ✅ **Release builds fail without live backend config** (`680db0e`) — new Release-only build phase
-  in [project.pbxproj](Vault/Vault.xcodeproj/project.pbxproj) errors with instructions when
-  `Vault/Supabase.plist` is missing or still contains placeholders, so the seeded mock world can
+  in [project.pbxproj](HuddlePal/HuddlePal.xcodeproj/project.pbxproj) errors with instructions when
+  `HuddlePal/Supabase.plist` is missing or still contains placeholders, so the seeded mock world can
   never be archived by accident. Verified in all three directions (Release w/o plist → fails with
   message; Release with plist → succeeds; Debug w/o plist → succeeds).
-  [DEPLOYMENT.md](Vault/DEPLOYMENT.md) updated to document this.
+  [DEPLOYMENT.md](HuddlePal/DEPLOYMENT.md) updated to document this.
 - ✅ Versioning confirmed sane: `CFBundleShortVersionString` 1.0, `CFBundleVersion` 1, iOS 17.0 target.
 - ✅ Clean-install first launch verified on simulator (mock world, locked state, no crash).
 
 ### Phase 2 — App Store compliance
 - ✅ **Missing Sign in with Apple entitlement added** (`5a2779a`) —
-  [Vault.entitlements](Vault/Vault/Vault.entitlements) was an **empty dict** while the app offers
+  [HuddlePal.entitlements](HuddlePal/HuddlePal/HuddlePal.entitlements) was an **empty dict** while the app offers
   SIWA + email/phone login. Without it the live ASAuthorization flow fails on device, and offering
   email/phone login without SIWA violates Guideline 4.8.
 - ✅ **Privacy manifest completed** (`07c4c28`) —
-  [PrivacyInfo.xcprivacy](Vault/Vault/PrivacyInfo.xcprivacy) declared Photos/Name/UserID but not
+  [PrivacyInfo.xcprivacy](HuddlePal/HuddlePal/PrivacyInfo.xcprivacy) declared Photos/Name/UserID but not
   **email address, phone number** (OTP sign-in) or **other user content** (captions, comments,
   bios). All added: linked, non-tracking, app-functionality. `plutil -lint` clean; verified present
   in the built bundle.
@@ -78,7 +78,7 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
 
 ### Phase 4 — Stability
 - ✅ **`SupabaseClient` hardened** (`a27644c`,
-  [SupabaseClient.swift](Vault/Vault/Services/Live/SupabaseClient.swift)): converted to an **actor**
+  [SupabaseClient.swift](HuddlePal/HuddlePal/Services/Live/SupabaseClient.swift)): converted to an **actor**
   (its `session` was unsynchronized shared mutable state across concurrent refresh flows);
   **single-flight token refresh** (GoTrue refresh tokens are single-use — parallel refreshes could
   invalidate the session and sign the user out); **transient refresh failures no longer wipe the
@@ -88,12 +88,12 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
   full archive to the "starts today" empty state; it now keeps last-known content like Home does.
 - ✅ Audited every view model: all user-initiated network paths surface errors and stop spinners
   (`defer { isWorking = false }` pattern throughout); no force casts; the one remaining `try!`
-  ([AppDependencies.swift:186](Vault/Vault/App/AppDependencies.swift:186)) is a documented
+  ([AppDependencies.swift:186](HuddlePal/HuddlePal/App/AppDependencies.swift:186)) is a documented
   last-resort fallback creating an *in-memory* store, which cannot realistically fail — left as is.
 
 ### Phase 5 — Performance & size
 - ✅ **Thumbnail decodes downsampled** (`a9966e0`,
-  [DepositCards.swift](Vault/Vault/Components/DepositCards.swift)) — archive tiles (110pt) and
+  [DepositCards.swift](HuddlePal/HuddlePal/Components/DepositCards.swift)) — archive tiles (110pt) and
   profile strips decoded full 1440px bitmaps (~10 MB RAM each); now ImageIO thumbnail decode capped
   at the tile's @3x pixel size. Full-bleed contexts unchanged.
 - ✅ Launch path is light (async bootstrap behind the reveal animation; no synchronous network).
@@ -104,8 +104,8 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
 
 ### Phase 6 — Tests
 - ✅ **New smoke tests for critical flows**
-  ([CriticalFlowTests.swift](Vault/VaultTests/CriticalFlowTests.swift)): bootstrap auto-sign-in +
-  both seeded vaults locked; deposit → gate unlocks; second same-day deposit refused
+  ([CriticalFlowTests.swift](HuddlePal/HuddlePalTests/CriticalFlowTests.swift)): bootstrap auto-sign-in +
+  both seeded huddles locked; deposit → gate unlocks; second same-day deposit refused
   (once-and-permanent); create → join (case-insensitive code) → duplicate-join and bad-code
   refusals; sign-out round trip. **Final run: 20/20 green; final Release build: clean.**
 
@@ -120,7 +120,7 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
 
 ### Phase 8 — Accessibility (quick pass)
 - ✅ **Labels + tap target** (`5f504ae`): VoiceOver labels for every icon-only control (archive /
-  settings toolbar, add-vault menu, both more-options menus, send-comment, retake-photo,
+  settings toolbar, add-huddle menu, both more-options menus, send-comment, retake-photo,
   remove-photo, state-aware reaction labels); remove-photo tap target enlarged to ~44pt.
 - Logged as P3 (not fixed): the app uses fixed point sizes throughout, so **Dynamic Type is
   effectively ignored** — layouts won't break (they don't scale), but large-text users get small
@@ -139,7 +139,7 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
 - [ ] Decide the final bundle ID (🚫 #2 above) and create the App Store Connect app record with it.
 - [ ] Let automatic signing register the **Sign in with Apple** capability on the App ID.
 
-**Backend (follow [DEPLOYMENT.md](Vault/DEPLOYMENT.md) — it's accurate and ordered)**
+**Backend (follow [DEPLOYMENT.md](HuddlePal/DEPLOYMENT.md) — it's accurate and ordered)**
 - [ ] Create the Supabase project; run `supabase/schema.sql`; create **private** `deposits` bucket
       with ~5 MB file limit and `image/jpeg, image/heic` MIME allowlist.
 - [ ] Enable Auth providers: Email (edit Magic Link template to send `{{ .Token }}`), Apple (add
@@ -151,7 +151,7 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
       account deletion end-to-end** (🚫 #4).
 - [ ] Set up `reports`-table monitoring (dashboard query or webhook → email) — App Review expects
       UGC reports acted on within 24h.
-- [ ] Copy `supabase/Supabase.example.plist` → `Vault/Vault/Supabase.plist` with real values on the
+- [ ] Copy `supabase/Supabase.example.plist` → `HuddlePal/HuddlePal/Supabase.plist` with real values on the
       machine you archive from (gitignored; Release build fails without it — by design).
 
 **App Store Connect record**
@@ -164,7 +164,7 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
       - *Name*: display name — app functionality, linked, no tracking
       - Data used for tracking: **none**. Third-party data collection: **none** (Supabase is your
         processor, not an SDK in the binary).
-- [ ] Support URL + **privacy policy URL** — host [PRIVACY.md](Vault/PRIVACY.md) somewhere public;
+- [ ] Support URL + **privacy policy URL** — host [PRIVACY.md](HuddlePal/PRIVACY.md) somewhere public;
       its content already matches what the app collects (verified). Replace the bracketed
       operator-name placeholders before publishing.
 - [ ] Review notes: **provide a demo login** (an email address on a mailbox App Review can't read
@@ -184,7 +184,7 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
       requirement and review surface. Keeping Universal is fine too; then test on an iPad first.
 - [ ] **Timezone caveat** (documented in DEPLOYMENT.md): dayKey is device-local and the server
       trusts the client's "today" within ±1 day. Same-timezone groups: fine. Split-timezone groups
-      can see edge-of-day disagreements. Acceptable for launch; a vault "home timezone" is the fix.
+      can see edge-of-day disagreements. Acceptable for launch; a huddle "home timezone" is the fix.
 - [ ] Terms of Service / EULA: Apple's standard EULA applies by default; UGC apps benefit from an
       in-app link to terms with a zero-tolerance policy. PRIVACY.md covers reporting/blocking;
       consider adding a short terms page next to the privacy policy.
@@ -195,14 +195,14 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
 
 1. **Internal (you + 1 friend, 1–2 days):**
    - Two-phone smoke test from DEPLOYMENT.md Phase 4: onboard via email code on A, via Apple on B;
-     create vault on A, join by code on B; deposit on A (blurred on B), deposit on B (unlock
+     create huddle on A, join by code on B; deposit on A (blurred on B), deposit on B (unlock
      animation both sides); react + comment both ways; archive on both.
    - Kill/relaunch both apps (session restore); airplane-mode launch (must show sign-in/error, not
      hang, and must **not** log you out — fixed on this branch).
    - Set the daily reminder, accept the permission prompt, verify a notification fires and is
      suppressed after depositing.
    - **Delete account** on B; verify B's photos remain as "Former member" on A, and B can re-onboard.
-2. **Internal group (the real 2–8 person vault, 3–5 days):** exercise the streak across real
+2. **Internal group (the real 2–8 person huddle, 3–5 days):** exercise the streak across real
    midnights, one skip token, one deliberate miss → recovery-window backfill before the countdown
    expires. Watch Supabase logs + `reports` table.
 3. Only then (optional) external TestFlight — requires beta review; with a working demo account

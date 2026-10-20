@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged with the generated Info.plist (GENERATE_INFOPLIST_FILE).
+	     Registers the huddlepal:// scheme for shareable invite links. -->
+	<key>NSCameraUsageDescription</key>
+	<string>HuddlePal uses your camera so you can capture today's photo in the moment.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.vaultphotos.app.invites</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>huddlepal</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Copy this file to HuddlePal/HuddlePal/Supabase.plist and fill in both
+	     values from your Supabase project (Dashboard → Settings → API).
+	     Without a filled-in Supabase.plist the app runs in mock mode.
+	     The anon key is publishable — RLS is what protects the data. -->
+	<key>SUPABASE_URL</key>
+	<string>https://YOUR-PROJECT.supabase.co</string>
+	<key>SUPABASE_ANON_KEY</key>
+	<string>YOUR-ANON-KEY</string>
+	<!-- Optional: digits in the sign-in codes your project sends (6–10,
+	     default 6). Must match Authentication → Email → "Email OTP Length"
+	     and the SMS equivalent, or the code boxes won't fit the code. -->
+	<key>EMAIL_OTP_LENGTH</key>
+	<integer>6</integer>
+	<key>SMS_OTP_LENGTH</key>
+	<integer>6</integer>
+</dict>
+</plist>
