@@ -18,9 +18,7 @@ protocol IdentityKeyStoring {
 /// reinstall — losing it means waiting for a huddle member to re-share every
 /// huddle key. Only account deletion removes it, never sign-out.
 struct IdentityKeychain: IdentityKeyStoring {
-    // Keeps the pre-rename "vaultphotos" prefix on purpose: changing it
-    // orphans every installed device's identity key.
-    private static let service = "com.vaultphotos.app.identity"
+    private static let service = "com.huddlepals.app.identity"
 
     func load(for userID: UUID) -> Curve25519.KeyAgreement.PrivateKey? {
         var query = Self.query(for: userID)

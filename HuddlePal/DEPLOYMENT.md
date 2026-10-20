@@ -36,7 +36,7 @@ seeded **mock** world. No code changes to switch.
      app's Phone tab will return the provider's error; Apple + email work
      without it.
    - **Apple**: *Sign In / Up → Apple* → enable, and add your app's bundle
-     id (default `com.vaultphotos.app`) to **Client IDs**. The native iOS
+     id (`com.huddlepals.app`) to **Client IDs**. The native iOS
      flow needs no secret key.
 3. **Storage** → *New bucket* → name `deposits`, **Private** (not public).
    (Profile photos live in the same bucket under `avatars/…` — the schema's
@@ -56,12 +56,11 @@ seeded **mock** world. No code changes to switch.
    `huddle_key_recipients`, `share_huddle_key`, plus their helpers). The
    security hardening (skip-token auth, crypto invite codes, streak-tamper
    protection), join-day streaks, and encrypted photos are baked in.
-   A database that already ran an older copy of this file should not be
-   re-pasted. Run the newest file in `supabase/migrations/` in the SQL
-   editor instead (it renames the group tables, columns, and RPCs), then
-   `supabase/scripts/reset_test_data.sql` only if you are wiping test data.
-   That script is destructive: it deletes every app row and every object
-   in the `deposits` bucket, and it does not delete `auth.users`.
+   The file only builds a fresh database. If the project already ran an
+   older copy, start over: run `supabase/scripts/reset_database.sql`
+   (destructive — it drops every app table, function, and storage policy,
+   and keeps `auth.users`), empty the `deposits` bucket in the Storage
+   dashboard, then run `schema.sql`.
 5. **Deploy the account-deletion edge function** (required for App Review —
    see "Account deletion" below): `supabase functions deploy delete-account`.
    It revokes the user's Apple token, deletes their avatars, and deletes the
@@ -97,9 +96,8 @@ seeded **mock** world. No code changes to switch.
 1. Enroll at [developer.apple.com](https://developer.apple.com/programs/)
    ($99/year). Approval is usually same-day.
 2. In Xcode, select the **HuddlePal** target → *Signing & Capabilities* →
-   choose your **Team**. Change the bundle id from `com.vaultphotos.app` to
-   something you own (e.g. `com.yourname.huddle`) in *Build Settings* if
-   Xcode reports a collision. The **Sign in with Apple** entitlement is
+   choose your **Team**. The bundle id is `com.huddlepals.app`; change it in
+   *Build Settings* only if Xcode reports a collision. The **Sign in with Apple** entitlement is
    already in the project (`HuddlePal.entitlements`); with automatic signing,
    Xcode registers the capability on your App ID — this requires the paid
    program, and if you change the bundle id, update the Client IDs list in
@@ -151,21 +149,11 @@ seeded **mock** world. No code changes to switch.
 
 ---
 
-> Already ran an earlier `schema.sql`? Don't re-run the whole file. Its
-> bottom carries commented migration blocks: profile columns + deposit
-> immutability + storage policies, security hardening, account deletion,
-> and **join-day streaks**. Run the ones your database predates. The
-> join-day block is required for any project created before members
-> counted from the day after joining: without it, `create_huddle` /
-> `join_huddle` reject the app's new `p_day_key` parameter, and joining
-> still resets streaks.
->
-> **End-to-end encrypted photos** ship as a standalone migration:
-> run [`supabase/migrations/20261019190000_e2ee_photos.sql`](supabase/migrations/20261019190000_e2ee_photos.sql)
-> in the SQL Editor (idempotent), then add `application/octet-stream` to
-> the `deposits` bucket's allowed MIME types (keep `image/jpeg`). Without
-> both, posting a photo fails. The `delete-account` function needs no
-> redeploy (only its comments changed; the key rows cascade in SQL).
+> Already ran an earlier `schema.sql`? There are no upgrade migrations —
+> start over with [`supabase/scripts/reset_database.sql`](supabase/scripts/reset_database.sql)
+> as in Phase 1 step 4, and make sure the `deposits` bucket allows
+> `application/octet-stream` (keep `image/jpeg`); without it, posting a
+> photo fails.
 
 ## Caveats you accepted by shipping this MVP
 

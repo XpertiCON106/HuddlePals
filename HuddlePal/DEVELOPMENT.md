@@ -18,7 +18,7 @@ behind identical service protocols — the app picks at launch based on whether
 `HuddlePal/HuddlePal/Supabase.plist` exists with real values.
 
 **Project status (as of 2026-10-19):** v1.0 (build 1), bundle id
-`com.vaultphotos.app`, heading to TestFlight from the `test-flight` branch.
+`com.huddlepals.app`, heading to TestFlight from the `test-flight` branch.
 Builds and passes its XCTests in Xcode 26.1.1. A real Supabase project now
 exists and is being exercised by hand; fixes from that so far include
 lowercase avatar paths, the reports select policy, and the
@@ -147,7 +147,7 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
 - **End-to-end encrypted photos (v5, live only)**: the operator must not
   be able to view deposits. `Services/Live/PhotoCrypto.swift` (CryptoKit
   only): per-user Curve25519 identity key (private half in the Keychain,
-  `IdentityKeychain`, service `com.vaultphotos.app.identity`,
+  `IdentityKeychain`, service `com.huddlepals.app.identity`,
   synchronizable + AfterFirstUnlock, one item per user; deleted only on
   account deletion, never sign-out; public half in `user_keys`) → per-huddle
   256-bit huddle key, stored per member in `huddle_keys` wrapped to their
@@ -294,8 +294,9 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   `spend_skip_token`, `recompute_streak`, `init_huddle_key`,
   `huddle_key_recipients`, `share_huddle_key`). `huddle_keys` has a
   select-own policy only; its writers are the two key RPCs (an upsert of a
-  row you can't SELECT fails under RLS). Later migrations live in
-  `supabase/migrations/` (applied by hand in the SQL Editor). Deposits insert policy clamps
+  row you can't SELECT fails under RLS). There are no upgrade migrations:
+  `supabase/scripts/reset_database.sql` wipes an older database so
+  `schema.sql` can run fresh. Deposits insert policy clamps
   dayKey to a UTC-anchored ~48h window.
 - Config: `BackendConfig.load()` reads bundled `Supabase.plist`
   (SUPABASE_URL / SUPABASE_ANON_KEY); placeholders ⇒ nil ⇒ mock mode. The
@@ -410,11 +411,10 @@ deliberate pass: OTP `/verify` response shape, Apple id_token grant, the
 `delete-account` edge function end-to-end, a Former-member photo after
 deleting a test account, posting a photo (insert-only uploads), the
 huddle list's `select=huddle_id,author_id` read, and the join-day streak
-SQL (never executed against Postgres — no local database here; the live
-project needs its migration block run before the new client can join or
-create huddles). Likewise the end-to-end encryption SQL
-(`supabase/migrations/20261019190000_e2ee_photos.sql`) has only passed a
-Postgres parser; the CryptoKit layer is unit-tested
+SQL (never executed against Postgres — no local database here). Likewise
+the end-to-end encryption SQL in `schema.sql` and
+`supabase/scripts/reset_database.sql` have not been run against Postgres
+here; the CryptoKit layer is unit-tested
 (`PhotoEncryptionTests`), the key sharing between two real accounts is
 not. Apple sign-in needs the paid
 account + provider config; SMS needs Twilio. DEPLOYMENT.md's last section

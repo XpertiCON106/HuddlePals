@@ -416,7 +416,7 @@ HuddlePal/
 ├── Config/Info.plist          Partial Info.plist: camera usage string + huddlepal:// scheme
 ├── supabase/
 │   ├── schema.sql             Tables + RLS + storage policies + 7 RPCs (run once)
-│   ├── migrations/            Later changes for an existing DB (e.g. E2EE photos)
+│   ├── scripts/reset_database.sql  Destructive: wipes an older DB so schema.sql can run fresh
 │   ├── functions/delete-account/  Edge function behind "Delete account"
 │   └── Supabase.example.plist Copy to HuddlePal/HuddlePal/Supabase.plist to go live
 ├── tools/generate_icon.swift  Renders the app icon (swift tools/generate_icon.swift out.png)
