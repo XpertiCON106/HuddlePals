@@ -148,7 +148,7 @@ describe('deposits (check-ins)', () => {
     await assert.rejects(deposit(db, D, H1.id, today), RLS_DENIED, 'D is in no huddle')
     await assert.rejects(
       q(db, B, `insert into deposits (huddle_id, author_id, storage_path, wrapped_photo_key, day_key)
-                values ($1, $2, 'x/y.jpg', $3, $4)`, [H1.id, A, WRAPPED_KEY, today]),
+                values ($1, $2, $5, $3, $4)`, [H1.id, A, WRAPPED_KEY, today, `${H1.id}/${randomUUID()}.jpg`]),
       RLS_DENIED,
       'B cannot post as A',
     )
@@ -181,6 +181,18 @@ describe('deposits (check-ins)', () => {
     await deposit(db, A, H1.id, await serverToday(db, 1))
     await assert.rejects(deposit(db, A, H1.id, await serverToday(db, -3)), RLS_DENIED)
     await assert.rejects(deposit(db, A, H1.id, await serverToday(db, 2)), RLS_DENIED)
+  })
+
+  it('a check-in’s photo path is its own huddle’s folder, never another huddle or ../ (QA-22)', async () => {
+    const { db, A, H1, H2, today } = await world()
+    const insert = (path) => q(db, A, `insert into deposits (huddle_id, author_id, storage_path, wrapped_photo_key, day_key)
+                                        values ($1, $2, $3, $4, $5)`, [H1.id, A, path, WRAPPED_KEY, today])
+    await assert.rejects(insert(`${H2.id}/${randomUUID()}.jpg`), /check constraint/, 'another huddle’s photo')
+    await assert.rejects(insert(`${H1.id}/../../Library/x.jpg`), /check constraint/)
+    await assert.rejects(insert(`../${H1.id}/${randomUUID()}.jpg`), /check constraint/)
+    await assert.rejects(insert(`avatars/${A}/${randomUUID()}.jpg`), /check constraint/)
+    // The app writes upper-case UUIDs (Swift's uuidString).
+    await insert(`${H1.id.toUpperCase()}/${randomUUID().toUpperCase()}.jpg`)
   })
 
   it('rejects malformed day keys, oversized captions and unencrypted rows', async () => {

@@ -132,7 +132,7 @@ describe('streaks', () => {
     const { db, A, B, h } = await huddleWithTwo()
     for (const off of [-2, -1]) {
       const d = await serverToday(db, off)
-      await admin(db, `insert into deposits (huddle_id, author_id, storage_path, wrapped_photo_key, day_key) values ($1,$2,'p1',$4,$3),($1,$5,'p2',$4,$3)`, [h.id, A, d, WRAPPED_KEY, B])
+      await admin(db, `insert into deposits (huddle_id, author_id, storage_path, wrapped_photo_key, day_key) values ($1,$2,$6,$4,$3),($1,$5,$7,$4,$3)`, [h.id, A, d, WRAPPED_KEY, B, `${h.id}/${randomUUID()}.jpg`, `${h.id}/${randomUUID()}.jpg`])
     }
     assert.equal(await streak(db, A, h, await serverToday(db)), 2)
     const [row] = await admin(db, 'select streak_count, last_streak_day from huddles where id = $1', [h.id])

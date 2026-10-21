@@ -44,8 +44,18 @@ final class MockMediaService: MediaServiceProtocol {
         self.fileManager = fileManager
     }
 
+    /// Paths arrive in rows other people wrote (deposit storage paths,
+    /// profile photo paths), so only a plain relative path stays inside the
+    /// cache: no absolute paths, no "..".
+    static func isSafe(_ relativePath: String) -> Bool {
+        !relativePath.isEmpty
+            && !relativePath.hasPrefix("/")
+            && !relativePath.split(separator: "/").contains("..")
+    }
+
     func saveImageData(_ data: Data, preferredName: String?) async throws -> String {
         let name = preferredName ?? "\(UUID().uuidString).jpg"
+        guard Self.isSafe(name) else { throw CocoaError(.fileWriteInvalidFileName) }
         let relativePath = "\(Self.mediaDirectoryName)/\(name)"
         let fileURL = documentsURL.appendingPathComponent(relativePath)
         // preferredName may carry subfolders ("<huddle_id>/<file>.jpg").
@@ -62,10 +72,12 @@ final class MockMediaService: MediaServiceProtocol {
     }
 
     func loadImageData(at relativePath: String) async -> Data? {
-        try? Data(contentsOf: imageURL(for: relativePath))
+        guard Self.isSafe(relativePath) else { return nil }
+        return try? Data(contentsOf: imageURL(for: relativePath))
     }
 
     func deleteImage(at relativePath: String) {
+        guard Self.isSafe(relativePath) else { return }
         try? fileManager.removeItem(at: imageURL(for: relativePath))
     }
 

@@ -57,7 +57,10 @@ create table public.deposits (
   -- The Storage object holds ciphertext only (end-to-end encryption, see
   -- "end-to-end encrypted photos" below): AES-GCM under a per-photo key,
   -- which is stored here sealed with the huddle key (base64 combined box).
-  storage_path text not null,
+  -- "<huddle_id>/<uuid>.jpg", in this deposit's own huddle folder: a row
+  -- can't point at another huddle's photo, and the path is safe to join onto
+  -- members' local cache folders.
+  storage_path text not null constraint deposits_storage_path_check check (storage_path ~* ('^' || huddle_id::text || '/[0-9a-f-]{36}\.jpg$')),
   wrapped_photo_key text not null check (wrapped_photo_key ~ '^[A-Za-z0-9+/]{80}$'),
   enc_version smallint not null default 1 check (enc_version = 1),
   caption text check (caption is null or char_length(caption) <= 80),

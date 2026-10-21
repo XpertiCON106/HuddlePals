@@ -79,6 +79,7 @@ final class LiveMediaService: MediaServiceProtocol {
     }
 
     func loadImageData(at relativePath: String) async -> Data? {
+        guard MockMediaService.isSafe(relativePath) else { return nil }
         if let cached = await localCache.loadImageData(at: relativePath) {
             return cached
         }
