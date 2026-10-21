@@ -99,6 +99,7 @@ final class LiveHuddleService: HuddleServiceProtocol {
             if message.contains("invite_code_not_found") { throw HuddleServiceError.inviteCodeNotFound }
             if message.contains("already_member") { throw HuddleServiceError.alreadyMember }
             if message.contains("huddle_full") { throw HuddleServiceError.huddleFull }
+            if message.contains("too_many_attempts") { throw HuddleServiceError.tooManyAttempts }
             throw SupabaseClient.ClientError.http(status: 0, message: message)
         }
     }

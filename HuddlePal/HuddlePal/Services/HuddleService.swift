@@ -6,6 +6,8 @@ enum HuddleServiceError: LocalizedError {
     case alreadyMember
     case notAMember
     case huddleFull
+    /// Too many wrong invite codes recently (the server allows 10 an hour).
+    case tooManyAttempts
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +15,7 @@ enum HuddleServiceError: LocalizedError {
         case .alreadyMember: "You're already a member of this huddle."
         case .notAMember: "You're not a member of this huddle."
         case .huddleFull: "This huddle already has 8 members — that's the limit."
+        case .tooManyAttempts: "Too many codes that didn't match. Wait an hour, then try again."
         }
     }
 }
