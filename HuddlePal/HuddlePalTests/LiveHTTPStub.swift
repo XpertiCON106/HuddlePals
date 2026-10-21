@@ -12,6 +12,8 @@ final class StubURLProtocol: URLProtocol {
     struct Reply {
         var status = 200
         var body = Data("[]".utf8)
+        /// Fail the request the way URLSession does when offline.
+        var error: URLError?
     }
 
     private static let lock = NSLock()
@@ -46,6 +48,10 @@ final class StubURLProtocol: URLProtocol {
         let reply = Self.lock.withLock { () -> Reply in
             Self.log.append(recorded)
             return Self.handler?(recorded) ?? Reply()
+        }
+        if let error = reply.error {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
         }
         let response = HTTPURLResponse(
             url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1",
@@ -86,12 +92,12 @@ enum LiveStub {
 
     /// A client holding a fresh session for `userID`, signed in through a
     /// stubbed email-code verify. Clears any Keychain session first.
-    static func signedInClient(userID: UUID = UUID()) async throws -> SupabaseClient {
+    static func signedInClient(userID: UUID = UUID(), expiresIn: Int = 3600) async throws -> SupabaseClient {
         KeychainStore.delete(key: sessionKey)
         let client = SupabaseClient(config: config, urlSession: urlSession())
         StubURLProtocol.respond { _ in
             Reply(body: json([
-                "access_token": "access", "refresh_token": "refresh", "expires_in": 3600,
+                "access_token": "access", "refresh_token": "refresh", "expires_in": expiresIn,
                 "user": ["id": userID.uuidString],
             ]))
         }

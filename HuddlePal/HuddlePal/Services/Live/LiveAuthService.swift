@@ -37,8 +37,27 @@ final class LiveAuthService: AuthServiceProtocol {
     }
 
     func currentState() async throws -> AuthSessionState {
-        guard let session = try await client.validSession() else { return .signedOut }
-        return try await state(for: session, suggestedName: nil)
+        do {
+            guard let session = try await client.validSession() else { return .signedOut }
+            return try await state(for: session, suggestedName: nil)
+        } catch where Self.isTransient(error) {
+            // Offline (or the server is down) at launch: a stored session
+            // stays signed in on the cached profile instead of landing on
+            // sign-in. Screens show their last synced state and retry.
+            if let userID = await client.currentUserID, let user = try store.user(id: userID) {
+                return .signedIn(user)
+            }
+            throw error
+        }
+    }
+
+    /// A failure that says nothing about the session itself.
+    private static func isTransient(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        if case SupabaseClient.ClientError.http(let status, _) = error {
+            return status >= 500 || status == 429 || status == 408
+        }
+        return false
     }
 
     func requestCode(to destination: OTPDestination) async throws {

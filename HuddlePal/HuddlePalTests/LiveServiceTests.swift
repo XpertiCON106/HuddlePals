@@ -103,6 +103,42 @@ final class LiveServiceTests: XCTestCase {
         XCTAssertEqual(reactionReads.count, 5, "450 deposit ids → 5 chunks of ≤100")
     }
 
+    // MARK: Launching offline (QA-12)
+
+    private func authService(_ client: SupabaseClient) -> LiveAuthService {
+        let keyring = LivePhotoKeyring(client: client, session: session, identityStore: InMemoryIdentityStore())
+        return LiveAuthService(
+            client: client, store: store, keyring: keyring,
+            media: LiveMediaService(client: client, keyring: keyring), config: LiveStub.config
+        )
+    }
+
+    func testLaunchingOfflineKeepsTheStoredSessionSignedIn() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        StubURLProtocol.respond { _ in .init(error: URLError(.notConnectedToInternet)) }
+        guard case .signedIn(let user) = try await authService(client).currentState() else {
+            return XCTFail("an offline launch must not look like being signed out")
+        }
+        XCTAssertEqual(user.id, me.id)
+    }
+
+    func testLaunchingOfflineWithAnExpiredTokenKeepsTheSessionToo() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id, expiresIn: 0)
+        StubURLProtocol.respond { _ in .init(error: URLError(.timedOut)) }
+        guard case .signedIn = try await authService(client).currentState() else {
+            return XCTFail("the refresh couldn't run; the session is still good")
+        }
+        XCTAssertNotNil(KeychainStore.load(key: LiveStub.sessionKey), "the stored session survives")
+    }
+
+    func testARevokedSessionStillSignsOut() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id, expiresIn: 0)
+        StubURLProtocol.respond { _ in .init(status: 400, body: LiveStub.json(["error": "invalid_grant", "error_description": "Refresh Token Not Found"])) }
+        guard case .signedOut = try await authService(client).currentState() else {
+            return XCTFail("a refused refresh token means signed out")
+        }
+    }
+
     // MARK: Joining (QA-02)
 
     func testTooManyWrongInviteCodesSaysSoInsteadOfAGenericError() async throws {
