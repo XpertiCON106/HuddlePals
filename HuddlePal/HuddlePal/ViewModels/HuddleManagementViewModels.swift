@@ -110,6 +110,13 @@ final class HuddleSettingsViewModel {
 
     var memberships: [Membership] { huddle.sortedMemberships }
 
+    /// Only the keeper may change huddle settings. For anyone else the
+    /// server's rule silently updates nothing, so the control is off.
+    var isKeeper: Bool {
+        guard let me = deps.session.currentUser?.id else { return false }
+        return huddle.memberships.contains { $0.user?.id == me && $0.role == .keeper }
+    }
+
     var streakDetail: String {
         if huddle.streakCount == 0 {
             return "No active streak. It starts the next day everyone deposits."
@@ -129,6 +136,7 @@ final class HuddleSettingsViewModel {
     /// longer schedules its own notification — that avoided a member in
     /// several huddles getting one nudge per huddle on top of the per-user one.
     func setNotificationHour(_ hour: Int) async {
+        guard isKeeper else { return }
         try? await deps.huddleService.updateNotificationHour(hour, for: huddle)
     }
 

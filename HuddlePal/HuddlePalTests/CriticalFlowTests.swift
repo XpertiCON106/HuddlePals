@@ -158,6 +158,21 @@ final class CriticalFlowTests: XCTestCase {
         XCTAssertEqual(crew.streakCount, before, "joining never resets the group's streak")
     }
 
+    func testOnlyTheKeeperCanChangeTheHuddlesHour() async throws {
+        // QA-26: for a member the server silently updates nothing.
+        let keeper = try await signedInUser()
+        let crew = try XCTUnwrap(try await deps.huddleService.huddles(for: keeper).first { $0.inviteCode == "CREW42" })
+        let settings = HuddleSettingsViewModel(deps: deps, huddle: crew)
+        XCTAssertTrue(settings.isKeeper)
+        await settings.setNotificationHour(7)
+        XCTAssertEqual(crew.notificationHour, 7)
+
+        deps.session.currentUser = try XCTUnwrap(crew.members.first { $0.id != keeper.id })
+        XCTAssertFalse(settings.isKeeper)
+        await settings.setNotificationHour(22)
+        XCTAssertEqual(crew.notificationHour, 7, "a member's change must not show as saved")
+    }
+
     func testRegeneratingTheSeedWorldOverExistingDataWorks() async throws {
         // QA-24: setUp regenerates on an empty store; the DEBUG menu
         // regenerates over a full one.
