@@ -84,12 +84,14 @@ final class DailyReminderScheduler: ReminderScheduling {
     // MARK: Authorization
 
     func authorizationStatus() async -> UNAuthorizationStatus {
-        await center.notificationSettings().authorizationStatus
+        if UITestHooks.notificationsDenied { return .denied }
+        return await center.notificationSettings().authorizationStatus
     }
 
     /// Standard permission request; returns whether reminders may be shown.
     func requestAuthorization() async -> Bool {
-        (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        if UITestHooks.notificationsDenied { return false }
+        return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
     }
 
     // MARK: Scheduling

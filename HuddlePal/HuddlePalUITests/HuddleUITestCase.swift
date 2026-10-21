@@ -1,16 +1,21 @@
 import XCTest
 
 /// Shared plumbing for the UI journeys. Every test launches a fresh first-run
-/// app (`-ui-testing` wipes its storage and forces the seeded mock world, so
-/// no test can reach a live backend), with a stand-in camera because the
-/// Simulator has none.
+/// app (`-ui-testing` forces the seeded mock world, so no test can reach a
+/// live backend; `-ui-testing-reset` wipes its storage), with a stand-in
+/// camera because the Simulator has none.
 class HuddleUITestCase: XCTestCase {
     var app: XCUIApplication!
+    /// The Terms' current version (TermsOfService.version). Tests other than
+    /// the Terms journey start already agreed, so they don't spend a minute
+    /// scrolling the document; if the version moves on, the Terms show and
+    /// `launchToShelf` agrees as a person would.
+    static let termsVersion = "2026-10-20"
 
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-ui-testing", "-ui-testing-fake-camera"]
+        app.launchArguments = ["-ui-testing", "-ui-testing-reset", "-ui-testing-fake-camera"]
     }
 
     override func tearDownWithError() throws {
@@ -23,7 +28,10 @@ class HuddleUITestCase: XCTestCase {
         }
     }
 
-    func launch(arguments: [String] = [], environment: [String: String] = [:]) {
+    func launch(arguments: [String] = [], environment: [String: String] = [:], termsAgreed: Bool = false) {
+        if termsAgreed {
+            app.launchArguments += ["-huddlepal.terms.acceptedVersion", Self.termsVersion]
+        }
         app.launchArguments += arguments
         app.launchEnvironment.merge(environment) { _, new in new }
         app.launch()
@@ -73,9 +81,12 @@ class HuddleUITestCase: XCTestCase {
 
     /// First launch lands on the seeded shelf, signed in as "You".
     func launchToShelf(arguments: [String] = [], environment: [String: String] = [:]) {
-        launch(arguments: arguments, environment: environment)
-        agreeToTerms()
-        waitFor(app.staticTexts["The Crew"], timeout: 20, "the seeded shelf")
+        launch(arguments: arguments, environment: environment, termsAgreed: true)
+        let shelf = app.staticTexts["The Crew"]
+        if !shelf.waitForExistence(timeout: 20), app.buttons["Agree"].exists {
+            agreeToTerms()
+        }
+        waitFor(shelf, timeout: 20, "the seeded shelf")
     }
 
     func openHuddle(_ name: String) {
@@ -103,15 +114,57 @@ class HuddleUITestCase: XCTestCase {
         waitFor(post).tap()
     }
 
+    /// Taps `label` in the row, then the same-named button of the
+    /// confirmation dialog it opens (the newest match).
+    func tapAndConfirm(_ label: String, file: StaticString = #filePath, line: UInt = #line) {
+        let row = app.buttons[label]
+        scrollTo(row)
+        let rowFrame = row.frame
+        row.tap()
+        // The dialog's button: same label, somewhere else, and tappable
+        // (the row underneath is covered by the dialog).
+        let matches = app.buttons.matching(identifier: label)
+        var confirm: XCUIElement?
+        let found = expectation(for: NSPredicate { _, _ in
+            for index in 0..<matches.count {
+                let candidate = matches.element(boundBy: index)
+                if candidate.frame != rowFrame && candidate.isHittable {
+                    confirm = candidate
+                    return true
+                }
+            }
+            return false
+        }, evaluatedWith: NSNull())
+        XCTAssertEqual(XCTWaiter.wait(for: [found], timeout: 10), .completed, "no confirmation for \(label)", file: file, line: line)
+        confirm?.tap()
+    }
+
     /// Profile → Sign out → confirm.
     func signOut() {
         openTab("Profile")
-        let signOut = app.buttons["Sign out"]
-        scrollTo(signOut)
-        signOut.tap()
-        waitFor(app.sheets.buttons["Sign out"].exists ? app.sheets.buttons["Sign out"] : app.buttons["Sign out"].firstMatch)
-        if app.sheets.buttons["Sign out"].exists { app.sheets.buttons["Sign out"].tap() }
-        else { app.buttons.matching(identifier: "Sign out").element(boundBy: 1).tap() }
+        tapAndConfirm("Sign out")
+        waitFor(app.buttons["Continue"], timeout: 20, "back on the welcome cards")
+    }
+
+    /// Answers a system permission alert (notifications, …).
+    func answerSystemAlert(_ button: String, timeout: TimeInterval = 10) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let choice = springboard.buttons[button]
+        if choice.waitForExistence(timeout: timeout) { choice.tap() }
+    }
+
+    /// The onboarding profile step after a first sign-in.
+    func completeProfile(name: String) {
+        let field = waitFor(app.textFields["Your name"], timeout: 20, "the profile step")
+        field.tap()
+        field.typeText(name)
+        waitFor(app.buttons["Open my huddle"]).tap()
+    }
+
+    /// The shelf's + menu.
+    func openAddMenu(_ item: String) {
+        waitFor(app.buttons["Create or join a huddle"]).tap()
+        waitFor(app.buttons[item]).tap()
     }
 
     /// Walks the welcome cards and signs in with the mock "Continue with
@@ -125,11 +178,12 @@ class HuddleUITestCase: XCTestCase {
         waitFor(app.buttons["Continue with Apple"]).tap()
     }
 
-    func scrollTo(_ element: XCUIElement, in container: XCUIElement? = nil, maxSwipes: Int = 12) {
-        let scroller = container ?? app.collectionViews.firstMatch
+    /// Swipes the screen until `element` exists and can be tapped (lists
+    /// create rows lazily, so off-screen rows don't exist yet).
+    func scrollTo(_ element: XCUIElement, maxSwipes: Int = 15) {
         var swipes = 0
-        while !element.isHittable && swipes < maxSwipes {
-            scroller.swipeUp()
+        while !(element.exists && element.isHittable) && swipes < maxSwipes {
+            app.swipeUp()
             swipes += 1
         }
     }
