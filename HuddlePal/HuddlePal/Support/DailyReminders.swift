@@ -126,6 +126,19 @@ final class DailyReminderScheduler {
         }
     }
 
+    /// The trigger's date, carrying its calendar and time zone: without them
+    /// iOS reads the numbers in the user's own calendar, and a Gregorian
+    /// year (2026) read as Buddhist is centuries in the past, so the
+    /// reminder would never fire.
+    static func triggerComponents(onDay dayDate: Date, atMinutes minutesIntoDay: Int, calendar: Calendar) -> DateComponents {
+        var components = calendar.dateComponents([.year, .month, .day], from: dayDate)
+        components.hour = minutesIntoDay / 60
+        components.minute = minutesIntoDay % 60
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        return components
+    }
+
     private func schedule(
         id: String,
         title: String,
@@ -134,9 +147,7 @@ final class DailyReminderScheduler {
         atMinutes minutesIntoDay: Int,
         calendar: Calendar
     ) {
-        var components = calendar.dateComponents([.year, .month, .day], from: dayDate)
-        components.hour = minutesIntoDay / 60
-        components.minute = minutesIntoDay % 60
+        let components = Self.triggerComponents(onDay: dayDate, atMinutes: minutesIntoDay, calendar: calendar)
 
         let content = UNMutableNotificationContent()
         content.title = title

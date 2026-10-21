@@ -41,11 +41,19 @@ struct HuddleEngine {
     let calendar: Calendar
     private let formatter: DateFormatter
 
+    /// Only the time zone is taken from `calendar`. Day keys are always
+    /// Gregorian ("2026-10-21"), whatever calendar the user picked in
+    /// Settings, because the server checks them against its own dates: with
+    /// the Buddhist calendar (Thailand's default) "yyyy" would print 2569.
+    /// Every calendar Foundation offers starts its days at midnight, so day
+    /// boundaries are unchanged.
     init(calendar: Calendar = .current) {
-        self.calendar = calendar
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        self.calendar = gregorian
         let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
+        formatter.calendar = gregorian
+        formatter.timeZone = gregorian.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         self.formatter = formatter

@@ -292,6 +292,8 @@ final class SupabaseStore {
 
     private static func dayKeyDate(_ key: String) -> Date? {
         let formatter = DateFormatter()
+        // Day keys are Gregorian; the user's own calendar would misread the year.
+        formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.date(from: key)

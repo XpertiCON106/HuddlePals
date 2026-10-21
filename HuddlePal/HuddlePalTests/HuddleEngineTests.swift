@@ -184,6 +184,49 @@ final class HuddleEngineTests: XCTestCase {
         XCTAssertNil(engine.recovery(memberIDs: members, deposits: deposits, now: now))
     }
 
+    // MARK: Calendars and time zones
+
+    func testDayKeysAreGregorianWhateverCalendarTheUserPicked() {
+        // QA-09: Thailand's default calendar is Buddhist, where "yyyy" is 2569
+        // and the server rejected every check-in.
+        for identifier: Calendar.Identifier in [.buddhist, .japanese, .islamicUmmAlQura, .hebrew, .persian] {
+            var userCalendar = Calendar(identifier: identifier)
+            userCalendar.timeZone = calendar.timeZone
+            let engine = HuddleEngine(calendar: userCalendar)
+            XCTAssertEqual(engine.dayKey(for: date(2026, 10, 21, 9)), "2026-10-21", "\(identifier)")
+            XCTAssertEqual(engine.date(fromDayKey: "2026-10-21"), date(2026, 10, 21, 0), "\(identifier)")
+            XCTAssertEqual(engine.dayKey(byAdding: -1, to: "2026-10-01"), "2026-09-30", "\(identifier)")
+            XCTAssertEqual(engine.calendar.timeZone, calendar.timeZone, "the user's time zone is kept")
+        }
+    }
+
+    func testStreakAndBackfillSurviveADayWithNoMidnight() {
+        // America/Santiago skips 00:00 on 2026-09-06 (clocks jump to 01:00).
+        var santiago = Calendar(identifier: .gregorian)
+        santiago.timeZone = TimeZone(identifier: "America/Santiago")!
+        let engine = HuddleEngine(calendar: santiago)
+        let now = santiago.date(from: DateComponents(year: 2026, month: 9, day: 7, hour: 9))!
+        XCTAssertNotNil(engine.date(fromDayKey: "2026-09-06"))
+        XCTAssertEqual(engine.dayKey(byAdding: -1, to: "2026-09-07"), "2026-09-06")
+        XCTAssertEqual(engine.dayKey(byAdding: -1, to: "2026-09-06"), "2026-09-05")
+        let deposits = ["2026-09-04", "2026-09-05", "2026-09-06"].flatMap { day in
+            members.map { deposit($0, day) }
+        }
+        XCTAssertEqual(engine.computeStreak(memberIDs: members, deposits: deposits, now: now).count, 3)
+        XCTAssertTrue(engine.canBackfill(dayKey: "2026-09-06", now: now))
+    }
+
+    func testReminderTriggersCarryTheirCalendar() {
+        var buddhist = Calendar(identifier: .buddhist)
+        buddhist.timeZone = calendar.timeZone
+        let engine = HuddleEngine(calendar: buddhist)
+        let components = DailyReminderScheduler.triggerComponents(
+            onDay: date(2026, 10, 21, 8), atMinutes: 19 * 60 + 30, calendar: engine.calendar
+        )
+        XCTAssertEqual(components.calendar?.identifier, .gregorian)
+        XCTAssertEqual(components.date, date(2026, 10, 21, 19, 30), "fires on the evening it was meant for")
+    }
+
     func testARecoveryShownLastNightIsClosedTheNextMorning() throws {
         // Computed in the evening, still on screen after midnight (QA-07).
         let evening = date(2026, 6, 10, 21, 0)

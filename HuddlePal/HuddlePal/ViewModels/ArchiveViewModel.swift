@@ -83,10 +83,12 @@ final class ArchiveViewModel {
         }
         .sorted { $0.dayKey > $1.dayKey } // newest first
 
+        // Display only: the user's own calendar and locale (the engine's
+        // calendar is always Gregorian, for day keys).
         let monthFormatter = DateFormatter()
-        monthFormatter.calendar = engine.calendar
+        monthFormatter.calendar = Calendar.current
         monthFormatter.timeZone = engine.calendar.timeZone
-        monthFormatter.dateFormat = "MMMM yyyy"
+        monthFormatter.setLocalizedDateFormatFromTemplate("MMMMyyyy")
 
         var order: [String] = []
         var grouped: [String: [DaySection]] = [:]
