@@ -63,11 +63,14 @@ seeded **mock** world. No code changes to switch.
    dashboard, then run `schema.sql`.
 5. **Deploy the account-deletion edge function** (required for App Review —
    see "Account deletion" below): `supabase functions deploy delete-account`.
-   It revokes the user's Apple token, deletes their avatars, and deletes the
-   auth user (deposits stay as "Former member"; the user's encryption keys
-   cascade away with the account). If you keep Sign in with
-   Apple, set the Apple secrets so revocation works:
-   `supabase secrets set APPLE_TEAM_ID=… APPLE_KEY_ID=… APPLE_SERVICE_ID=<bundle id> APPLE_PRIVATE_KEY="$(cat AuthKey_XXX.p8)"`.
+   It trades the Apple authorization code the app sends for the user's Apple
+   tokens and revokes them, deletes their avatars, releases their deposit
+   photos, and deletes the auth user (deposits stay as "Former member"; the
+   user's encryption keys cascade away with the account). Set the four
+   Apple secrets so revocation works: `APPLE_TEAM_ID`, `APPLE_KEY_ID`,
+   `APPLE_CLIENT_ID=com.huddlepals.ios` and `APPLE_PRIVATE_KEY` (the `.p8`
+   contents). [DEVELOPMENT.md](DEVELOPMENT.md) → "Account deletion and
+   Apple token revocation" has the key setup and the exact commands.
 6. **Settings → API**: copy the **Project URL** and the **anon public key**.
 7. **Set up report monitoring**: the `reports` table fills when users flag
    content — watch it (a saved dashboard query, or a Database Webhook to
@@ -183,7 +186,8 @@ seeded **mock** world. No code changes to switch.
   48h window). Same-timezone groups: no issue. Split-timezone groups can
   see edge-of-day disagreements — a huddle "home timezone" is the fix.
 - **Account deletion (Model B).** "Delete account" in Profile removes the
-  account, login, name, and avatars and revokes the Apple token, but
+  account, login, name, and avatars and revokes the Apple tokens (Apple
+  confirms the person first), but
   **deposited photos stay in shared huddles as "Former member"** — the
   archive is permanent (disclose this in your privacy policy; see
   [PRIVACY.md](PRIVACY.md)). Deletion runs through the `delete-account` edge

@@ -1,19 +1,19 @@
 # QA Report: `polish` branch (HuddlePals)
 
-_QA sweep run 2026-10-21 on `polish` (branched from `main` at a06d8a7). This file is not committed; every fix is its own commit on `polish`, none pushed._
+_QA sweep run 2026-10-21 on `polish` (branched from `main` at a06d8a7); every fix is its own commit. `polish` was merged into `main` (PR #1). QA-20 was then fixed on `main` (section 11, "Follow-up")._
 
 > **Name check.** You called the app "Vault". The code is **HuddlePals** (renamed in 25d7ba7 / b1af561). Glossary: group = **huddle**, check-in = **deposit**, group owner = **keeper**. Where your brief and the code disagree, the code wins (see "Brief vs. code" below).
 
 ## Executive summary
 
-**Verdict: yes, with caveats.** The `polish` app build is ready for TestFlight once the six database migrations are applied. **Apply migration 001 to production now**, independent of any app release: the profile-photo leak it closes (QA-01) is live today.
+**Verdict: yes, with caveats.** The `polish` app build is ready for TestFlight once the seven database migrations are applied and the updated `delete-account` edge function is deployed with its Apple secrets (section 3). **Apply migration 001 to production now**, independent of any app release: the profile-photo leak it closes (QA-01) is live today.
 
 | | Before | After |
 |---|---|---|
-| iOS tests (unit + UI) | 78 / 78 (unit only) | **152 / 152** (128 unit + 24 UI); UI suite green 3 runs in a row |
-| Database / RLS / RPC tests | none | **69 / 69** on fresh `schema.sql` and on deployed schema + migrations |
+| iOS tests (unit + UI) | 78 / 78 (unit only) | **160 / 160** (135 unit + 25 UI). The 24-test UI suite was green 3 runs in a row; after QA-20 the 25-test suite ran green once |
+| Database / RLS / RPC tests | none | **88 / 88** (71 database + 17 edge-function logic) on fresh `schema.sql` and on deployed schema + migrations |
 | App line coverage | 20.9% | **74.9%** |
-| Findings | — | **33**: 2 Critical, 3 High, 15 Medium, 13 Low. **30 fixed**, 3 open (QA-19 Low, QA-20 Medium, QA-21 Medium) |
+| Findings | — | **33**: 2 Critical, 3 High, 15 Medium, 13 Low. **31 fixed**, 2 open (QA-19 Low, QA-21 Medium) |
 
 ## Progress (working checklist)
 
@@ -24,6 +24,7 @@ _QA sweep run 2026-10-21 on `polish` (branched from `main` at a06d8a7). This fil
 - [x] Phase 4: retest from clean: Debug/Release/analyze/strict on 53fd496; unit+UI ×1 and UI ×2 more (no flakes); device matrix SE3 / Pro Max / iPad mini / 17 Pro
 - [x] Phase 4b: final confirmation on the final commit **c0d313a**: `scripts/test-all.sh` (credentials check + DB 69/69 ×2 + iOS 152/152), UI suite 2 more runs (24/24 each, 3 in a row), clean Release build (0 warnings)
 - [x] Phase 5: report
+- [x] Follow-up on `main`: QA-20 fixed (da0723a edge function + migration 007, 82ed439 app). Results: DB + edge suite 88/88 ×2; unit 135/135; UI 25/25 (one full run, plus the new test rerun after a copy change); Release build 0 warnings; analyzer 0 issues; strict concurrency the same 20. Device matrix and coverage were not re-run
 
 ---
 
@@ -75,7 +76,7 @@ TBD sections below are filled after the final retest.
 | QA-17 | Medium | Input | Client limits ≠ server (names 60/40, comment 500 unlimited; emoji counted as characters not code points) → generic errors after upload | fixed 2268d70 |
 | QA-18 | Medium | UX | Home/Archive: no loading or error state; failures looked like "Nobody has posted yet" | fixed 0143219 |
 | QA-19 | Low | Stability | Sync prune can delete SwiftData models still on screen: **not reproduced** (probe: reads after delete+save return cached values) | open, recommendation |
-| QA-20 | Medium | Compliance | Apple token revocation on account deletion can never run (no authorization code is ever obtained) | open, needs Apple secrets + design |
+| QA-20 | Medium | Compliance | Apple token revocation on account deletion can never run (no authorization code is ever obtained) | fixed da0723a, 82ed439 (+ migration 007, edge function redeploy, Apple secrets) |
 | QA-21 | Medium | A11y | No Dynamic Type: ~130 fixed font sizes | open, recommendation |
 | QA-22 | Low | Security | Deposit `storage_path` / photo paths unchecked: cross-huddle reference, `../` traversal into members' app sandbox | fixed 3bd621b (+ migration 006) |
 | QA-23 | Low | Sync | Reactions/blocks upsert used merge-duplicates → DO UPDATE refused by RLS on duplicates | fixed 49efa92 |
@@ -164,14 +165,15 @@ Production runs `schema.sql` as of **b1af561** (assumption: that commit says "st
 | 4 | `004_qa05_drop_key_copy_on_leave.sql` | Leaving deletes your huddle-key copy (QA-05) | **deletes key copies held by people who already left** |
 | 5 | `005_qa06_bound_emoji_and_photo_paths.sql` | Emoji ≤16 code points, photo_paths array ≤3 (QA-06) | `NOT VALID`: existing rows not rechecked |
 | 6 | `006_qa22_deposit_storage_path_shape.sql` | Deposit path must be `<its huddle>/<uuid>.jpg` (QA-22) | `NOT VALID`: existing rows not rechecked |
+| 7 | `007_qa20_release_storage_objects.sql` | `release_storage_objects(user)`, service role only: the `delete-account` function clears the user's ownership of the photos they uploaded before `deleteUser` (QA-20) | none (runs per deletion) |
 
 Verified locally: the whole DB suite passes on (a) fresh `schema.sql` and (b) deployed schema + migrations, and a parity test proves (a) and (b) produce the same columns, constraints, indexes, policies, functions, triggers and grants. Each migration also re-applies cleanly.
 
-**Compatibility:** all six are safe with the app version already in people's hands. The old app already treats an empty `join_huddle` result as "code not found", already writes `<huddle>/<UUID>.jpg` paths, and only reads co-members' avatars. Ship the migrations first, then the app build.
+**Compatibility:** all seven are safe with the app version already in people's hands. The old app already treats an empty `join_huddle` result as "code not found", already writes `<huddle>/<UUID>.jpg` paths, and only reads co-members' avatars. Ship the migrations first, then the app build.
 
 **App build:** every client fix needs a new TestFlight/App Store build (not done; you deploy).
 
-**Not changed (still needs your deploy decision):** the `delete-account` edge function (see QA-20 and the edge-function notes below).
+**Edge function `delete-account` (changed for QA-20, not deployed):** run migration 007, set the four Apple secrets (`APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID=com.huddlepals.ios`, `APPLE_PRIVATE_KEY`), then `supabase functions deploy delete-account --project-ref <ref>` from `HuddlePal/`. DEVELOPMENT.md → "Account deletion and Apple token revocation" has the Apple key steps, the exact commands and a one-time device check. Order: migration 007 → secrets → function → app build. The new function works with the app already in people's hands: with no code in the body it deletes without revoking and logs why. The new app works with the old function too, but nothing is revoked until the new function is deployed.
 
 ---
 
@@ -191,14 +193,14 @@ Verified locally: the whole DB suite passes on (a) fresh `schema.sql` and (b) de
 | Area | Why | What was done instead |
 |---|---|---|
 | A real Supabase stack (GoTrue, PostgREST, Storage API, Realtime) | No Docker / Supabase CLI here; production is off-limits | SQL, RLS and storage policies on real Postgres (PGlite) with Supabase-equivalent roles/`auth.uid()`/`storage.foldername`. The HTTP layer is tested against an in-process stub that reproduces PostgREST's row cap, error bodies, `Prefer` semantics, offline failures |
-| `delete-account` edge function | No Deno / edge runtime | Code review; cascade behaviour it triggers is tested in SQL. Open risks: Apple revocation never runs (QA-20); `auth.admin.deleteUser` may fail if the user owns Storage objects (unverified; test once in a staging project) |
-| Sign in with Apple (real sheet), email/SMS delivery, APNs | Need Apple/Twilio accounts and a live backend | Mock flows in UI tests; request/response handling unit-tested |
+| `delete-account` edge function | No Deno / edge runtime; no Apple developer key; Apple's endpoints are external | Its logic (`handler.ts`, `apple.ts`) runs on Node 24 against fake Apple and Supabase services: 17 tests, including the client-secret signature verified with the key's public half. `tsc --strict` is clean on all three files (`index.ts` against the supabase-js 2.117.2 types). `release_storage_objects` and the deletion it unblocks are tested in SQL with `objects_owner_fkey` present. **Not run:** Apple's real `/auth/token` and `/auth/revoke`, the Supabase edge runtime, the deployed GoTrue `deleteUser`. Do the device check in DEVELOPMENT.md once after deploying |
+| Sign in with Apple (real sheet, including the confirmation before deletion), email/SMS delivery, APNs | Need Apple/Twilio accounts and a live backend | Mock flows in UI tests (the deletion re-auth via `MockAppleReauthenticator`, plus the "Apple couldn't confirm" fallback); request/response handling unit-tested |
 | Real camera capture | Simulator has no camera | Mocked capture path (`-ui-testing-fake-camera`) and mocked permission states |
 | Multi-device E2EE key sharing | Needs two real accounts on a backend | Crypto unit-tested (existing PhotoEncryptionTests); SQL of init/share/recipients tested |
 | Network conditioning on device (slow/flaky) | Mock backend makes no requests | Offline/timeout/5xx/429 paths unit-tested via the HTTP stub |
 | Reduce Motion | No reliable switch from XCUITest | Code path reviewed: launch reveal already honoured it; unlock reveal now does (QA-27) |
 | Web pieces, AASA, Lighthouse/axe | No web code in this repo | n/a |
-| SwiftLint / ESLint / `tsc` | None configured in the repo | Static analyzer + strict-concurrency diagnostics instead |
+| SwiftLint / ESLint / `tsc` | None configured in the repo | Static analyzer + strict-concurrency diagnostics instead. For QA-20, `tsc` 5.9.2 was run ad hoc via `npx` in a scratch folder (nothing added to the repo) |
 
 ---
 
@@ -228,13 +230,13 @@ App Store rules (check before launch): the **Small Business Program** charges **
 | # | Improvement | Why (from the code) | Effort |
 |---|---|---|---|
 | 1 | **Incremental sync** (cursor on `created_at`/`id`, plus deletions via a small tombstone or membership check) | Every open re-downloads the full history; the biggest cost and slowness driver (6.1) | M |
-| 2 | **CI** running `scripts/test-all.sh` on a macOS runner (or Xcode Cloud) for every PR | 152 unit/UI tests and 69 DB tests (×2 schema modes) now exist; nothing runs them automatically | S |
+| 2 | **CI** running `scripts/test-all.sh` on a macOS runner (or Xcode Cloud) for every PR | 160 unit/UI tests and 88 DB/edge-function tests (×2 schema modes) now exist; nothing runs them automatically | S |
 | 3 | **Crash + error reporting** (MetricKit, or Sentry with PII scrubbing; edge-function logs) | No crash reporting is configured at all; release-readiness gap | S |
 | 4 | **A staging Supabase project** and live integration tests (PostgREST, Storage, `delete-account`, Apple sign-in) | The HTTP layer is only stub-tested; the edge function has never run | M |
 | 5 | **Invite hardening**: expiring/rotatable codes, keeper approval before key sharing (decision 4.1) | One forwarded code = permanent access to every photo | M |
 | 6 | **Dynamic Type + accessibility pass** (QA-21, QA-27 remainder) | ~130 fixed sizes; large-text users get small text | M |
 | 7 | **ID-based navigation routes** (QA-19) | Routes hold SwiftData models; a multi-device leave could leave a stale model on screen | S |
-| 8 | **Apple token revocation done right** (QA-20) | App Review 5.1.1(v) expects revocation; today it can't run | M |
+| 8 | ~~**Apple token revocation done right** (QA-20)~~ **done** | Fixed after the sweep; needs your deploy (section 3) | — |
 
 ### 6.4 Features (ranked by impact ÷ effort)
 | # | Feature | User benefit | Drives | Effort |
@@ -262,13 +264,13 @@ App Store rules (check before launch): the **Small Business Program** charges **
 | Release build (clean) | ✅ success, 0 warnings | ✅ success, 0 warnings; no `Supabase.plist` in the bundle |
 | Static analyzer (`xcodebuild analyze`) | ✅ 0 issues | ✅ 0 issues |
 | Strict concurrency (diagnostic build, `SWIFT_STRICT_CONCURRENCY=complete`) | 20 unique Swift 6 warnings (not errors in Swift 5 mode) | 20, the same set (none new): Haptics main-actor calls, non-Sendable service existentials, static ISO8601 formatters, SwiftData `#Predicate` key paths. Swift 6 migration item, not a polish fix |
-| iOS unit tests | 78 / 78 passed, 0 skipped | **128 / 128** passed, 0 skipped |
-| UI tests | none existed | **24 / 24** passed in each of 3 consecutive runs (no flakes) |
+| iOS unit tests | 78 / 78 passed, 0 skipped | **128 / 128** passed, 0 skipped; after QA-20 **135 / 135** |
+| UI tests | none existed | **24 / 24** passed in each of 3 consecutive runs (no flakes); after QA-20 **25 / 25** in one full run |
 | Device matrix (9 UI tests: first launch, CTA layout, posting, two-account join, XXXL text, dark mode, 13-screen accessibility audit) | — | iPhone SE 3 **9/9** · iPhone 17 Pro **9/9** · iPhone 17 Pro Max **9/9** · iPad mini **9/9** |
-| DB / RLS / RPC tests | none existed (first run of the new suite: 53 / 62 passed, the 9 failures = QA-01/02/04/05/06) | **69 / 69** on fresh `schema.sql` **and** 69 / 69 on deployed schema + migrations (clean `npm ci`) |
+| DB / RLS / RPC tests | none existed (first run of the new suite: 53 / 62 passed, the 9 failures = QA-01/02/04/05/06) | **69 / 69** on fresh `schema.sql` **and** 69 / 69 on deployed schema + migrations (clean `npm ci`); after QA-20 **88 / 88** in both (+2 SQL, +17 edge-function logic) |
 | App code coverage (line) | 20.9% (2549 / 12209) | **74.9%** (9678 / 12920), final commit |
 | Linters / formatters | none configured | none configured |
-| Dependencies | App: 0 third-party. Edge fn: supabase-js@2 (floating major, resolves to 2.118.0; 0 advisories), djwt@3.0.2 (latest) | + dev-only `@electric-sql/pglite@0.5.8` (tests only; 0 vulnerabilities, no transitive deps) |
+| Dependencies | App: 0 third-party. Edge fn: supabase-js@2 (floating major, resolves to 2.118.0; 0 advisories), djwt@3.0.2 (latest) | + dev-only `@electric-sql/pglite@0.5.8` (tests only; 0 vulnerabilities, no transitive deps). QA-20: edge function's supabase-js pinned to **2.117.2** (released 2026-09-25); **djwt removed** (WebCrypto signs the client secret); the test suite now needs Node ≥ 22.18 (runs the function's TypeScript). `typescript@5.9.2` used ad hoc via `npx` for type checks, not added |
 | Secrets (gitleaks 8.30.1 over all history + working tree; custom regex over every object) | 0 real secrets (1 false positive). Dangling unreferenced blob = copy of prod plist (publishable anon key) | unchanged (see 4.8) |
 
 ---
@@ -285,11 +287,10 @@ App Store rules (check before launch): the **Small Business Program** charges **
 - Photos: E2EE (AES-GCM per photo, X25519 key wrapping); EXIF/GPS stripped; storage paths per-huddle, non-guessable UUIDs; bucket listing gated by membership (and, after QA-01, avatars by co-membership).
 - Rate limiting: GoTrue limits OTP and refresh; **invite guessing now limited (QA-02)**; uploads limited only by bucket size and membership (a member could still upload junk; acceptable at this scale).
 
-**Fixed:** QA-01, 02, 05, 06, 10, 13, 22, 28, 30 (see findings log).
+**Fixed:** QA-01, 02, 05, 06, 10, 13, 20, 22, 28, 30 (see findings log).
 
 **Open (recommendation):**
-- QA-20: Apple token revocation on deletion can't run (no authorization code). Re-authenticate with Apple at deletion, send `authorizationCode`, exchange and revoke in the edge function.
-- Edge function: returns `delErr.message` to the client (internal detail); CORS `*` unnecessary for a native client; floating `supabase-js@2` import (pin an exact, aged version in a `deno.json` + lockfile); no re-authentication before irreversible deletion; verify `deleteUser` succeeds for a user who owns Storage objects (avatars are deleted first, but deposit objects stay).
+- Edge function, still open: CORS `*` is unnecessary for a native client, and `supabase-js` is pinned to an exact version (2.117.2) in the import URL but has no `deno.json` + lockfile. Fixed with QA-20: the `delErr.message` leak, the floating `@2` import, no re-authentication before deletion (Apple now confirms), and `deleteUser` for a user who owns Storage objects (ownership released first).
 - `tools/decrypt_reported_photo`: the README example passes the key on argv (shell history); prefer `-` (stdin). Output written 0644 without overwrite protection.
 - Custom URL scheme `huddlepal://` can be claimed by another app (invite codes in links). Prefer universal links.
 - Crash reporting: none configured.
@@ -321,7 +322,7 @@ App Store rules (check before launch): the **Small Business Program** charges **
 
 ---
 
-## 11. Commits on `polish` (none pushed)
+## 11. Commits on `polish` (merged into `main` in PR #1)
 
 - `4a5a465` test(supabase): add local database, RLS and RPC test suite
 - `99e82e9` fix(storage): stop exposing profile photos to anyone with the anon key [QA-01]
@@ -363,3 +364,9 @@ App Store rules (check before launch): the **Small Business Program** charges **
 - `5d24437` fix(shelf): let a huddle's status line wrap instead of truncating [QA-34]
 - `f5aee96` test(ui): open tabs on iPad too, where the tabs sit in a top bar
 - `c0d313a` fix(tests): don't clobber PATH in test-all.sh's ignore check [QA-28]
+
+### Follow-up on `main` (QA-20, pushed)
+
+- `da0723a` fix(delete-account): revoke Apple tokens with a fresh authorization code [QA-20]
+- `82ed439` fix(profile): confirm with Apple before deleting the account [QA-20]
+- this report update, with the setup and deploy steps in DEVELOPMENT.md / DEPLOYMENT.md

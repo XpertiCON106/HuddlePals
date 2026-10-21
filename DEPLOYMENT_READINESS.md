@@ -21,7 +21,7 @@ was fixed on this branch. What remains is work only a human with the Apple/Supab
 | # | 🚫 Blocker (ranked) | Why |
 |---|---|---|
 | 1 | **No live backend exists yet.** No Supabase project has been created; `Supabase.plist` is absent; per `DEPLOYMENT.md` the live layer has *never made a real request*. | The Release build now (deliberately) refuses to build without live config. Create the Supabase project, run `schema.sql`, deploy the `delete-account` edge function, create the private `deposits` bucket with size/MIME limits, then bundle the plist. Budget time to shake out wire-format surprises — the live client is untested against a real project. |
-| 2 | **Bundle identifier is `com.huddlepals.ios`.** | Xcode's automatic signing registers the App ID on your team; create the matching App Store Connect record and add the id to the **Client IDs** list in Supabase's Apple provider (and `APPLE_SERVICE_ID` for the `delete-account` function). |
+| 2 | **Bundle identifier is `com.huddlepals.ios`.** | Xcode's automatic signing registers the App ID on your team; create the matching App Store Connect record and add the id to the **Client IDs** list in Supabase's Apple provider (and `APPLE_CLIENT_ID` for the `delete-account` function). |
 | 3 | **Sign in with Apple capability must be registered on the App ID.** | The entitlement is now in the project (fixed here), but with automatic signing Xcode must register the capability against *your* team/App ID — requires the paid developer account. |
 | 4 | **Account deletion path must actually work before review.** | Guideline 5.1.1(v) is a hard rejection. The in-app flow and edge function exist, but the function has never been deployed/run. Deploy it and delete a test account end-to-end before submitting. |
 
@@ -147,7 +147,7 @@ Once those four are done (plus the App Store Connect paperwork in §3), this bui
       expectations around SMS in your release notes.
 - [ ] Configure custom SMTP before inviting real users (built-in mailer is a few emails/hour).
 - [ ] Deploy `delete-account` (`supabase functions deploy delete-account`) and set
-      `APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_SERVICE_ID / APPLE_PRIVATE_KEY` secrets; **test a real
+      `APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_CLIENT_ID / APPLE_PRIVATE_KEY` secrets; **test a real
       account deletion end-to-end** (🚫 #4).
 - [ ] Set up `reports`-table monitoring (dashboard query or webhook → email) — App Review expects
       UGC reports acted on within 24h.

@@ -133,9 +133,13 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   (RootViewModel), foreground (HuddlePalApp scenePhase), after a deposit
   (HuddleHomeViewModel), and on settings change. Suppresses today once the
   user has uploaded in every huddle; respects denied permission.
-- **Account deletion — Model B (v4)**: `AuthServiceProtocol.deleteAccount()`.
-  Live = the `supabase/functions/delete-account` edge function (revokes Apple
-  token, deletes avatar objects, `auth.admin.deleteUser`). Deposited photos
+- **Account deletion — Model B (v4)**:
+  `AuthServiceProtocol.deleteAccount(appleAuthorizationCode:)`, after Apple
+  confirms the person (`AppleReauthenticating`). Live = the
+  `supabase/functions/delete-account` edge function (revokes the app's Apple
+  tokens, deletes avatar objects, releases the user's deposit photos,
+  `auth.admin.deleteUser`); see "Account deletion and Apple token
+  revocation" below. Deposited photos
   are PERMANENT and stay as "Former member" — this is why `deposits.author_id`
   / `comments.user_id` are nullable + `ON DELETE SET NULL`. Client side the
   matching DTO fields are optional, and `SupabaseStore` keeps any row whose
@@ -310,14 +314,139 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   `spend_skip_token`, `recompute_streak`, `init_huddle_key`,
   `huddle_key_recipients`, `share_huddle_key`). `huddle_keys` has a
   select-own policy only; its writers are the two key RPCs (an upsert of a
-  row you can't SELECT fails under RLS). There are no upgrade migrations:
-  `supabase/scripts/reset_database.sql` wipes an older database so
-  `schema.sql` can run fresh. Deposits insert policy clamps
+  row you can't SELECT fails under RLS). `schema.sql` builds a fresh
+  database; `supabase/migrations/` (001–007, see its README) upgrades the
+  one already deployed, and `supabase/scripts/reset_database.sql` wipes an
+  older database so `schema.sql` can run fresh. Deposits insert policy clamps
   dayKey to a UTC-anchored ~48h window.
 - Config: `BackendConfig.load()` reads bundled `Supabase.plist`
   (SUPABASE_URL / SUPABASE_ANON_KEY); placeholders ⇒ nil ⇒ mock mode. The
   plist is gitignored; example at `supabase/Supabase.example.plist`. Anon
   key is publishable; RLS is the security boundary.
+
+## Account deletion and Apple token revocation
+
+App Review guideline 5.1.1(v): deleting an account that signed in with
+Apple must revoke the app's Apple tokens. How it runs (QA-20):
+
+1. Profile → **Delete account** → confirm. The app then shows Apple's own
+   sheet (`SystemAppleReauthenticator`, Face ID or passcode) for a fresh
+   authorization code. Closing the sheet deletes nothing. If Apple can't
+   confirm (no Apple Account on the device, Apple unreachable), the app
+   offers **Delete account anyway** without a code, because deletion must
+   stay possible (Apple TN3194), and says where to remove HuddlePals from
+   Sign in with Apple by hand. Mock mode uses `MockAppleReauthenticator`.
+2. `LiveAuthService.deleteAccount(appleAuthorizationCode:)` POSTs
+   `{"authorization_code": "…"}` to `functions/v1/delete-account`.
+3. The edge function (`supabase/functions/delete-account/`: `index.ts`
+   wires Supabase in, `handler.ts` runs the steps, `apple.ts` talks to
+   Apple):
+   - signs a client secret (ES256 JWT, 5 minutes) with the Sign in with
+     Apple key;
+   - exchanges the code at `https://appleid.apple.com/auth/token`;
+   - checks the ID token's `sub` is this user's Apple ID;
+   - revokes the refresh token at `https://appleid.apple.com/auth/revoke`;
+   - deletes `avatars/<user id>/…`;
+   - calls `release_storage_objects` (migration 007), so the user's deposit
+     photos stop pointing at them and can't block the deletion;
+   - calls `auth.admin.deleteUser`.
+
+   An Apple failure is logged (`apple_revoke_failed …`) and the deletion
+   still completes. Codes, tokens and the key are never logged, and the
+   app never sees Supabase's error detail.
+
+### One-time setup: the Sign in with Apple key
+
+1. [developer.apple.com](https://developer.apple.com/account) →
+   Certificates, Identifiers & Profiles → **Keys** → **+**.
+2. Give it a name (e.g. "HuddlePals token revocation"), tick **Sign in with
+   Apple**, click **Configure**, pick the primary App ID
+   `com.huddlepals.ios`, then **Save** → **Continue** → **Register**.
+3. **Download** `AuthKey_<KEY_ID>.p8`. Apple offers the download once, so
+   keep it in a password manager. It never goes in the repo. The
+   10-character **Key ID** is shown on the key's page.
+4. The 10-character **Team ID** is under Account → **Membership details**.
+
+### Set the secrets
+
+They live only in Supabase's edge function secrets. `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` are injected automatically. With the Supabase
+CLI logged in (`supabase login`), set the four Apple secrets:
+
+```bash
+supabase secrets set --project-ref <project-ref> APPLE_TEAM_ID=<TEAM_ID> APPLE_KEY_ID=<KEY_ID> APPLE_CLIENT_ID=com.huddlepals.ios
+```
+
+```bash
+supabase secrets set --project-ref <project-ref> APPLE_PRIVATE_KEY="$(cat /path/to/AuthKey_<KEY_ID>.p8)"
+```
+
+```bash
+supabase secrets list --project-ref <project-ref>
+```
+
+- `APPLE_CLIENT_ID` is the **bundle ID**: the codes come from the native
+  app, so Apple issued them to it. A Services ID is only for web sign-in.
+- The key may keep its real newlines or use `\n` escapes; both work.
+- Dashboard alternative: Edge Functions → **Secrets**.
+- Without these secrets, deletion still works but logs
+  `apple_revoke_skipped: APPLE_* secrets not set`.
+
+### Deploy
+
+1. **Database first.** On the existing project, run
+   `supabase/migrations/007_qa20_release_storage_objects.sql` in the SQL
+   editor. A fresh project gets it from `schema.sql`. Without it, the
+   release step logs `storage_release_failed`. Then, on Storage versions
+   that still have `objects_owner_fkey`, `deleteUser` fails for anyone who
+   ever posted.
+2. **Then the function.** From `HuddlePal/`:
+
+   ```bash
+   supabase functions deploy delete-account --project-ref <project-ref>
+   ```
+
+   This uploads `index.ts` together with `handler.ts` and `apple.ts`. Leave
+   JWT verification on (the default), since the function acts only for the
+   caller's own access token.
+
+### Check it once on a device (TestFlight)
+
+1. Sign in with Apple using a test Apple Account, then deposit a photo in a
+   huddle shared with a second account.
+2. Profile → Delete account → confirm → Face ID.
+3. Supabase → Edge Functions → `delete-account` → Logs should show
+   `apple_revoked` and no `…_failed` lines.
+4. On the phone, HuddlePals should be gone from Settings › your name ›
+   Sign-In & Security › Sign in with Apple.
+5. The user should be gone from Authentication → Users, and the second
+   account still sees the photo as "Former member".
+
+### Tests
+
+`cd supabase/tests && npm test` runs these checks (Node 22.18+ runs the
+function's TypeScript directly; nothing reaches Apple or Supabase):
+
+- `delete-account.test.mjs`:
+  - the client secret, with its signature verified against the key's
+    public half;
+  - the exact `/auth/token` and `/auth/revoke` requests;
+  - deletion going ahead when Apple refuses or can't be reached;
+  - nothing secret in the logs;
+  - a failed `deleteUser` returning a 500 with no detail.
+- `rpc.test.mjs`: `release_storage_objects` can only be run by the service
+  role, it unblocks `deleteUser` under `objects_owner_fkey`, and the
+  photos stay.
+
+On the app side:
+
+- `ProfileConfirmationTests`: the Apple step, cancelling it, and the
+  fallback.
+- `LiveServiceTests`: the request body.
+- `UnhappyPathTests.testDeletingWhenAppleCantConfirmStillWorks`: the
+  fallback dialog.
+
+Apple's real servers and sheet are not covered; do the device check above.
 
 ## Mock world & debug
 
