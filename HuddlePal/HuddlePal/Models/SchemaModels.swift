@@ -262,3 +262,19 @@ enum HuddleSchema {
         User.self, Huddle.self, Membership.self, Deposit.self, Reaction.self, Comment.self,
     ]
 }
+
+extension ModelContext {
+    /// Deletes every row of every model and saves. Object by object, parents
+    /// first, so the cascade and nullify rules run: a batch
+    /// `delete(model:)` refuses rows that others still point at.
+    func deleteAllHuddleData() throws {
+        for huddle in try fetch(FetchDescriptor<Huddle>()) { delete(huddle) }
+        for user in try fetch(FetchDescriptor<User>()) { delete(user) }
+        // Anything left without a parent.
+        for deposit in try fetch(FetchDescriptor<Deposit>()) { delete(deposit) }
+        for membership in try fetch(FetchDescriptor<Membership>()) { delete(membership) }
+        for reaction in try fetch(FetchDescriptor<Reaction>()) { delete(reaction) }
+        for comment in try fetch(FetchDescriptor<Comment>()) { delete(comment) }
+        try save()
+    }
+}

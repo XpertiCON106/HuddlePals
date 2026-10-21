@@ -38,6 +38,10 @@ struct LocalDepositImage: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
         }
+        // One element for VoiceOver: whose photo it is (or that it's locked).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityAddTraits(.isImage)
         // A huddle photo that couldn't be opened retries whenever this device
         // gains a huddle key (a member shared it).
         .task(id: deposit == nil ? relativePath : "\(relativePath)#\(deps.session.photoKeysVersion)") {
@@ -67,6 +71,12 @@ struct LocalDepositImage: View {
                 loadedPath = relativePath
             }
         }
+    }
+
+    private var accessibilityDescription: String {
+        guard let deposit else { return "Profile photo" }
+        if isLocked { return "Photo locked. Waiting for a huddle member to share access." }
+        return "Photo by \(deposit.author?.displayName ?? "Former member")"
     }
 
     private func lockedPlaceholder(showsText: Bool) -> some View {
@@ -230,5 +240,7 @@ struct BlurredDepositCard: View {
         }
         .padding(10)
         .cardSurface()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(deposit.author?.displayName ?? "Former member")'s photo, locked until you share yours")
     }
 }

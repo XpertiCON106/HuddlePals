@@ -1,0 +1,71 @@
+import SwiftUI
+import UIKit
+
+/// Launch switches for the UI tests (HuddlePalUITests). Debug builds only:
+/// in Release every switch reads false and the reset can't run.
+///   -ui-testing                 mock backend only, whatever config is bundled
+///   -ui-testing-reset           also start from a first launch (wipe storage)
+///   -ui-testing-fake-camera     the Simulator has no camera: a stand-in
+///                               capture screen hands Compose a test photo
+///   -ui-testing-camera-denied   camera permission refused
+///   -ui-testing-notifications-denied   notification permission refused
+///                               (the Simulator can't reset a decided one)
+enum UITestHooks {
+    #if DEBUG
+    private static let arguments = ProcessInfo.processInfo.arguments
+    static let isUITesting = arguments.contains("-ui-testing")
+    static let resetsState = arguments.contains("-ui-testing-reset")
+    static let fakeCamera = arguments.contains("-ui-testing-fake-camera")
+    static let cameraDenied = arguments.contains("-ui-testing-camera-denied")
+    static let notificationsDenied = arguments.contains("-ui-testing-notifications-denied")
+    #else
+    static let isUITesting = false
+    static let resetsState = false
+    static let fakeCamera = false
+    static let cameraDenied = false
+    static let notificationsDenied = false
+    #endif
+
+    /// Wipes what the app persists (settings, the local store, cached
+    /// photos) so every UI test starts from a first launch.
+    static func resetPersistentStateIfTesting() {
+        #if DEBUG
+        guard resetsState else { return }
+        if let domain = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: domain)
+        }
+        let files = FileManager.default
+        let support = files.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        for name in (try? files.contentsOfDirectory(atPath: support.path)) ?? [] where name.hasPrefix("default.store") {
+            try? files.removeItem(at: support.appendingPathComponent(name))
+        }
+        let documents = files.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? files.removeItem(at: documents.appendingPathComponent(MockMediaService.mediaDirectoryName))
+        #endif
+    }
+}
+
+#if DEBUG
+/// Stands in for the camera in UI tests: one button that "takes" a photo.
+struct FakeCameraView: View {
+    var onCapture: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Test camera")
+                .font(.headline)
+            Button("Take test photo") {
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 1200)).image { context in
+                    UIColor.systemTeal.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 900, height: 1200))
+                }
+                onCapture(image)
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            Button("Cancel") { dismiss() }
+        }
+    }
+}
+#endif

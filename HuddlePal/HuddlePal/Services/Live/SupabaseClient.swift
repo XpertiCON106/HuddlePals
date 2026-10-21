@@ -34,8 +34,14 @@ actor SupabaseClient {
             case .invalidURL:
                 return "Something went wrong. Please try again."
             case .http(let status, _):
-                if status == 401 || status == 403 {
+                // 401: the token itself was refused. 403 is PostgREST's answer
+                // to an access rule saying no (e.g. a huddle you've left), not
+                // an expired session.
+                if status == 401 {
                     return "Your session has expired. Please sign in again."
+                }
+                if status == 403 {
+                    return "You don't have access to that any more."
                 }
                 return "Something went wrong. Please try again."
             }
@@ -45,18 +51,42 @@ actor SupabaseClient {
     private let config: BackendConfig
     private let urlSession: URLSession
     private var session: Session?
-    private static let sessionKey = "supabase.session"
+    /// Keychain account holding the session. Tests use their own, so a run
+    /// never clears a real sign-in on the simulator.
+    private let sessionKey: String
 
     let decoder: JSONDecoder
     let encoder: JSONEncoder
 
-    init(config: BackendConfig, urlSession: URLSession = .shared) {
+    /// No HTTP cache: `URLSession.shared` keeps responses (rows with
+    /// captions and comments, profile photos) on disk under Library/Caches,
+    /// where sign-out can't reach them. Photos have their own cache.
+    static func makeURLSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }
+
+    /// Called when the server ends the session (a refused refresh token, e.g.
+    /// after signing out everywhere), so the app returns to sign-in instead
+    /// of failing every request with "Not signed in".
+    private let onSessionEnded: @Sendable () -> Void
+
+    init(
+        config: BackendConfig,
+        urlSession: URLSession = SupabaseClient.makeURLSession(),
+        onSessionEnded: @escaping @Sendable () -> Void = {},
+        sessionKey: String = "supabase.session"
+    ) {
         self.config = config
         self.urlSession = urlSession
+        self.onSessionEnded = onSessionEnded
+        self.sessionKey = sessionKey
         decoder = Self.makeDecoder()
         encoder = Self.makeEncoder()
 
-        if let data = KeychainStore.load(key: Self.sessionKey),
+        if let data = KeychainStore.load(key: sessionKey),
            let saved = try? decoder.decode(Session.self, from: data) {
             session = saved
         }
@@ -182,15 +212,23 @@ actor SupabaseClient {
                     body: ["refresh_token": refreshToken]
                 )
                 return storeSession(from: response)
-            } catch ClientError.http(let status, _) where (400..<500).contains(status) {
+            } catch ClientError.http(let status, _) where Self.refusesSession(status) {
                 // Refresh token revoked/expired — surface as signed out.
                 clearSession()
+                onSessionEnded()
                 return nil
             }
         }
         refreshTask = task
         defer { refreshTask = nil }
         return try await task.value
+    }
+
+    /// A 4xx answer to a refresh means the token is no good, except a
+    /// timeout (408) or GoTrue's rate limit (429): those say nothing about
+    /// the session, and signing out on them would wipe a valid one.
+    static func refusesSession(_ status: Int) -> Bool {
+        (400..<500).contains(status) && status != 408 && status != 429
     }
 
     func signOut() async {
@@ -225,14 +263,14 @@ actor SupabaseClient {
         )
         session = new
         if let data = try? encoder.encode(new) {
-            KeychainStore.save(data, key: Self.sessionKey)
+            KeychainStore.save(data, key: sessionKey)
         }
         return new
     }
 
     private func clearSession() {
         session = nil
-        KeychainStore.delete(key: Self.sessionKey)
+        KeychainStore.delete(key: sessionKey)
     }
 
     private func authRequestVoid<B: Encodable>(path: String, body: B) async throws {
@@ -266,17 +304,46 @@ actor SupabaseClient {
         return try decoder.decode([R].self, from: data)
     }
 
+    /// Rows asked for per request by `selectAll`. PostgREST cuts every
+    /// response at the project's max-rows setting (Supabase default 1000) and
+    /// silently drops the rest, so a read that can grow without bound must page.
+    static let pageSize = 500
+
+    /// Every row matching `query`, fetched a page at a time in a stable order.
+    /// Oldest first, so rows inserted mid-read land on a later page instead of
+    /// shifting earlier ones out of the result.
+    func selectAll<R: Decodable>(
+        _ table: String,
+        query: [URLQueryItem],
+        order: String = "created_at.asc,id.asc"
+    ) async throws -> [R] {
+        var rows: [R] = []
+        while true {
+            let page: [R] = try await select(table, query: query + [
+                URLQueryItem(name: "order", value: order),
+                URLQueryItem(name: "limit", value: String(Self.pageSize)),
+                URLQueryItem(name: "offset", value: String(rows.count)),
+            ])
+            rows += page
+            if page.count < Self.pageSize { return rows }
+        }
+    }
+
+    /// `ignoreDuplicates`: an existing row is left alone (ON CONFLICT DO
+    /// NOTHING, which returns no row) instead of merged (DO UPDATE, which
+    /// needs an UPDATE policy: reactions and blocks deliberately have none).
     @discardableResult
     func upsert<B: Encodable, R: Decodable>(
         _ table: String,
         values: B,
-        onConflict: String? = nil
+        onConflict: String? = nil,
+        ignoreDuplicates: Bool = false
     ) async throws -> [R] {
         var query: [URLQueryItem] = []
         var prefer = "return=representation"
         if let onConflict {
             query.append(URLQueryItem(name: "on_conflict", value: onConflict))
-            prefer += ",resolution=merge-duplicates"
+            prefer += ignoreDuplicates ? ",resolution=ignore-duplicates" : ",resolution=merge-duplicates"
         }
         let data = try await rest(
             table: table, method: "POST", query: query,

@@ -10,13 +10,21 @@ final class LiveAuthService: AuthServiceProtocol {
     private let client: SupabaseClient
     private let store: SupabaseStore
     private let keyring: LivePhotoKeyring
+    private let media: LiveMediaService
     private let emailCodeLength: Int
     private let phoneCodeLength: Int
 
-    init(client: SupabaseClient, store: SupabaseStore, keyring: LivePhotoKeyring, config: BackendConfig) {
+    init(
+        client: SupabaseClient,
+        store: SupabaseStore,
+        keyring: LivePhotoKeyring,
+        media: LiveMediaService,
+        config: BackendConfig
+    ) {
         self.client = client
         self.store = store
         self.keyring = keyring
+        self.media = media
         emailCodeLength = config.emailCodeLength
         phoneCodeLength = config.phoneCodeLength
     }
@@ -29,8 +37,27 @@ final class LiveAuthService: AuthServiceProtocol {
     }
 
     func currentState() async throws -> AuthSessionState {
-        guard let session = try await client.validSession() else { return .signedOut }
-        return try await state(for: session, suggestedName: nil)
+        do {
+            guard let session = try await client.validSession() else { return .signedOut }
+            return try await state(for: session, suggestedName: nil)
+        } catch where Self.isTransient(error) {
+            // Offline (or the server is down) at launch: a stored session
+            // stays signed in on the cached profile instead of landing on
+            // sign-in. Screens show their last synced state and retry.
+            if let userID = await client.currentUserID, let user = try store.user(id: userID) {
+                return .signedIn(user)
+            }
+            throw error
+        }
+    }
+
+    /// A failure that says nothing about the session itself.
+    private static func isTransient(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        if case SupabaseClient.ClientError.http(let status, _) = error {
+            return status >= 500 || status == 429 || status == 408
+        }
+        return false
     }
 
     func requestCode(to destination: OTPDestination) async throws {
@@ -131,6 +158,14 @@ final class LiveAuthService: AuthServiceProtocol {
         try await client.invokeFunction("delete-account")
         if let userID { keyring.forgetIdentity(for: userID) }
         await client.signOut()
+    }
+
+    /// The synced store holds co-members' profiles, captions and comments;
+    /// the cache holds every huddle photo (ciphertext) and profile photo
+    /// (plaintext) this account opened.
+    func removeLocalData() throws {
+        try store.removeAllLocalData()
+        media.removeLocalCache()
     }
 
     /// Authenticated → signed in if the profile row exists, otherwise the

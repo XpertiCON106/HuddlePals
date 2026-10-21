@@ -84,6 +84,9 @@ private struct ProfileContent: View {
             aboutSection
         }
         .scrollContentBackground(.hidden)
+        // The bio is multi-line (Return adds a line), so scrolling is how the
+        // keyboard goes away; without this it stayed over the tab bar.
+        .scrollDismissesKeyboard(.immediately)
         .background(Theme.background)
         .overlay {
             if viewModel.isLoading {
@@ -237,6 +240,11 @@ private struct ProfileContent: View {
                 TextField("Display name", text: $viewModel.displayName)
                     .font(.system(size: 17, weight: .medium))
                     .disabled(viewModel.isWorking)
+                    .onChange(of: viewModel.displayName) { _, newValue in
+                        if newValue.serverLength > TextLimit.displayName {
+                            viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
+                        }
+                    }
             }
             .listRowBackground(Theme.surface)
 
@@ -246,11 +254,11 @@ private struct ProfileContent: View {
                     .lineLimit(2...4)
                     .disabled(viewModel.isWorking)
                     .onChange(of: viewModel.bio) { _, newValue in
-                        if newValue.count > AuthValidation.bioLimit {
-                            viewModel.bio = String(newValue.prefix(AuthValidation.bioLimit))
+                        if newValue.serverLength > AuthValidation.bioLimit {
+                            viewModel.bio = newValue.prefix(serverLength: AuthValidation.bioLimit)
                         }
                     }
-                if viewModel.bio.count > AuthValidation.bioLimit - 30 {
+                if viewModel.bio.serverLength > AuthValidation.bioLimit - 30 {
                     Text("\(viewModel.bioRemaining)")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(Theme.textSecondary)
@@ -446,6 +454,7 @@ private struct ProfileDraftPhotoImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .accessibilityLabel("New profile photo, not saved yet")
             } else if let path = photo.persistedPath {
                 LocalDepositImage(relativePath: path, maxPixelSize: 380)
             } else {

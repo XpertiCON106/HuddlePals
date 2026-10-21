@@ -17,7 +17,8 @@ final class CreateHuddleViewModel {
     static let emojiChoices = ["🏔", "🌊", "🌻", "🔥", "🐾", "🌙", "🍞", "🎒", "🏡", "🌵", "⛺️", "🫶"]
 
     var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isCreating
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (1...TextLimit.huddleName).contains(trimmed.serverLength) && !isCreating
     }
 
     /// Stub deep link shared via the share sheet.
@@ -64,10 +65,16 @@ final class JoinHuddleViewModel {
     init(deps: AppDependencies) {
         self.deps = deps
         // A huddlepal://join/<code> link may have arrived before this screen.
-        if let pending = deps.session.pendingInviteCode {
-            code = pending
-            deps.session.pendingInviteCode = nil
-        }
+        usePendingInvite()
+    }
+
+    /// Takes the code of a huddlepal://join/<code> link, once. Also called
+    /// when a link arrives while this screen is already open.
+    func usePendingInvite() {
+        guard let pending = deps.session.pendingInviteCode else { return }
+        code = pending
+        errorMessage = nil
+        deps.session.pendingInviteCode = nil
     }
 
     func join() async {
@@ -103,6 +110,13 @@ final class HuddleSettingsViewModel {
 
     var memberships: [Membership] { huddle.sortedMemberships }
 
+    /// Only the keeper may change huddle settings. For anyone else the
+    /// server's rule silently updates nothing, so the control is off.
+    var isKeeper: Bool {
+        guard let me = deps.session.currentUser?.id else { return false }
+        return huddle.memberships.contains { $0.user?.id == me && $0.role == .keeper }
+    }
+
     var streakDetail: String {
         if huddle.streakCount == 0 {
             return "No active streak. It starts the next day everyone deposits."
@@ -122,6 +136,7 @@ final class HuddleSettingsViewModel {
     /// longer schedules its own notification — that avoided a member in
     /// several huddles getting one nudge per huddle on top of the per-user one.
     func setNotificationHour(_ hour: Int) async {
+        guard isKeeper else { return }
         try? await deps.huddleService.updateNotificationHour(hour, for: huddle)
     }
 

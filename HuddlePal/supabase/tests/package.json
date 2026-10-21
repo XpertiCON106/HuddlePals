@@ -1,0 +1,17 @@
+{
+  "name": "huddlepals-supabase-tests",
+  "private": true,
+  "type": "module",
+  "description": "Database, RLS, storage-policy and RPC tests for supabase/schema.sql, run against an in-process Postgres (PGlite).",
+  "scripts": {
+    "test": "npm run test:fresh && npm run test:migrated",
+    "test:fresh": "HUDDLE_DB=fresh node --test --test-reporter=spec",
+    "test:migrated": "HUDDLE_DB=migrated node --test --test-reporter=spec"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

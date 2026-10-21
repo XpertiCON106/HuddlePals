@@ -133,8 +133,8 @@ final class ProfileViewModel {
 
     var isDraftValid: Bool {
         let name = normalizedDisplayName
-        return (1...40).contains(name.count)
-            && bio.count <= AuthValidation.bioLimit
+        return (1...TextLimit.displayName).contains(name.serverLength)
+            && bio.serverLength <= AuthValidation.bioLimit
             && draftPhotos.count <= AuthValidation.maxProfilePhotos
     }
 
@@ -155,7 +155,7 @@ final class ProfileViewModel {
     /// When this device agreed to the current Terms of Service.
     var termsAcceptedAt: Date? { deps.terms.acceptedAt }
 
-    var bioRemaining: Int { AuthValidation.bioLimit - bio.count }
+    var bioRemaining: Int { AuthValidation.bioLimit - bio.serverLength }
     var canAddPhotos: Bool {
         draftPhotos.count < AuthValidation.maxProfilePhotos && !isWorking
     }
@@ -383,8 +383,7 @@ final class ProfileViewModel {
 
     func signOut() async {
         try? await deps.auth.signOut()
-        deps.session.currentUser = nil
-        deps.session.needsProfileSetup = false
+        await deps.endSession()
     }
 
     /// Returns true on success so the view can route back to onboarding.
@@ -393,8 +392,7 @@ final class ProfileViewModel {
         defer { isPerformingAccountAction = false }
         do {
             try await deps.auth.deleteAccount()
-            deps.session.currentUser = nil
-            deps.session.needsProfileSetup = false
+            await deps.endSession()
             return true
         } catch {
             statusMessage = error.localizedDescription

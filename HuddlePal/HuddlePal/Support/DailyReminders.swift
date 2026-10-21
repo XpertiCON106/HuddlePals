@@ -44,7 +44,23 @@ final class ReminderSettings {
 /// uploaded, while (b) keeping reminders alive for upcoming days even if
 /// the app isn't reopened. ~3 notifications/day × 7 days stays well under
 /// the iOS 64-pending limit.
-final class DailyReminderScheduler {
+/// What `ReminderCoordinator` needs from the notification scheduler; a
+/// protocol so tests can watch what gets scheduled or cancelled.
+protocol ReminderScheduling: AnyObject {
+    func authorizationStatus() async -> UNAuthorizationStatus
+    func requestAuthorization() async -> Bool
+    func cancelAll()
+    func reschedule(
+        enabled: Bool,
+        hour: Int,
+        minute: Int,
+        suppressToday: Bool,
+        calendar: Calendar,
+        now: Date
+    ) async
+}
+
+final class DailyReminderScheduler: ReminderScheduling {
     /// How many days ahead to keep scheduled.
     static let windowDays = 7
     /// Gentle nudges after the chosen time if still not uploaded (the cap).
@@ -68,12 +84,14 @@ final class DailyReminderScheduler {
     // MARK: Authorization
 
     func authorizationStatus() async -> UNAuthorizationStatus {
-        await center.notificationSettings().authorizationStatus
+        if UITestHooks.notificationsDenied { return .denied }
+        return await center.notificationSettings().authorizationStatus
     }
 
     /// Standard permission request; returns whether reminders may be shown.
     func requestAuthorization() async -> Bool {
-        (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        if UITestHooks.notificationsDenied { return false }
+        return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
     }
 
     // MARK: Scheduling
@@ -126,6 +144,19 @@ final class DailyReminderScheduler {
         }
     }
 
+    /// The trigger's date, carrying its calendar and time zone: without them
+    /// iOS reads the numbers in the user's own calendar, and a Gregorian
+    /// year (2026) read as Buddhist is centuries in the past, so the
+    /// reminder would never fire.
+    static func triggerComponents(onDay dayDate: Date, atMinutes minutesIntoDay: Int, calendar: Calendar) -> DateComponents {
+        var components = calendar.dateComponents([.year, .month, .day], from: dayDate)
+        components.hour = minutesIntoDay / 60
+        components.minute = minutesIntoDay % 60
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        return components
+    }
+
     private func schedule(
         id: String,
         title: String,
@@ -134,9 +165,7 @@ final class DailyReminderScheduler {
         atMinutes minutesIntoDay: Int,
         calendar: Calendar
     ) {
-        var components = calendar.dateComponents([.year, .month, .day], from: dayDate)
-        components.hour = minutesIntoDay / 60
-        components.minute = minutesIntoDay % 60
+        let components = Self.triggerComponents(onDay: dayDate, atMinutes: minutesIntoDay, calendar: calendar)
 
         let content = UNMutableNotificationContent()
         content.title = title
@@ -160,7 +189,7 @@ final class DailyReminderScheduler {
 @Observable
 final class ReminderCoordinator {
     let settings: ReminderSettings
-    private let scheduler: DailyReminderScheduler
+    private let scheduler: any ReminderScheduling
     private let session: AppSession
     private let engine: HuddleEngine
     private let dateProvider: DateProviding
@@ -171,7 +200,7 @@ final class ReminderCoordinator {
 
     init(
         settings: ReminderSettings,
-        scheduler: DailyReminderScheduler,
+        scheduler: any ReminderScheduling,
         session: AppSession,
         engine: HuddleEngine,
         dateProvider: DateProviding
@@ -225,6 +254,11 @@ final class ReminderCoordinator {
     /// Recompute and reschedule. Cheap; safe to call often.
     func refresh() async {
         await updateAuthorizationStatus()
+        // Signed out: nobody to remind. (Days 1–6 used to stay scheduled.)
+        guard session.currentUser != nil else {
+            scheduler.cancelAll()
+            return
+        }
         await scheduler.reschedule(
             enabled: settings.isEnabled,
             hour: settings.hour,

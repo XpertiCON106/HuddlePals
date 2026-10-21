@@ -38,21 +38,37 @@ struct ComposeView: View {
                         onComplete(false)
                     }
                     .foregroundStyle(Theme.textSecondary)
+                    // Once posting starts it can't be called back: the
+                    // photo becomes permanent either way, so the sheet must
+                    // stay to report the result.
+                    .disabled(viewModel?.isSaving ?? false)
                 }
             }
         }
+        .interactiveDismissDisabled(viewModel?.isSaving ?? false)
         .fullScreenCover(isPresented: $showCamera) {
+            #if DEBUG
+            if UITestHooks.fakeCamera {
+                FakeCameraView { image in viewModel?.setCapturedImage(image) }
+            } else {
+                CameraPicker { image in
+                    viewModel?.setCapturedImage(image)
+                }
+                .ignoresSafeArea()
+            }
+            #else
             CameraPicker { image in
                 viewModel?.setCapturedImage(image)
             }
             .ignoresSafeArea()
+            #endif
         }
         .onAppear {
             if viewModel == nil {
                 viewModel = ComposeViewModel(deps: deps, huddle: huddle, targetDayKey: targetDayKey)
                 // Open the camera immediately (when there is one — the
                 // Simulator has none).
-                showCamera = CameraPicker.isAvailable
+                showCamera = CameraPicker.availability() == .ready
             }
         }
     }
@@ -70,6 +86,9 @@ private struct ComposeContent: View {
     let onSuccess: () -> Void
 
     @FocusState private var captionFocused: Bool
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
+    @State private var camera = CameraPicker.availability()
 
     var body: some View {
         Group {
@@ -81,6 +100,10 @@ private struct ComposeContent: View {
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewModel.stage)
+        .onChange(of: scenePhase) { _, phase in
+            // Back from Settings with camera access turned on.
+            if phase == .active { camera = CameraPicker.availability() }
+        }
     }
 
     // MARK: Stage 1 — capture
@@ -126,6 +149,7 @@ private struct ComposeContent: View {
                     .resizable()
                     .scaledToFill()
                     .aspectRatio(3 / 4, contentMode: .fit)
+                    .accessibilityLabel("Your photo")
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
                     .overlay(alignment: .bottomTrailing) {
                         Button {
@@ -146,13 +170,14 @@ private struct ComposeContent: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
         .onTapGesture {
-            if viewModel.previewImage == nil, CameraPicker.isAvailable { showCamera = true }
+            if viewModel.previewImage == nil, camera == .ready { showCamera = true }
         }
     }
 
     @ViewBuilder
     private var emptyCapturePrompt: some View {
-        if CameraPicker.isAvailable {
+        switch camera {
+        case .ready:
             VStack(spacing: 16) {
                 Image(systemName: "camera.fill")
                     .font(.system(size: 42, weight: .light))
@@ -171,20 +196,57 @@ private struct ComposeContent: View {
                         .background(Theme.surfaceElevated, in: Capsule())
                 }
             }
-        } else {
-            VStack(spacing: 12) {
-                Image(systemName: "camera.metering.unknown")
-                    .font(.system(size: 38, weight: .light))
-                    .foregroundStyle(Theme.textSecondary)
-                Text("No camera available")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("HuddlePals captures today's photo with your camera. Run this on a device to deposit.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+        case .denied:
+            cameraUnavailable(
+                symbol: "camera.fill",
+                title: "Camera access is off",
+                message: "HuddlePals takes today's photo in the moment, with your camera. Turn on Camera for HuddlePals in Settings."
+            ) {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                } label: {
+                    Label("Open Settings", systemImage: "gear")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Theme.surfaceElevated, in: Capsule())
+                }
             }
+        case .restricted:
+            cameraUnavailable(
+                symbol: "lock.fill",
+                title: "The camera is restricted",
+                message: "Screen Time or a device profile blocks the camera on this iPhone, so today's photo can't be taken here."
+            ) { EmptyView() }
+        case .noCamera:
+            cameraUnavailable(
+                symbol: "camera.metering.unknown",
+                title: "No camera available",
+                message: "HuddlePals captures today's photo with your camera. Run this on a device to deposit."
+            ) { EmptyView() }
+        }
+    }
+
+    private func cameraUnavailable<Action: View>(
+        symbol: String,
+        title: String,
+        message: String,
+        @ViewBuilder action: () -> Action
+    ) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 38, weight: .light))
+                .foregroundStyle(Theme.textSecondary)
+            Text(title)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.textPrimary)
+            Text(message)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+            action()
         }
     }
 
@@ -197,6 +259,7 @@ private struct ComposeContent: View {
                     .resizable()
                     .scaledToFill()
                     .aspectRatio(3 / 4, contentMode: .fit)
+                    .accessibilityLabel("Your photo")
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)

@@ -45,7 +45,8 @@ final class LiveModerationService: ModerationServiceProtocol {
         let _: [BlockDTO] = try await client.upsert(
             "blocks",
             values: NewBlock(blockerId: blocker, blockedId: user.id),
-            onConflict: "blocker_id,blocked_id"
+            onConflict: "blocker_id,blocked_id",
+            ignoreDuplicates: true
         )
     }
 

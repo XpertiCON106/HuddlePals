@@ -38,6 +38,9 @@ struct AvatarView: View {
             }
             .clipShape(Circle())
             .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+            // Decorative: a name is always next to it, or the surrounding
+            // link / stack carries it (UserLink, AvatarStack).
+            .accessibilityHidden(true)
             .task(id: imageLoadID) {
                 if let imageData {
                     image = UIImage(data: imageData)
@@ -92,6 +95,8 @@ struct AvatarStack: View {
                     .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(users.isEmpty ? "No members" : "Members: " + users.map(\.displayName).joined(separator: ", "))
     }
 }
 
@@ -111,6 +116,9 @@ struct UserLink<Content: View>: View {
                 content()
             }
             .buttonStyle(.plain)
+            // Content is sometimes only the (decorative) avatar.
+            .accessibilityLabel(user.displayName)
+            .accessibilityHint("Shows their profile")
         } else {
             content()
         }
@@ -174,6 +182,13 @@ struct ColorRampPicker: View {
             .onTapGesture {
                 selection = token
                 Haptics.light()
+            }
+            // A bare shape with a tap gesture is invisible to VoiceOver.
+            .accessibilityElement()
+            .accessibilityLabel(AvatarPalette.name(for: token))
+            .accessibilityAddTraits(token == selection ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction {
+                selection = token
             }
     }
 }

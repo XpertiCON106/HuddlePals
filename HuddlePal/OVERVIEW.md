@@ -11,7 +11,7 @@ This document is the single place to understand everything: the product, the rul
 | Dependencies | **Zero** third-party packages — Apple frameworks + raw `URLSession` |
 | State | `@Observable` (Observation framework), no Combine |
 | Backends | Mock (seeded offline demo) and Live (Supabase) behind identical protocols |
-| Auth | Sign in with Apple, email + SMS codes (6 digits by default; mock code: `123456`) |
+| Auth | Sign in with Apple. Email + SMS codes are built but switched off (`FeatureFlags.emailAndPhoneSignInEnabled = false`) |
 | Design | Adaptive "gallery print": paper + ink in light, deep charcoal + paper-white in dark; system-following with in-app override |
 | Tests | Deterministic XCTests (⌘U): engine rules, critical mock flows, live sync reconciliation, profile editor |
 
@@ -108,7 +108,7 @@ flowchart TD
 
 | Screen | What it does |
 |---|---|
-| **Onboarding** | Terms of Service first: the full text with Agree / Decline; Agree unlocks only after scrolling to the end. Decline returns to the first concept card, and nothing past the cards opens until Agree (re-asked whenever `TermsOfService.version` changes). Then three concept cards → sign-in method (Apple / email / phone) → verification code → profile (name + avatar ink). Returning accounts skip the profile step. |
+| **Onboarding** | Terms of Service first: the full text with Agree / Decline; Agree unlocks only after scrolling to the end. Decline returns to the first concept card, and nothing past the cards opens until Agree (re-asked whenever `TermsOfService.version` changes). Then three concept cards → sign-in method (Apple; email / phone when the feature flag is on) → verification code → profile (name + avatar ink). Returning accounts skip the profile step. |
 | **Huddles shelf** | Every huddle you belong to: emoji, name, member stack, streak, lock state, "N waiting for you". Tap to step inside; create/join from the toolbar. |
 | **Huddle Home (Today)** | One huddle's day. Serif huddle name, member stack, streak badge, and — when a streak just broke — the 24h recovery banner with a live countdown. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards + "waiting on…" row. |
 | **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
@@ -231,7 +231,7 @@ Relationship notes: inverses are declared once, on the to-many side, with cascad
 
 ## 7. Authentication
 
-Three ways in, one account model. Email and phone send a **verification code** (6 digits unless the Supabase project is set to more — up to 10; the app's code boxes follow `EMAIL_OTP_LENGTH` / `SMS_OTP_LENGTH` in `Supabase.plist`); Apple uses the native sheet. All resolve to a Supabase `auth.users` row; the app's `profiles` row (name + avatar) is created on first sign-in by the onboarding profile step.
+Three ways in, one account model. **Today only Sign in with Apple is shown**: email and phone are built but hidden behind `FeatureFlags.emailAndPhoneSignInEnabled`. (The Supabase project's email provider may still accept codes server-side; turn it off there too if it shouldn't.) Email and phone send a **verification code** (6 digits unless the Supabase project is set to more — up to 10; the app's code boxes follow `EMAIL_OTP_LENGTH` / `SMS_OTP_LENGTH` in `Supabase.plist`); Apple uses the native sheet. All resolve to a Supabase `auth.users` row; the app's `profiles` row (name + avatar) is created on first sign-in by the onboarding profile step.
 
 ```mermaid
 sequenceDiagram
@@ -321,7 +321,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | reports / blocks | your own | your own |
 | user_keys | your own + co-members' public keys | only your own row |
 | huddle_keys | only your own wrapped copies | via `init_huddle_key` / `share_huddle_key` only |
-| storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/…` readable by any signed-in user | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
+| storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
 
 Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, `can_see_deposit`) are `SECURITY DEFINER` — the standard way to avoid the memberships-policy-reads-memberships RLS recursion trap.
 
@@ -467,5 +467,5 @@ Honest edges, in rough priority order:
 5. **Storage orphans** — a removed profile photo, or an upload whose deposit insert then fails, leaves an unreferenced Storage object (harmless at this scale; a scheduled cleanup function fixes it).
 6. **Email deliverability** — Supabase's built-in mailer is rate-limited to a few messages/hour; configure SMTP before group testing. SMS requires a paid Twilio setup.
 7. **Home-screen widget** — planned post-MVP as a `Widgets/` extension target sharing the store via an app group.
-8. **Keeper succession** — if the keeper leaves, no one is promoted (server-side reassignment is a TODO in the leave flow).
+8. **Keeper succession** — when the keeper leaves or deletes their account, the longest-standing remaining member becomes keeper (the `memberships_after_delete` trigger). There is no way yet to hand the role over by choice.
 9. **Encryption edges** — one identity key per account: using two devices needs iCloud Keychain, otherwise the device that launched last is the one that can decrypt. A huddle's key isn't rotated when someone leaves. If every remaining member has lost the key, that huddle's photos are unrecoverable. Captions and comments are plaintext; encrypting them would mean sealing them with the huddle key on the client (as with photo keys) and losing server-side length checks and moderation visibility.

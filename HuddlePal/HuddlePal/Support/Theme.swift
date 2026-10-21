@@ -46,8 +46,10 @@ enum Theme {
         light: (0.102, 0.102, 0.094),
         dark: (0.945, 0.941, 0.930)
     )
+    /// Light mode ≈ 5:1 on the paper canvas (WCAG AA for small text; the
+    /// earlier 0.478 gray was ≈ 4.2:1).
     static let textSecondary = dynamic(
-        light: (0.478, 0.478, 0.463),
+        light: (0.400, 0.400, 0.388),
         dark: (0.604, 0.600, 0.584)
     )
     /// Muted brick red — destructive actions and errors only.
@@ -194,4 +196,20 @@ enum AvatarPalette {
         "0091FF-6E56CF", // twilight
     ]
     static let hexes = solids + gradients
+
+    /// Spoken names for the identity colors (VoiceOver); a custom token
+    /// falls back to a generic name.
+    static func name(for token: String) -> String {
+        switch token {
+        case "E5484D": "Coral red"
+        case "F76B15": "Tangerine"
+        case "46A758": "Leaf green"
+        case "0091FF": "Azure"
+        case "6E56CF": "Violet"
+        case "D6409F": "Magenta"
+        case "F76B15-E5484D": "Sunset gradient"
+        case "0091FF-6E56CF": "Twilight gradient"
+        default: "Custom color"
+        }
+    }
 }

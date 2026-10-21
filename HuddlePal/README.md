@@ -155,7 +155,15 @@ Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (
 
 ## Testing
 
-⌘U runs seven suites:
+**One command runs everything** (database and access rules, unit tests, UI journeys):
+
+```
+HuddlePal/scripts/test-all.sh
+```
+
+It builds with `Supabase.plist` excluded, so a test run can never reach the live backend. The UI tests reset HuddlePals' data on the simulator they use, so run them on a test-only simulator (`SIMULATOR="HuddlePals Tests"` by default; the script header shows how to create it). The database suite alone is `cd supabase/tests && npm install && npm test`: it runs `schema.sql` and the migrations on an in-process Postgres (PGlite) and checks every access rule both ways.
+
+⌘U runs the app's XCTest suites:
 
 - `HuddleEngineTests` pins the calendar to `America/Los_Angeles` and feeds explicit dates, covering: perfect-day increment, missing-member reset, incomplete-today preservation, skip-token preservation, joining mid-streak, once-and-permanent, the recovery window (opens / restores / expires), dayKey boundary (23:59 / 00:01 gate flip), backfill window (yesterday ✓ / 2 days ✗ / today ✗ / future ✗), backfill repairing a streak on recompute, gate semantics, caption sanitization, and invite-code shape.
 - `CriticalFlowTests` drives the assembled mock stack: launch into two locked huddles, deposit → unlock → repeat refused, create/join, sign-out, and the huddle list's "who posted today" read.

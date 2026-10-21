@@ -66,7 +66,10 @@ final class ComposeViewModel {
     /// Irreversible: once this succeeds the photo can never be deleted,
     /// edited, or replaced.
     func confirmAndPost() async -> Bool {
-        guard let imageData,
+        // One post at a time: a second tap before the first finishes would
+        // upload a second photo and then fail as "already posted today".
+        guard !isSaving,
+              let imageData,
               let user = deps.session.currentUser else { return false }
         isSaving = true
         defer { isSaving = false }

@@ -17,18 +17,19 @@ final class LiveDepositService: DepositServiceProtocol {
         // Opening a huddle: get its key if this device lacks it, and share it
         // with any member still waiting — before the photos render.
         await keyring.sync(huddleIDs: [huddle.id])
-        let depositDTOs: [DepositDTO] = try await client.select("deposits", query: [
+        // Complete sets, paged and chunked: applyDeposits prunes whatever is
+        // missing, so a truncated read would delete real history locally.
+        let depositDTOs: [DepositDTO] = try await client.selectAll("deposits", query: [
             URLQueryItem(name: "huddle_id", value: "eq.\(huddle.id.uuidString)"),
         ])
         var reactionDTOs: [ReactionDTO] = []
         var commentDTOs: [CommentDTO] = []
-        let depositIDs = depositDTOs.map(\.id)
-        if !depositIDs.isEmpty {
-            reactionDTOs = try await client.select("reactions", query: [
-                URLQueryItem(name: "deposit_id", value: depositIDs.postgrestInList),
+        for chunk in depositDTOs.map(\.id).chunked() {
+            reactionDTOs += try await client.selectAll("reactions", query: [
+                URLQueryItem(name: "deposit_id", value: chunk.postgrestInList),
             ])
-            commentDTOs = try await client.select("comments", query: [
-                URLQueryItem(name: "deposit_id", value: depositIDs.postgrestInList),
+            commentDTOs += try await client.selectAll("comments", query: [
+                URLQueryItem(name: "deposit_id", value: chunk.postgrestInList),
             ])
         }
         // Pull any referenced profile we don't have yet (e.g. a member who
@@ -40,10 +41,9 @@ final class LiveDepositService: DepositServiceProtocol {
                 + reactionDTOs.map(\.userId)
                 + commentDTOs.compactMap(\.userId)
         )
-        let missing = try store.missingUserIDs(in: referenced)
-        if !missing.isEmpty {
+        for chunk in try store.missingUserIDs(in: referenced).chunked() {
             let profiles: [ProfileDTO] = try await client.select("profiles", query: [
-                URLQueryItem(name: "id", value: missing.postgrestInList),
+                URLQueryItem(name: "id", value: chunk.postgrestInList),
             ])
             for profile in profiles {
                 try store.apply(profile)
@@ -137,7 +137,9 @@ final class LiveDepositService: DepositServiceProtocol {
             let rows: [ReactionDTO] = try await client.upsert(
                 "reactions",
                 values: NewReaction(depositId: deposit.id, userId: user.id, emoji: emoji),
-                onConflict: "deposit_id,user_id,emoji"
+                onConflict: "deposit_id,user_id,emoji",
+                // Already there (a stale screen, a double tap): nothing to do.
+                ignoreDuplicates: true
             )
             if let dto = rows.first {
                 store.insertReactionLocally(dto, deposit: deposit, user: user)

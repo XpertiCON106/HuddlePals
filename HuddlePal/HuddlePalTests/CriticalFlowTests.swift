@@ -158,6 +158,49 @@ final class CriticalFlowTests: XCTestCase {
         XCTAssertEqual(crew.streakCount, before, "joining never resets the group's streak")
     }
 
+    func testOnlyTheKeeperCanChangeTheHuddlesHour() async throws {
+        // QA-26: for a member the server silently updates nothing.
+        let keeper = try await signedInUser()
+        deps.session.currentUser = keeper
+        let huddles = try await deps.huddleService.huddles(for: keeper)
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == "CREW42" })
+        let settings = HuddleSettingsViewModel(deps: deps, huddle: crew)
+        XCTAssertTrue(settings.isKeeper)
+        await settings.setNotificationHour(7)
+        XCTAssertEqual(crew.notificationHour, 7)
+
+        deps.session.currentUser = try XCTUnwrap(crew.members.first { $0.id != keeper.id })
+        XCTAssertFalse(settings.isKeeper)
+        await settings.setNotificationHour(22)
+        XCTAssertEqual(crew.notificationHour, 7, "a member's change must not show as saved")
+    }
+
+    func testRegeneratingTheSeedWorldOverExistingDataWorks() async throws {
+        // QA-24: setUp regenerates on an empty store; the DEBUG menu
+        // regenerates over a full one.
+        _ = try await signedInUser()
+        try await deps.seeder.regenerate()
+        let huddles = try deps.modelContainer.mainContext.fetch(FetchDescriptor<Huddle>())
+        XCTAssertEqual(huddles.count, 2, "a clean rebuild, not a duplicate world")
+        let user = try await signedInUser()
+        XCTAssertEqual(user.displayName, SeedDataService.currentUserName)
+    }
+
+    func testWhenTheKeeperLeavesTheLongestStandingMemberTakesOver() async throws {
+        // QA-04, mirroring the server's memberships_after_delete trigger.
+        let keeper = try await signedInUser()
+        let huddles = try await deps.huddleService.huddles(for: keeper)
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == "CREW42" })
+        XCTAssertEqual(crew.sortedMemberships.first?.user?.id, keeper.id)
+        let expected = crew.sortedMemberships.dropFirst().min { $0.joinedAt < $1.joinedAt }?.user?.id
+
+        try await deps.huddleService.leaveHuddle(crew, user: keeper)
+
+        let keepers = crew.memberships.filter { $0.role == .keeper }
+        XCTAssertEqual(keepers.count, 1, "a huddle always has exactly one keeper")
+        XCTAssertEqual(keepers.first?.user?.id, expected)
+    }
+
     // MARK: Create / join
 
     func testCreateAndJoinHuddleFlow() async throws {

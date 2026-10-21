@@ -126,13 +126,16 @@ private struct SettingsContent: View {
                 }
             }
             .listRowBackground(Theme.surface)
+            .disabled(!viewModel.isKeeper)
             .onChange(of: notificationHour) { _, newValue in
                 Task { await viewModel.setNotificationHour(newValue) }
             }
         } header: {
             Text("Reminder")
         } footer: {
-            Text("The huddle's preferred time of day. Turn on your personal upload reminder in Profile to actually get notified.")
+            Text(viewModel.isKeeper
+                 ? "The huddle's preferred time of day. Turn on your personal upload reminder in Profile to actually get notified."
+                 : "The huddle's preferred time of day, set by the keeper. Turn on your personal upload reminder in Profile to get notified.")
         }
     }
 

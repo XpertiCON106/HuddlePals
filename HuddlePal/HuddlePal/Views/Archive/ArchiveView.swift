@@ -38,7 +38,20 @@ private struct ArchiveContent: View {
                     backfillBanner(backfillKey)
                 }
 
-                if viewModel.months.isEmpty {
+                if let error = viewModel.loadError {
+                    LoadErrorBanner(message: error) {
+                        Task { await viewModel.refresh() }
+                    }
+                }
+
+                if !viewModel.hasLoaded {
+                    if viewModel.loadError == nil {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                            .accessibilityLabel("Loading the archive")
+                    }
+                } else if viewModel.months.isEmpty {
                     EmptyHuddleState(
                         systemImage: "archivebox",
                         title: "The archive starts today",
@@ -78,7 +91,7 @@ private struct ArchiveContent: View {
         .sheet(isPresented: $showBackfillCompose) {
             ComposeView(huddle: viewModel.huddle, targetDayKey: viewModel.backfillDayKey) { success in
                 if success {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.handleBackfillSuccess() }
                 }
             }
         }

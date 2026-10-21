@@ -117,4 +117,11 @@ extension Array where Element == UUID {
     var postgrestInList: String {
         "in.(" + map(\.uuidString).joined(separator: ",") + ")"
     }
+
+    /// An `in.(…)` filter costs ~37 URL bytes per id and gateways refuse
+    /// request lines past ~8 KB, so id lists that grow with history are
+    /// queried in chunks.
+    func chunked(by size: Int = 100) -> [[UUID]] {
+        stride(from: 0, to: count, by: size).map { Array(self[$0..<Swift.min($0 + size, count)]) }
+    }
 }

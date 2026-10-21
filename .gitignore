@@ -1,1 +1,10 @@
 .DS_Store
+
+# Credentials: never commit them, wherever a copy lands.
+Supabase.plist
+.env
+.env.*
+!.env.example
+*.p8
+AuthKey_*
+*.mobileprovision

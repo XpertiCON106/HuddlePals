@@ -96,6 +96,17 @@ final class AuthInputTests: XCTestCase {
         XCTAssertEqual(BackendConfig(plist: custom)?.emailCodeLength, 6)
     }
 
+    func testOnlyARefusedTokenIsCalledAnExpiredSession() {
+        // QA-25: an access rule saying no (403) isn't a sign-in problem.
+        typealias Failure = SupabaseClient.ClientError
+        XCTAssertEqual(Failure.http(status: 401, message: "JWT expired").errorDescription,
+                       "Your session has expired. Please sign in again.")
+        XCTAssertEqual(Failure.http(status: 403, message: "new row violates row-level security policy").errorDescription,
+                       "You don't have access to that any more.")
+        XCTAssertEqual(Failure.http(status: 500, message: "boom").errorDescription,
+                       "Something went wrong. Please try again.")
+    }
+
     func testBackendConfigStillRequiresARealHTTPSProject() {
         XCTAssertNil(BackendConfig(plist: ["SUPABASE_URL": "http://example.supabase.co", "SUPABASE_ANON_KEY": "key"]))
         XCTAssertNil(BackendConfig(plist: [
@@ -106,5 +117,32 @@ final class AuthInputTests: XCTestCase {
     func testMockCodeLengthMatchesTheMockCode() {
         let deps = AppDependencies.makeMock(inMemory: true)
         XCTAssertEqual(deps.auth.codeLength(for: .email("a@b.co")), MockAuthService.mockCode.count)
+    }
+}
+
+/// QA-30: a test run never wires the live backend, and never touches the
+/// app's own Keychain session.
+@MainActor
+final class TestIsolationTests: XCTestCase {
+    func testATestRunNeverUsesTheLiveBackend() {
+        let config = BackendConfig(url: URL(string: "https://example.supabase.co")!, anonKey: "anon")
+        XCTAssertTrue(AppDependencies.usesLiveBackend(config: config, environment: [:]))
+        XCTAssertFalse(AppDependencies.usesLiveBackend(config: config, environment: ["XCTestConfigurationFilePath": "/x.xctestconfiguration"]))
+        XCTAssertFalse(AppDependencies.usesLiveBackend(config: nil, environment: [:]))
+        // This very process is a test host.
+        XCTAssertFalse(AppDependencies.usesLiveBackend(config: config, environment: ProcessInfo.processInfo.environment))
+    }
+
+    func testLiveServiceTestsKeepTheirSessionApartFromTheApps() async throws {
+        let marker = Data("real sign-in".utf8)
+        let previous = KeychainStore.load(key: "supabase.session")
+        KeychainStore.save(marker, key: "supabase.session")
+        defer {
+            if let previous { KeychainStore.save(previous, key: "supabase.session") } else { KeychainStore.delete(key: "supabase.session") }
+            KeychainStore.delete(key: LiveStub.sessionKey)
+            StubURLProtocol.reset()
+        }
+        _ = try await LiveStub.signedInClient()
+        XCTAssertEqual(KeychainStore.load(key: "supabase.session"), marker, "the app's own session is untouched")
     }
 }

@@ -18,14 +18,15 @@ create table public.profiles (
   avatar_color_hex text not null default 'E5484D',
   bio text check (bio is null or char_length(bio) <= 160),
   -- Up to 3 profile photo storage paths ("avatars/<user_id>/<file>.jpg").
-  photo_paths jsonb not null default '[]'::jsonb,
+  photo_paths jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(photo_paths) = 'array' and jsonb_array_length(photo_paths) <= 3),
   created_at timestamptz not null default now()
 );
 
 create table public.huddles (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(name) between 1 and 60),
-  emoji text not null default '🏔',
+  emoji text not null default '🏔' check (char_length(emoji) between 1 and 16),
   invite_code text not null unique,
   notification_hour int not null default 19 check (notification_hour between 0 and 23),
   streak_count int not null default 0,
@@ -56,7 +57,10 @@ create table public.deposits (
   -- The Storage object holds ciphertext only (end-to-end encryption, see
   -- "end-to-end encrypted photos" below): AES-GCM under a per-photo key,
   -- which is stored here sealed with the huddle key (base64 combined box).
-  storage_path text not null,
+  -- "<huddle_id>/<uuid>.jpg", in this deposit's own huddle folder: a row
+  -- can't point at another huddle's photo, and the path is safe to join onto
+  -- members' local cache folders.
+  storage_path text not null constraint deposits_storage_path_check check (storage_path ~* ('^' || huddle_id::text || '/[0-9a-f-]{36}\.jpg$')),
   wrapped_photo_key text not null check (wrapped_photo_key ~ '^[A-Za-z0-9+/]{80}$'),
   enc_version smallint not null default 1 check (enc_version = 1),
   caption text check (caption is null or char_length(caption) <= 80),
@@ -271,9 +275,24 @@ begin
   return next v_huddle;
 end $$;
 
+-- Wrong invite-code guesses, per user. Codes are 6 characters from a
+-- 31-character alphabet (~887M codes), few enough to enumerate with
+-- unlimited tries, and a successful guess gets the huddle key shared
+-- automatically. join_huddle refuses a caller with 10 misses in the last hour.
+-- Only that SECURITY DEFINER function touches this table: RLS is on and there
+-- are no policies, so clients can neither read nor write it.
+create table public.join_attempts (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  attempted_at timestamptz not null default now()
+);
+create index join_attempts_user_time on public.join_attempts (user_id, attempted_at);
+alter table public.join_attempts enable row level security;
+
 -- Validates the invite code and enforces the 8-member cap atomically.
 -- `p_day_key` is the caller's local today, stored as their join day — the
--- streak starts waiting on them the day after.
+-- streak starts waiting on them the day after. An unknown code returns no
+-- row (the app reads that as "no huddle for that code"): raising instead
+-- would roll back the recorded miss.
 create or replace function public.join_huddle(p_code text, p_day_key text default null)
 returns setof public.huddles
 language plpgsql security definer set search_path = public as $$
@@ -281,8 +300,15 @@ declare
   v_huddle huddles%rowtype;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
+  delete from join_attempts where user_id = auth.uid() and attempted_at < now() - interval '1 hour';
+  if (select count(*) from join_attempts where user_id = auth.uid()) >= 10 then
+    raise exception 'too_many_attempts';
+  end if;
   select * into v_huddle from huddles where upper(invite_code) = upper(trim(p_code));
-  if not found then raise exception 'invite_code_not_found'; end if;
+  if not found then
+    insert into join_attempts (user_id) values (auth.uid());
+    return;
+  end if;
   if exists (select 1 from memberships where huddle_id = v_huddle.id and user_id = auth.uid()) then
     raise exception 'already_member';
   end if;
@@ -293,6 +319,29 @@ begin
     values (auth.uid(), v_huddle.id, client_day_key(p_day_key));
   return next v_huddle;
 end $$;
+
+-- A huddle always has a keeper: when the keeper leaves (or deletes their
+-- account, which cascades here), the longest-standing remaining member
+-- takes over. A departing member's wrapped copy of the huddle key goes with
+-- them: no key material outlives the membership. Runs as the table owner,
+-- since members can't update roles or delete key copies.
+create or replace function public.handle_membership_removed()
+returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from huddle_keys where huddle_id = old.huddle_id and user_id = old.user_id;
+  if old.role = 'keeper'
+     and not exists (select 1 from memberships where huddle_id = old.huddle_id and role = 'keeper') then
+    update memberships set role = 'keeper'
+      where id = (select id from memberships where huddle_id = old.huddle_id
+                  order by joined_at, id limit 1);
+  end if;
+  return old;
+end $$;
+
+create trigger memberships_after_delete
+  after delete on public.memberships
+  for each row execute function public.handle_membership_removed();
 
 -- Decrements the CALLER's token and records their skip, atomically.
 -- `p_user` is accepted for signature stability but deliberately ignored:
@@ -355,8 +404,10 @@ end $$;
 -- ======================================================= storage RLS
 -- One private bucket, "deposits", with two path namespaces:
 --   "<huddle_id>/<file>.jpg"          → huddle photos (ciphertext), gated by membership
---   "avatars/<user_id>/<file>.jpg"   → profile photos: any signed-in user
---                                      may view; only the owner may write.
+--   "avatars/<user_id>/<file>.jpg"   → profile photos: readable by the owner and
+--                                      anyone who shares a huddle with them (the
+--                                      same people who can read the profile row);
+--                                      only the owner may write.
 
 -- Safe uuid cast: the avatars namespace would otherwise crash the
 -- huddle-membership check ('avatars'::uuid raises).
@@ -369,10 +420,15 @@ exception when others then
   return null;
 end $$;
 
-create policy deposits_storage_read on storage.objects for select
+-- Signed-in callers only: the anon key ships in the app, so an anon-readable
+-- path is a public one (listable through the Storage API).
+create policy deposits_storage_read on storage.objects for select to authenticated
   using (
     bucket_id = 'deposits' and (
-      (storage.foldername(name))[1] = 'avatars'
+      (
+        (storage.foldername(name))[1] = 'avatars'
+        and shares_huddle_with(try_uuid((storage.foldername(name))[2]))
+      )
       or (
         try_uuid((storage.foldername(name))[1]) is not null
         and is_huddle_member(try_uuid((storage.foldername(name))[1]))

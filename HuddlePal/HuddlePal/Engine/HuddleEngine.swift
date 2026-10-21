@@ -41,11 +41,19 @@ struct HuddleEngine {
     let calendar: Calendar
     private let formatter: DateFormatter
 
+    /// Only the time zone is taken from `calendar`. Day keys are always
+    /// Gregorian ("2026-10-21"), whatever calendar the user picked in
+    /// Settings, because the server checks them against its own dates: with
+    /// the Buddhist calendar (Thailand's default) "yyyy" would print 2569.
+    /// Every calendar Foundation offers starts its days at midnight, so day
+    /// boundaries are unchanged.
     init(calendar: Calendar = .current) {
-        self.calendar = calendar
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        self.calendar = gregorian
         let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
+        formatter.calendar = gregorian
+        formatter.timeZone = gregorian.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         self.formatter = formatter
@@ -194,6 +202,19 @@ struct HuddleEngine {
         let deadline: Date
         /// What the streak becomes if recovery succeeds right now.
         let recoverableStreak: Int
+
+        /// A recovery computed earlier can outlive its window (the app stays
+        /// open past midnight): it only counts while `now < deadline`.
+        func isOpen(at now: Date) -> Bool {
+            now < deadline
+        }
+
+        /// The countdown's range. Never reversed: a `ClosedRange` whose lower
+        /// bound passed its upper bound traps, which crashed the Home screen
+        /// when a banner was still showing after its deadline.
+        func countdown(from now: Date) -> ClosedRange<Date> {
+            now...max(now, deadline)
+        }
     }
 
     /// Non-nil while yesterday ended incomplete, the window is still open,
@@ -270,7 +291,7 @@ struct HuddleEngine {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return String(trimmed.prefix(captionLimit))
+        return trimmed.prefix(serverLength: captionLimit)
     }
 
     /// 6-char alphanumeric code; ambiguous glyphs (0/O, 1/I/L) excluded.

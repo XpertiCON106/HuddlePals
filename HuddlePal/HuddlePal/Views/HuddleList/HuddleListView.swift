@@ -137,7 +137,9 @@ private struct HuddleRowCard: View {
                     Text(todayLine)
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
+                        // Two lines on small phones rather than "3 waiting fo…".
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

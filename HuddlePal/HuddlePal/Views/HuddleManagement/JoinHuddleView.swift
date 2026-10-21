@@ -26,6 +26,10 @@ struct JoinHuddleView: View {
         .onAppear {
             if viewModel == nil { viewModel = JoinHuddleViewModel(deps: deps) }
         }
+        .onChange(of: deps.session.pendingInviteCode) {
+            // A second link while Join is already open isn't pushed again.
+            viewModel?.usePendingInvite()
+        }
     }
 }
 
@@ -53,6 +57,7 @@ private struct JoinHuddleContent: View {
             Image(systemName: "person.badge.key")
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(Theme.accent)
+                .accessibilityHidden(true)
                 .padding(.top, 24)
 
             Text("Enter your invite code")

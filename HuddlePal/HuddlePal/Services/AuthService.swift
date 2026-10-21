@@ -132,6 +132,10 @@ protocol AuthServiceProtocol: AnyObject {
     /// shared huddles as "Former member" (the archive is permanent); the
     /// user's profile, avatar, and login are removed and they're signed out.
     func deleteAccount() async throws
+    /// After sign-out or deletion, once the session is cleared: forgets
+    /// everything that account could see on this device (synced rows, cached
+    /// photos), so the next person to sign in finds none of it.
+    func removeLocalData() throws
 }
 
 extension AuthValidation {
@@ -142,7 +146,7 @@ extension AuthValidation {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return String(trimmed.prefix(bioLimit))
+        return trimmed.prefix(serverLength: bioLimit)
     }
 }
 
@@ -269,6 +273,10 @@ final class MockAuthService: AuthServiceProtocol {
         defaults.removeObject(forKey: Self.currentUserIDKey)
         defaults.set(true, forKey: Self.signedOutKey)
     }
+
+    /// Nothing to forget: the seeded world is the mock's whole data set and
+    /// lives on this device by design.
+    func removeLocalData() throws {}
 
     // MARK: Internals
 

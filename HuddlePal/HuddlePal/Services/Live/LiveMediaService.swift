@@ -79,6 +79,7 @@ final class LiveMediaService: MediaServiceProtocol {
     }
 
     func loadImageData(at relativePath: String) async -> Data? {
+        guard MockMediaService.isSafe(relativePath) else { return nil }
         if let cached = await localCache.loadImageData(at: relativePath) {
             return cached
         }
@@ -88,6 +89,11 @@ final class LiveMediaService: MediaServiceProtocol {
         }
         _ = try? await localCache.saveImageData(data, preferredName: storagePath)
         return data
+    }
+
+    /// Sign-out / account deletion: drops every cached photo.
+    func removeLocalCache() {
+        localCache.removeAll()
     }
 
     func deleteImage(at relativePath: String) {

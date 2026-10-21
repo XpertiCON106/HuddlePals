@@ -96,12 +96,17 @@ private struct TermsStep: View {
                 PrimaryButton(title: "Agree", systemImage: "checkmark", isEnabled: viewModel.hasReachedEndOfTerms) {
                     withAnimation { viewModel.agreeToTerms() }
                 }
-                Button("Decline") {
+                Button {
                     withAnimation { viewModel.declineTerms() }
+                } label: {
+                    // The frame inside the label: outside it, only the
+                    // word itself was tappable.
+                    Text("Decline")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: .infinity, minHeight: 44)
             }
             .padding(.top, 14)
             .padding(.bottom, 8)
@@ -144,6 +149,7 @@ private struct ConceptCard: View {
             Image(systemName: card.systemImage)
                 .font(.system(size: 64, weight: .light))
                 .foregroundStyle(Theme.accent)
+                .accessibilityHidden(true)
             Text(card.title)
                 .font(Theme.displayFont(30))
                 .foregroundStyle(Theme.textPrimary)
@@ -427,6 +433,11 @@ private struct ProfileStep: View {
             TextField("Your name", text: $viewModel.displayName)
                 .font(.system(size: 18, weight: .medium))
                 .textContentType(.name)
+                .onChange(of: viewModel.displayName) { _, newValue in
+                    if newValue.serverLength > TextLimit.displayName {
+                        viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
+                    }
+                }
                 .multilineTextAlignment(.center)
                 .focused($nameFocused)
                 .submitLabel(.done)

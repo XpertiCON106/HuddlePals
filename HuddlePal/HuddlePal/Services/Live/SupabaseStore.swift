@@ -284,6 +284,12 @@ final class SupabaseStore {
         try context.save()
     }
 
+    /// Sign-out / account deletion: every synced row goes, so nothing the
+    /// previous account could see is left for the next one.
+    func removeAllLocalData() throws {
+        try context.deleteAllHuddleData()
+    }
+
     /// Only a format this build can decrypt; anything else (a newer
     /// `enc_version`) renders as the locked placeholder.
     private static func wrappedPhotoKey(of dto: DepositDTO) -> String? {
@@ -292,6 +298,8 @@ final class SupabaseStore {
 
     private static func dayKeyDate(_ key: String) -> Date? {
         let formatter = DateFormatter()
+        // Day keys are Gregorian; the user's own calendar would misread the year.
+        formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.date(from: key)

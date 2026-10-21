@@ -22,6 +22,10 @@ final class ArchiveViewModel {
     private(set) var months: [MonthSection] = []
     /// Non-nil when "add to yesterday" should be offered.
     private(set) var backfillDayKey: String?
+    /// False until the first refresh lands (an empty archive is unknown until then).
+    private(set) var hasLoaded = false
+    /// The last refresh failed; the archive shown is the last one synced.
+    private(set) var loadError: String?
 
     init(deps: AppDependencies, huddle: Huddle) {
         self.deps = deps
@@ -32,6 +36,7 @@ final class ArchiveViewModel {
         guard let user = deps.session.currentUser else {
             months = []
             backfillDayKey = nil
+            hasLoaded = true
             return
         }
         do {
@@ -65,10 +70,22 @@ final class ArchiveViewModel {
             } else {
                 backfillDayKey = nil
             }
+            hasLoaded = true
+            loadError = nil
         } catch {
             // Pull-based refresh: keep the last-known archive on a transient
             // failure rather than collapsing to the misleading empty state.
+            loadError = error.localizedDescription
         }
+    }
+
+    /// Backfilling can complete yesterday and so restore the streak (what
+    /// the recovery window is for): recompute it now, as Home does after a
+    /// deposit, instead of at the huddle list's next daily recompute.
+    func handleBackfillSuccess() async {
+        try? await deps.huddleService.recomputeStreak(for: huddle, now: deps.dateProvider.now)
+        await refresh()
+        await deps.reminders.refresh()
     }
 
     private static func group(_ deposits: [Deposit], engine: HuddleEngine) -> [MonthSection] {
@@ -83,10 +100,12 @@ final class ArchiveViewModel {
         }
         .sorted { $0.dayKey > $1.dayKey } // newest first
 
+        // Display only: the user's own calendar and locale (the engine's
+        // calendar is always Gregorian, for day keys).
         let monthFormatter = DateFormatter()
-        monthFormatter.calendar = engine.calendar
+        monthFormatter.calendar = Calendar.current
         monthFormatter.timeZone = engine.calendar.timeZone
-        monthFormatter.dateFormat = "MMMM yyyy"
+        monthFormatter.setLocalizedDateFormatFromTemplate("MMMMyyyy")
 
         var order: [String] = []
         var grouped: [String: [DaySection]] = [:]

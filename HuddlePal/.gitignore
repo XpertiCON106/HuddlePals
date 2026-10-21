@@ -2,7 +2,13 @@
 # fill it in; never commit it.
 HuddlePal/Supabase.plist
 
+# Backend test dependencies (npm install in supabase/tests)
+supabase/tests/node_modules/
+
 # Xcode
 xcuserdata/
 DerivedData/
 *.xcuserstate
+
+# Local test output (scripts/test-all.sh)
+build/

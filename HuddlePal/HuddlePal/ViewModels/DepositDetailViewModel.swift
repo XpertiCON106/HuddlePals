@@ -77,7 +77,8 @@ final class DepositDetailViewModel {
 
     func postComment() async {
         let text = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let user = deps.session.currentUser else { return }
+        guard !isPosting, (1...TextLimit.comment).contains(text.serverLength),
+              let user = deps.session.currentUser else { return }
         isPosting = true
         errorMessage = nil
         defer { isPosting = false }

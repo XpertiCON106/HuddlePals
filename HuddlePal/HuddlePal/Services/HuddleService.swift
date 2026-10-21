@@ -6,6 +6,8 @@ enum HuddleServiceError: LocalizedError {
     case alreadyMember
     case notAMember
     case huddleFull
+    /// Too many wrong invite codes recently (the server allows 10 an hour).
+    case tooManyAttempts
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +15,7 @@ enum HuddleServiceError: LocalizedError {
         case .alreadyMember: "You're already a member of this huddle."
         case .notAMember: "You're not a member of this huddle."
         case .huddleFull: "This huddle already has 8 members — that's the limit."
+        case .tooManyAttempts: "Too many codes that didn't match. Wait an hour, then try again."
         }
     }
 }
@@ -118,10 +121,16 @@ final class MockHuddleService: HuddleServiceProtocol {
     }
 
     func leaveHuddle(_ huddle: Huddle, user: User) async throws {
-        // TODO: BACKEND — delete the membership row; server reassigns the
-        // keeper role if the keeper leaves.
+        // Live: deleting the membership row fires the server's
+        // memberships_after_delete trigger, which hands the keeper role to
+        // the longest-standing remaining member. Mirrored here.
         guard let membership = huddle.memberships.first(where: { $0.user?.id == user.id }) else {
             throw HuddleServiceError.notAMember
+        }
+        let remaining = huddle.sortedMemberships.filter { $0.id != membership.id }
+        if membership.role == .keeper, !remaining.contains(where: { $0.role == .keeper }),
+           let successor = remaining.min(by: { $0.joinedAt < $1.joinedAt }) {
+            successor.role = .keeper
         }
         context.delete(membership)
         try context.save()

@@ -14,16 +14,25 @@
 			remoteGlobalIDString = AA0000000000000000000020;
 			remoteInfo = HuddlePal;
 		};
+		AA0000000000000000000062 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000020;
+			remoteInfo = HuddlePal;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		AA0000000000000000000030 /* HuddlePal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HuddlePal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000031 /* HuddlePalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HuddlePalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000032 /* HuddlePalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HuddlePalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000010 /* HuddlePal */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = HuddlePal; sourceTree = "<group>"; };
 		AA0000000000000000000011 /* HuddlePalTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = HuddlePalTests; sourceTree = "<group>"; };
+		AA0000000000000000000012 /* HuddlePalUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = HuddlePalUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -41,6 +50,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000047 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -49,6 +65,7 @@
 			children = (
 				AA0000000000000000000010 /* HuddlePal */,
 				AA0000000000000000000011 /* HuddlePalTests */,
+				AA0000000000000000000012 /* HuddlePalUITests */,
 				AA0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -58,6 +75,7 @@
 			children = (
 				AA0000000000000000000030 /* HuddlePal.app */,
 				AA0000000000000000000031 /* HuddlePalTests.xctest */,
+				AA0000000000000000000032 /* HuddlePalUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,6 +129,29 @@
 			productReference = AA0000000000000000000031 /* HuddlePalTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		AA0000000000000000000022 /* HuddlePalUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000059 /* Build configuration list for PBXNativeTarget "HuddlePalUITests" */;
+			buildPhases = (
+				AA0000000000000000000046 /* Sources */,
+				AA0000000000000000000047 /* Frameworks */,
+				AA0000000000000000000048 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000063 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000012 /* HuddlePalUITests */,
+			);
+			name = HuddlePalUITests;
+			packageProductDependencies = (
+			);
+			productName = HuddlePalUITests;
+			productReference = AA0000000000000000000032 /* HuddlePalUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -126,6 +167,10 @@
 					};
 					AA0000000000000000000021 = {
 						CreatedOnToolsVersion = 16.0;
+						TestTargetID = AA0000000000000000000020;
+					};
+					AA0000000000000000000022 = {
+						CreatedOnToolsVersion = 26.1;
 						TestTargetID = AA0000000000000000000020;
 					};
 				};
@@ -146,6 +191,7 @@
 			targets = (
 				AA0000000000000000000020 /* HuddlePal */,
 				AA0000000000000000000021 /* HuddlePalTests */,
+				AA0000000000000000000022 /* HuddlePalUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -159,6 +205,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AA0000000000000000000045 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000048 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -205,6 +258,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000046 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -212,6 +272,11 @@
 			isa = PBXTargetDependency;
 			target = AA0000000000000000000020 /* HuddlePal */;
 			targetProxy = AA0000000000000000000060 /* PBXContainerItemProxy */;
+		};
+		AA0000000000000000000063 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000020 /* HuddlePal */;
+			targetProxy = AA0000000000000000000062 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -444,6 +509,38 @@
 			};
 			name = Release;
 		};
+		AA000000000000000000005A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.huddlepals.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = HuddlePal;
+			};
+			name = Debug;
+		};
+		AA000000000000000000005B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.huddlepals.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = HuddlePal;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -470,6 +567,15 @@
 			buildConfigurations = (
 				AA0000000000000000000057 /* Debug */,
 				AA0000000000000000000058 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000059 /* Build configuration list for PBXNativeTarget "HuddlePalUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA000000000000000000005A /* Debug */,
+				AA000000000000000000005B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

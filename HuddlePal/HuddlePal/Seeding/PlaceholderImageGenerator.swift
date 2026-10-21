@@ -37,7 +37,9 @@ enum PlaceholderImageGenerator {
                     gradient,
                     start: .zero,
                     end: CGPoint(x: size.width * 0.3, y: size.height),
-                    options: []
+                    // Past the end point the canvas is otherwise left
+                    // unpainted: a white wedge in every seeded photo.
+                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
                 )
             }
 
