@@ -39,6 +39,16 @@ final class ComposeTests: XCTestCase {
         }
     }
 
+    func testCameraAvailabilityExplainsEveryWayTheCameraCanBeMissing() {
+        // QA-11: a refusal used to open the system's black camera screen.
+        XCTAssertEqual(CameraPicker.availability(hasCamera: true, status: .authorized), .ready)
+        XCTAssertEqual(CameraPicker.availability(hasCamera: true, status: .notDetermined), .ready, "iOS asks on first open")
+        XCTAssertEqual(CameraPicker.availability(hasCamera: true, status: .denied), .denied)
+        // Screen Time also makes the source type unavailable: it is not "no camera".
+        XCTAssertEqual(CameraPicker.availability(hasCamera: false, status: .restricted), .restricted)
+        XCTAssertEqual(CameraPicker.availability(hasCamera: false, status: .notDetermined), .noCamera)
+    }
+
     func testADoubleTapPostsOnce() async throws {
         let huddle = try await crew()
         let viewModel = ComposeViewModel(deps: deps, huddle: huddle)

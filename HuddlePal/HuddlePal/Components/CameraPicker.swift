@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -10,6 +11,31 @@ struct CameraPicker: UIViewControllerRepresentable {
     /// False on the Simulator and any device without a camera.
     static var isAvailable: Bool {
         UIImagePickerController.isSourceTypeAvailable(.camera)
+    }
+
+    /// Whether Compose can open the camera, and if not, why.
+    enum Availability: Equatable {
+        /// Open it (iOS asks for permission the first time).
+        case ready
+        /// The user turned camera access off for HuddlePals: Settings fixes it.
+        case denied
+        /// Screen Time or a device profile blocks the camera.
+        case restricted
+        /// The Simulator, or a device without a camera.
+        case noCamera
+    }
+
+    /// Permission is checked first: a restricted camera also reports the
+    /// source type as unavailable, and must not read as "no camera".
+    static func availability(
+        hasCamera: Bool = isAvailable,
+        status: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    ) -> Availability {
+        switch status {
+        case .denied: return .denied
+        case .restricted: return .restricted
+        default: return hasCamera ? .ready : .noCamera
+        }
     }
 
     var onCapture: (UIImage) -> Void
