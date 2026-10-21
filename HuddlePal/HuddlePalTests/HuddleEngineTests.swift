@@ -422,3 +422,12 @@ final class HuddleEngineTests: XCTestCase {
         XCTAssertEqual(AvatarStyle.components(of: "").count, 1)
     }
 }
+
+/// QA-27: every identity color in the picker has its own spoken name.
+final class AvatarPaletteAccessibilityTests: XCTestCase {
+    func testEveryPaletteColorHasADistinctSpokenName() {
+        let names = AvatarPalette.hexes.map(AvatarPalette.name(for:))
+        XCTAssertFalse(names.contains("Custom color"))
+        XCTAssertEqual(Set(names).count, AvatarPalette.hexes.count)
+    }
+}

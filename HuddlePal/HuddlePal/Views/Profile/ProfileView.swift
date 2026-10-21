@@ -451,6 +451,7 @@ private struct ProfileDraftPhotoImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .accessibilityLabel("New profile photo, not saved yet")
             } else if let path = photo.persistedPath {
                 LocalDepositImage(relativePath: path, maxPixelSize: 380)
             } else {

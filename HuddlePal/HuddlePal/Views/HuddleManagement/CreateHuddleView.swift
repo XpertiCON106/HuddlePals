@@ -84,6 +84,7 @@ private struct CreateHuddleContent: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(choice == viewModel.emoji ? .isSelected : [])
                 }
             }
 

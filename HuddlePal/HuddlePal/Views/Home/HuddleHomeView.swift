@@ -326,6 +326,7 @@ private struct RecoveryBanner: View {
 private struct UnlockRevealOverlay: View {
     let onFinished: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var lockOpen = false
     @State private var fadeOut = false
 
@@ -335,15 +336,16 @@ private struct UnlockRevealOverlay: View {
             Image(systemName: lockOpen ? "lock.open.fill" : "lock.fill")
                 .font(.system(size: 64, weight: .medium))
                 .foregroundStyle(Theme.accent)
-                .scaleEffect(lockOpen ? 1.25 : 1)
-                .rotationEffect(.degrees(lockOpen ? -12 : 0))
+                // Reduce Motion: the lock just changes and fades, no spring.
+                .scaleEffect(lockOpen && !reduceMotion ? 1.25 : 1)
+                .rotationEffect(.degrees(lockOpen && !reduceMotion ? -12 : 0))
                 .opacity(fadeOut ? 0 : 1)
                 .contentTransition(.symbolEffect(.replace))
         }
         .ignoresSafeArea()
         .allowsHitTesting(!fadeOut)
         .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.55).delay(0.15)) {
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 0.55).delay(0.15)) {
                 lockOpen = true
             }
             withAnimation(.easeOut(duration: 0.35).delay(0.95)) {

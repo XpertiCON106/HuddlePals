@@ -149,6 +149,7 @@ private struct ComposeContent: View {
                     .resizable()
                     .scaledToFill()
                     .aspectRatio(3 / 4, contentMode: .fit)
+                    .accessibilityLabel("Your photo")
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
                     .overlay(alignment: .bottomTrailing) {
                         Button {
@@ -258,6 +259,7 @@ private struct ComposeContent: View {
                     .resizable()
                     .scaledToFill()
                     .aspectRatio(3 / 4, contentMode: .fit)
+                    .accessibilityLabel("Your photo")
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)

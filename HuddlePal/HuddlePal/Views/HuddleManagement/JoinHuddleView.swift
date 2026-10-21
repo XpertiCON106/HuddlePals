@@ -57,6 +57,7 @@ private struct JoinHuddleContent: View {
             Image(systemName: "person.badge.key")
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(Theme.accent)
+                .accessibilityHidden(true)
                 .padding(.top, 24)
 
             Text("Enter your invite code")
