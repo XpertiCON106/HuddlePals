@@ -184,6 +184,20 @@ final class HuddleEngineTests: XCTestCase {
         XCTAssertNil(engine.recovery(memberIDs: members, deposits: deposits, now: now))
     }
 
+    func testARecoveryShownLastNightIsClosedTheNextMorning() throws {
+        // Computed in the evening, still on screen after midnight (QA-07).
+        let evening = date(2026, 6, 10, 21, 0)
+        let deposits = fullDays(offsets: -3...(-1), now: evening, absent: [-1: cleo])
+        let recovery = try XCTUnwrap(engine.recovery(memberIDs: members, deposits: deposits, now: evening))
+        XCTAssertTrue(recovery.isOpen(at: evening))
+        XCTAssertEqual(recovery.countdown(from: evening), evening...recovery.deadline)
+
+        let nextMorning = date(2026, 6, 11, 7, 0)
+        XCTAssertFalse(recovery.isOpen(at: nextMorning), "the banner hides instead of counting past zero")
+        // `nextMorning...recovery.deadline` would trap: the countdown stays a valid, empty range.
+        XCTAssertEqual(recovery.countdown(from: nextMorning), nextMorning...nextMorning)
+    }
+
     // MARK: Joining — members count from the day after they join
 
     func testJoiningDoesNotResetTheStreak() {

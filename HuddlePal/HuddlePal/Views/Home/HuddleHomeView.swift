@@ -43,7 +43,7 @@ private struct HomeContent: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
 
-                if let recovery = viewModel.recovery {
+                if let recovery = viewModel.recovery, recovery.isOpen(at: deps.dateProvider.now) {
                     RecoveryBanner(
                         recovery: recovery,
                         missingMembers: viewModel.recoveryMissingMembers,
@@ -78,6 +78,13 @@ private struct HomeContent: View {
         .toolbar { toolbarContent }
         .toolbarBackground(Theme.background, for: .navigationBar)
         .task { await viewModel.refresh() }
+        .task {
+            // Midnight (or a time zone change) while Home is open: today's
+            // gate and yesterday's recovery window both move.
+            for await _ in NotificationCenter.default.notifications(named: UIApplication.significantTimeChangeNotification) {
+                await viewModel.refresh()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await viewModel.refresh() }
@@ -254,7 +261,7 @@ private struct RecoveryBanner: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
-                Text(timerInterval: Date()...recovery.deadline, countsDown: true)
+                Text(timerInterval: recovery.countdown(from: Date()), countsDown: true)
                     .font(.system(size: 17, weight: .bold, design: .monospaced))
                     .foregroundStyle(Theme.destructive)
                     .monospacedDigit()

@@ -194,6 +194,19 @@ struct HuddleEngine {
         let deadline: Date
         /// What the streak becomes if recovery succeeds right now.
         let recoverableStreak: Int
+
+        /// A recovery computed earlier can outlive its window (the app stays
+        /// open past midnight): it only counts while `now < deadline`.
+        func isOpen(at now: Date) -> Bool {
+            now < deadline
+        }
+
+        /// The countdown's range. Never reversed: a `ClosedRange` whose lower
+        /// bound passed its upper bound traps, which crashed the Home screen
+        /// when a banner was still showing after its deadline.
+        func countdown(from now: Date) -> ClosedRange<Date> {
+            now...max(now, deadline)
+        }
     }
 
     /// Non-nil while yesterday ended incomplete, the window is still open,
