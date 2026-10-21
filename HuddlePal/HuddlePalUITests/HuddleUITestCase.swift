@@ -93,8 +93,15 @@ class HuddleUITestCase: XCTestCase {
         app.buttons.containing(.staticText, identifier: name).firstMatch.tap()
     }
 
+    /// iPhone has a tab bar at the bottom; iPadOS puts the tabs in a bar at
+    /// the top that isn't exposed as a tab bar. Both carry the tab's icon.
     func openTab(_ name: String) {
-        app.tabBars.buttons[name].tap()
+        let icons = ["Huddles": "square.stack.3d.up", "Profile": "person.crop.circle"]
+        if app.tabBars.firstMatch.exists {
+            app.tabBars.buttons[name].tap()
+        } else {
+            app.buttons.matching(identifier: icons[name] ?? name).firstMatch.tap()
+        }
     }
 
     /// Compose → stand-in camera → caption → confirm → post.
