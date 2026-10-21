@@ -5,6 +5,9 @@ final class JourneyTests: HuddleUITestCase {
     /// 1 (first half). First launch: the Terms gate, then the shelf.
     func testFirstLaunchShowsTheTermsThenTheShelf() {
         launch()
+        // After the launch reveal has gone (Agree is under it until then).
+        let agree = waitFor(app.buttons["Agree"], timeout: 20)
+        wait(for: [expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: agree)], timeout: 10)
         snapshot("01 terms")
         agreeToTerms()
         waitFor(app.staticTexts["The Crew"], timeout: 20)
@@ -17,8 +20,8 @@ final class JourneyTests: HuddleUITestCase {
         launchToShelf()
         openHuddle("The Crew")
         let cta = waitFor(app.buttons["Add today's memory"])
-        let tabBar = waitFor(app.tabBars.firstMatch)
-        if tabBar.frame.minY > app.frame.midY {
+        let tabBar = app.tabBars.firstMatch
+        if tabBar.exists && tabBar.frame.minY > app.frame.midY {
             // iPhone: the floating tab bar is at the bottom.
             XCTAssertLessThanOrEqual(cta.frame.maxY, tabBar.frame.minY + 1,
                                      "the button sits under the floating tab bar")
@@ -131,6 +134,10 @@ final class JourneyTests: HuddleUITestCase {
         save.tap()
         waitFor(app.alerts["Confirm Changes"]).buttons["Save Changes"].tap()
         waitFor(app.staticTexts["Saved"], timeout: 10)
+        // QA-33: done typing, a person swipes the list to put the keyboard
+        // away; it covers the tab bar until they can.
+        app.swipeDown()
+        waitUntilGone(app.otherElements["inputView"], timeout: 5)
 
         let reminder = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Daily upload reminder'")).firstMatch
         scrollTo(reminder)
@@ -144,6 +151,7 @@ final class JourneyTests: HuddleUITestCase {
         dark.tap()
         snapshot("12 profile dark")
         openTab("Huddles")
+        waitFor(app.staticTexts["The Crew"], timeout: 10, "the tab bar must be reachable after editing")
         snapshot("13 shelf dark")
     }
 

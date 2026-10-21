@@ -84,6 +84,9 @@ private struct ProfileContent: View {
             aboutSection
         }
         .scrollContentBackground(.hidden)
+        // The bio is multi-line (Return adds a line), so scrolling is how the
+        // keyboard goes away; without this it stayed over the tab bar.
+        .scrollDismissesKeyboard(.immediately)
         .background(Theme.background)
         .overlay {
             if viewModel.isLoading {
