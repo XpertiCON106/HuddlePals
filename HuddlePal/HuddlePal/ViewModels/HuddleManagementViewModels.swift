@@ -65,10 +65,16 @@ final class JoinHuddleViewModel {
     init(deps: AppDependencies) {
         self.deps = deps
         // A huddlepal://join/<code> link may have arrived before this screen.
-        if let pending = deps.session.pendingInviteCode {
-            code = pending
-            deps.session.pendingInviteCode = nil
-        }
+        usePendingInvite()
+    }
+
+    /// Takes the code of a huddlepal://join/<code> link, once. Also called
+    /// when a link arrives while this screen is already open.
+    func usePendingInvite() {
+        guard let pending = deps.session.pendingInviteCode else { return }
+        code = pending
+        errorMessage = nil
+        deps.session.pendingInviteCode = nil
     }
 
     func join() async {

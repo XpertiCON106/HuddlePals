@@ -192,6 +192,7 @@ private struct HugArm: Shape {
 // MARK: - Main tabs
 
 struct MainTabView: View {
+    @Environment(AppDependencies.self) private var deps
     @Environment(AppRouter.self) private var router
 
     var body: some View {
@@ -209,6 +210,10 @@ struct MainTabView: View {
             }
             .tabItem { Label("Profile", systemImage: "person.crop.circle") }
             .tag(AppTab.profile)
+        }
+        .task {
+            // An invite link opened before signing in.
+            router.openPendingInvite(deps.session)
         }
     }
 

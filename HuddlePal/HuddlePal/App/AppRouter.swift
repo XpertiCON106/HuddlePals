@@ -18,6 +18,18 @@ enum Route: Hashable {
     case userProfile(User)
 }
 
+/// The shareable invite link, huddlepal://join/<CODE>.
+enum InviteLink {
+    /// The code a link carries, uppercased: 6 letters or digits, the shape
+    /// join_huddle generates and the Join screen accepts. nil otherwise.
+    static func code(from url: URL) -> String? {
+        guard url.scheme == "huddlepal", url.host == "join" else { return nil }
+        let code = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard code.count == 6, code.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return nil }
+        return code
+    }
+}
+
 @MainActor
 @Observable
 final class AppRouter {
@@ -64,6 +76,12 @@ final class AppRouter {
             huddlesPath.append(route)
         }
         return true
+    }
+
+    /// An invite link that arrived while signed out opens Join once signed in.
+    func openPendingInvite(_ session: AppSession) {
+        guard session.pendingInviteCode != nil else { return }
+        navigateToHuddles(route: .joinHuddle)
     }
 
     func openHuddle(_ huddle: Huddle) {

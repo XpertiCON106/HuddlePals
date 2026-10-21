@@ -43,18 +43,17 @@ struct HuddlePalApp: App {
     /// huddlepal://join/<CODE> — the shareable invite link. Routes to the Join
     /// screen with the code prefilled (or parks it until sign-in finishes).
     private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "huddlepal", url.host == "join" else { return }
-        let code = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (4...8).contains(code.count) else { return }
+        guard let code = InviteLink.code(from: url) else { return }
         if dependencies.session.currentUser != nil {
             // `navigateToHuddles` consults the profile guard before mutating
             // either tab selection or path. A blocked link is canceled; its
             // code is deliberately not queued for replay after the warning.
             if router.navigateToHuddles(route: .joinHuddle) {
-                dependencies.session.pendingInviteCode = code.uppercased()
+                dependencies.session.pendingInviteCode = code
             }
         } else {
-            dependencies.session.pendingInviteCode = code.uppercased()
+            // Parked until sign-in; MainTabView then opens Join with it.
+            dependencies.session.pendingInviteCode = code
         }
     }
 }

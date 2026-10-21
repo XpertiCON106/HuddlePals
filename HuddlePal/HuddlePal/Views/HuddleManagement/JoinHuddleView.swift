@@ -26,6 +26,10 @@ struct JoinHuddleView: View {
         .onAppear {
             if viewModel == nil { viewModel = JoinHuddleViewModel(deps: deps) }
         }
+        .onChange(of: deps.session.pendingInviteCode) {
+            // A second link while Join is already open isn't pushed again.
+            viewModel?.usePendingInvite()
+        }
     }
 }
 
