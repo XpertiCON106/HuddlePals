@@ -78,6 +78,7 @@ private struct HomeContent: View {
             .padding(.bottom, 36)
         }
         .refreshable { await viewModel.refresh() }
+        .safeAreaInset(edge: .bottom) { depositCTA }
         .overlay {
             if viewModel.playUnlockReveal {
                 UnlockRevealOverlay {
@@ -184,8 +185,6 @@ private struct HomeContent: View {
                     BlurredDepositCard(deposit: deposit)
                 }
             }
-
-            depositCTA(title: "Add today's memory")
         }
     }
 
@@ -196,15 +195,26 @@ private struct HomeContent: View {
                 title: "Nobody has posted yet",
                 message: "Be the first today. Yours unlocks theirs the moment they deposit."
             )
-            depositCTA(title: "Deposit the first memory")
         }
     }
 
-    private func depositCTA(title: String) -> some View {
-        PrimaryButton(title: title, systemImage: "plus") {
-            viewModel.showCompose = true
+    /// The day's one action, pinned above the tab bar: at the end of the
+    /// scroll content it sat under the floating tab bar whenever a few
+    /// locked cards filled the screen.
+    @ViewBuilder
+    private var depositCTA: some View {
+        if viewModel.hasLoaded && !viewModel.isUnlocked {
+            PrimaryButton(
+                title: viewModel.todayDeposits.isEmpty ? "Deposit the first memory" : "Add today's memory",
+                systemImage: "plus"
+            ) {
+                viewModel.showCompose = true
+            }
+            .padding(.horizontal, Theme.screenPadding)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(Theme.background.opacity(0.94))
         }
-        .padding(.top, 6)
     }
 
     // MARK: Unlocked
