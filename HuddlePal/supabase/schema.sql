@@ -318,11 +318,14 @@ end $$;
 
 -- A huddle always has a keeper: when the keeper leaves (or deletes their
 -- account, which cascades here), the longest-standing remaining member
--- takes over. Runs as the table owner, since members can't update roles.
+-- takes over. A departing member's wrapped copy of the huddle key goes with
+-- them: no key material outlives the membership. Runs as the table owner,
+-- since members can't update roles or delete key copies.
 create or replace function public.handle_membership_removed()
 returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  delete from huddle_keys where huddle_id = old.huddle_id and user_id = old.user_id;
   if old.role = 'keeper'
      and not exists (select 1 from memberships where huddle_id = old.huddle_id and role = 'keeper') then
     update memberships set role = 'keeper'

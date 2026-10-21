@@ -70,6 +70,27 @@ describe('migrations', () => {
     assert.deepEqual(await admin(db, `select user_id from memberships where role = 'keeper'`), [{ user_id: B }])
   })
 
+  it('key copies held by people who already left are removed (QA-05)', async () => {
+    const { PGlite } = await import('@electric-sql/pglite')
+    const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto')
+    const { STUB_SQL, DEPLOYED_SQL, signUp, createHuddle, joinHuddle, affected, q, PUBLIC_KEY, WRAPPED_KEY } = await import('./harness.mjs')
+    const db = new PGlite({ extensions: { pgcrypto } })
+    await db.exec(STUB_SQL)
+    await db.exec(DEPLOYED_SQL)
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const h = await createHuddle(db, A)
+    await joinHuddle(db, B, h.invite_code)
+    for (const [u, c] of [[A, 'A'], [B, 'B']]) await q(db, u, 'insert into user_keys (user_id, public_key) values ($1, $2)', [u, PUBLIC_KEY(c)])
+    await q(db, A, 'select init_huddle_key($1, $2, $3, $4)', [h.id, WRAPPED_KEY, PUBLIC_KEY('E'), PUBLIC_KEY('A')])
+    await q(db, A, 'select share_huddle_key($1, $2, $3, $4, $5)', [h.id, B, WRAPPED_KEY, PUBLIC_KEY('F'), PUBLIC_KEY('B')])
+    await affected(db, B, 'delete from memberships where user_id = $1', [B])
+    assert.equal((await q(db, B, 'select * from huddle_keys')).length, 1, 'the old schema leaves the copy behind')
+    for (const { sql } of migrations()) await db.exec(sql)
+    assert.deepEqual(await q(db, B, 'select * from huddle_keys'), [])
+    assert.equal((await q(db, A, 'select * from huddle_keys')).length, 1, 'current members keep theirs')
+  })
+
   it('every migration can be applied twice', async () => {
     const db = await freshDatabase({ mode: 'migrated' })
     for (const { name, sql } of migrations()) {
