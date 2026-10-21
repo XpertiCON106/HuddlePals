@@ -266,6 +266,31 @@ actor SupabaseClient {
         return try decoder.decode([R].self, from: data)
     }
 
+    /// Rows asked for per request by `selectAll`. PostgREST cuts every
+    /// response at the project's max-rows setting (Supabase default 1000) and
+    /// silently drops the rest, so a read that can grow without bound must page.
+    static let pageSize = 500
+
+    /// Every row matching `query`, fetched a page at a time in a stable order.
+    /// Oldest first, so rows inserted mid-read land on a later page instead of
+    /// shifting earlier ones out of the result.
+    func selectAll<R: Decodable>(
+        _ table: String,
+        query: [URLQueryItem],
+        order: String = "created_at.asc,id.asc"
+    ) async throws -> [R] {
+        var rows: [R] = []
+        while true {
+            let page: [R] = try await select(table, query: query + [
+                URLQueryItem(name: "order", value: order),
+                URLQueryItem(name: "limit", value: String(Self.pageSize)),
+                URLQueryItem(name: "offset", value: String(rows.count)),
+            ])
+            rows += page
+            if page.count < Self.pageSize { return rows }
+        }
+    }
+
     @discardableResult
     func upsert<B: Encodable, R: Decodable>(
         _ table: String,
