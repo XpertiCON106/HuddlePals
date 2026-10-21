@@ -321,7 +321,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | reports / blocks | your own | your own |
 | user_keys | your own + co-members' public keys | only your own row |
 | huddle_keys | only your own wrapped copies | via `init_huddle_key` / `share_huddle_key` only |
-| storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/…` readable by any signed-in user | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
+| storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
 
 Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, `can_see_deposit`) are `SECURITY DEFINER` — the standard way to avoid the memberships-policy-reads-memberships RLS recursion trap.
 

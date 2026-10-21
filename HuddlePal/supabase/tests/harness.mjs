@@ -5,20 +5,42 @@
 
 import { PGlite } from '@electric-sql/pglite'
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 export const STUB_SQL = read('./supabase-stub.sql')
 export const SCHEMA_SQL = read('../schema.sql')
+/** schema.sql as production last ran it (b1af561, "start the backend fresh"). */
+export const DEPLOYED_SQL = read('./fixtures/deployed-schema-b1af561.sql')
+
+/** supabase/migrations/*.sql in the order they are applied. */
+export function migrations() {
+  const dir = new URL('../migrations/', import.meta.url)
+  return readdirSync(dir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+    .map((name) => ({ name, sql: readFileSync(new URL(name, dir), 'utf8') }))
+}
+
+/**
+ * HUDDLE_DB=fresh (default): schema.sql on an empty database.
+ * HUDDLE_DB=migrated: the deployed schema, then every migration — the path
+ * production takes. `npm test` runs the whole suite in both modes.
+ */
+export const MODE = process.env.HUDDLE_DB === 'migrated' ? 'migrated' : 'fresh'
 
 /** A fresh database with the full schema applied. */
-export async function freshDatabase({ schema = SCHEMA_SQL, extra = [] } = {}) {
+export async function freshDatabase({ mode = MODE } = {}) {
   const db = new PGlite({ extensions: { pgcrypto } })
   await db.exec(STUB_SQL)
-  await db.exec(schema)
-  for (const sql of extra) await db.exec(sql)
+  if (mode === 'migrated') {
+    await db.exec(DEPLOYED_SQL)
+    for (const { sql } of migrations()) await db.exec(sql)
+  } else {
+    await db.exec(SCHEMA_SQL)
+  }
   return db
 }
 

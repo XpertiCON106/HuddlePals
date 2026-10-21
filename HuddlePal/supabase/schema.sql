@@ -355,8 +355,10 @@ end $$;
 -- ======================================================= storage RLS
 -- One private bucket, "deposits", with two path namespaces:
 --   "<huddle_id>/<file>.jpg"          → huddle photos (ciphertext), gated by membership
---   "avatars/<user_id>/<file>.jpg"   → profile photos: any signed-in user
---                                      may view; only the owner may write.
+--   "avatars/<user_id>/<file>.jpg"   → profile photos: readable by the owner and
+--                                      anyone who shares a huddle with them (the
+--                                      same people who can read the profile row);
+--                                      only the owner may write.
 
 -- Safe uuid cast: the avatars namespace would otherwise crash the
 -- huddle-membership check ('avatars'::uuid raises).
@@ -369,10 +371,15 @@ exception when others then
   return null;
 end $$;
 
-create policy deposits_storage_read on storage.objects for select
+-- Signed-in callers only: the anon key ships in the app, so an anon-readable
+-- path is a public one (listable through the Storage API).
+create policy deposits_storage_read on storage.objects for select to authenticated
   using (
     bucket_id = 'deposits' and (
-      (storage.foldername(name))[1] = 'avatars'
+      (
+        (storage.foldername(name))[1] = 'avatars'
+        and shares_huddle_with(try_uuid((storage.foldername(name))[2]))
+      )
       or (
         try_uuid((storage.foldername(name))[1]) is not null
         and is_huddle_member(try_uuid((storage.foldername(name))[1]))
