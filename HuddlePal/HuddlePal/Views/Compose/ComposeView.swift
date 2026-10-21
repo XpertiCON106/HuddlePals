@@ -38,9 +38,14 @@ struct ComposeView: View {
                         onComplete(false)
                     }
                     .foregroundStyle(Theme.textSecondary)
+                    // Once posting starts it can't be called back: the
+                    // photo becomes permanent either way, so the sheet must
+                    // stay to report the result.
+                    .disabled(viewModel?.isSaving ?? false)
                 }
             }
         }
+        .interactiveDismissDisabled(viewModel?.isSaving ?? false)
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image in
                 viewModel?.setCapturedImage(image)
