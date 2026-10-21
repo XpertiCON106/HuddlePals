@@ -18,14 +18,15 @@ create table public.profiles (
   avatar_color_hex text not null default 'E5484D',
   bio text check (bio is null or char_length(bio) <= 160),
   -- Up to 3 profile photo storage paths ("avatars/<user_id>/<file>.jpg").
-  photo_paths jsonb not null default '[]'::jsonb,
+  photo_paths jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(photo_paths) = 'array' and jsonb_array_length(photo_paths) <= 3),
   created_at timestamptz not null default now()
 );
 
 create table public.huddles (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(name) between 1 and 60),
-  emoji text not null default '🏔',
+  emoji text not null default '🏔' check (char_length(emoji) between 1 and 16),
   invite_code text not null unique,
   notification_hour int not null default 19 check (notification_hour between 0 and 23),
   streak_count int not null default 0,

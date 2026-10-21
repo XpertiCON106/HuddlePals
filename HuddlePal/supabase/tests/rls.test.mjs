@@ -63,6 +63,14 @@ describe('profiles', () => {
     )
   })
 
+  it('a profile holds at most 3 photo paths, as a list (QA-06)', async () => {
+    const { db, B } = w
+    const paths = (n) => JSON.stringify(Array.from({ length: n }, (_, i) => `Media/avatars/${B}/${i}.jpg`))
+    assert.equal(await affected(db, B, `update profiles set photo_paths = $1::jsonb where id = $2`, [paths(3), B]), 1)
+    await assert.rejects(q(db, B, `update profiles set photo_paths = $1::jsonb where id = $2`, [paths(4), B]), /check constraint/)
+    await assert.rejects(q(db, B, `update profiles set photo_paths = '{"a":1}'::jsonb where id = $1`, [B]), /check constraint/)
+  })
+
   it('a user cannot move their own profile to another id', async () => {
     const { db, B, D } = w
     await assert.rejects(q(db, B, `update profiles set id = $1 where id = $2`, [D, B]), /row-level security|violates|duplicate/)
@@ -85,6 +93,7 @@ describe('huddles', () => {
     assert.equal(await affected(db, A, `update huddles set name = 'Fam' where id = $1`, [H1.id]), 1)
     await assert.rejects(q(db, A, `update huddles set streak_count = 999 where id = $1`, [H1.id]), RLS_DENIED)
     await assert.rejects(q(db, A, `update huddles set invite_code = 'AAAAAA' where id = $1`, [H1.id]), RLS_DENIED)
+    await assert.rejects(q(db, A, `update huddles set emoji = $1 where id = $2`, ['🏔'.repeat(500), H1.id]), /check constraint/, 'QA-06')
   })
 
   it('huddles cannot be inserted or deleted directly', async () => {
