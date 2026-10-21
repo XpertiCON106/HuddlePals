@@ -5,6 +5,7 @@ import SwiftUI
 /// session exists and the Terms are accepted.
 struct RootView: View {
     @Environment(AppDependencies.self) private var deps
+    @Environment(AppRouter.self) private var router
     @State private var viewModel: RootViewModel?
     @State private var showLaunchReveal = true
 
@@ -33,6 +34,12 @@ struct RootView: View {
             }
         }
         .background(Theme.background)
+        .onChange(of: deps.session.currentUser == nil) { _, signedOut in
+            // However the session ended (sign-out, deletion, or the server
+            // refusing it), the next account starts on a clean stack: no
+            // route may point at a model that was just deleted.
+            if signedOut { router.resetAll() }
+        }
         .task {
             if viewModel == nil {
                 let vm = RootViewModel(deps: deps)

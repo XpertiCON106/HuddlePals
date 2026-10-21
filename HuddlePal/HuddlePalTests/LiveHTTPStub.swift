@@ -92,9 +92,13 @@ enum LiveStub {
 
     /// A client holding a fresh session for `userID`, signed in through a
     /// stubbed email-code verify. Clears any Keychain session first.
-    static func signedInClient(userID: UUID = UUID(), expiresIn: Int = 3600) async throws -> SupabaseClient {
+    static func signedInClient(
+        userID: UUID = UUID(),
+        expiresIn: Int = 3600,
+        onSessionEnded: @escaping @Sendable () -> Void = {}
+    ) async throws -> SupabaseClient {
         KeychainStore.delete(key: sessionKey)
-        let client = SupabaseClient(config: config, urlSession: urlSession())
+        let client = SupabaseClient(config: config, urlSession: urlSession(), onSessionEnded: onSessionEnded)
         StubURLProtocol.respond { _ in
             Reply(body: json([
                 "access_token": "access", "refresh_token": "refresh", "expires_in": expiresIn,

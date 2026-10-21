@@ -60,9 +60,19 @@ actor SupabaseClient {
         return URLSession(configuration: configuration)
     }
 
-    init(config: BackendConfig, urlSession: URLSession = SupabaseClient.makeURLSession()) {
+    /// Called when the server ends the session (a refused refresh token, e.g.
+    /// after signing out everywhere), so the app returns to sign-in instead
+    /// of failing every request with "Not signed in".
+    private let onSessionEnded: @Sendable () -> Void
+
+    init(
+        config: BackendConfig,
+        urlSession: URLSession = SupabaseClient.makeURLSession(),
+        onSessionEnded: @escaping @Sendable () -> Void = {}
+    ) {
         self.config = config
         self.urlSession = urlSession
+        self.onSessionEnded = onSessionEnded
         decoder = Self.makeDecoder()
         encoder = Self.makeEncoder()
 
@@ -192,15 +202,23 @@ actor SupabaseClient {
                     body: ["refresh_token": refreshToken]
                 )
                 return storeSession(from: response)
-            } catch ClientError.http(let status, _) where (400..<500).contains(status) {
+            } catch ClientError.http(let status, _) where Self.refusesSession(status) {
                 // Refresh token revoked/expired — surface as signed out.
                 clearSession()
+                onSessionEnded()
                 return nil
             }
         }
         refreshTask = task
         defer { refreshTask = nil }
         return try await task.value
+    }
+
+    /// A 4xx answer to a refresh means the token is no good, except a
+    /// timeout (408) or GoTrue's rate limit (429): those say nothing about
+    /// the session, and signing out on them would wipe a valid one.
+    static func refusesSession(_ status: Int) -> Bool {
+        (400..<500).contains(status) && status != 408 && status != 429
     }
 
     func signOut() async {

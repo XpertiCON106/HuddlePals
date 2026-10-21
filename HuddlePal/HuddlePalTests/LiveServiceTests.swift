@@ -139,6 +139,48 @@ final class LiveServiceTests: XCTestCase {
         }
     }
 
+    // MARK: The server ending the session (QA-13)
+
+    func testARefusedRefreshEndsTheSessionInTheApp() async throws {
+        let ended = expectation(description: "the app is told the session ended")
+        let client = try await LiveStub.signedInClient(userID: me.id, expiresIn: 0) { ended.fulfill() }
+        StubURLProtocol.respond { _ in
+            .init(status: 400, body: LiveStub.json(["error": "invalid_grant", "error_description": "Refresh Token Not Found"]))
+        }
+        let session = try await client.validSession()
+        XCTAssertNil(session)
+        await fulfillment(of: [ended], timeout: 2)
+    }
+
+    func testARateLimitedRefreshKeepsTheSession() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id, expiresIn: 0) {
+            XCTFail("a rate limit says nothing about the session")
+        }
+        StubURLProtocol.respond { _ in .init(status: 429, body: LiveStub.json(["msg": "Request rate limit reached"])) }
+        do {
+            _ = try await client.validSession()
+            XCTFail("the refresh failed; it should throw, not return a session")
+        } catch SupabaseClient.ClientError.http(let status, _) {
+            XCTAssertEqual(status, 429)
+        }
+        let stillSignedIn = await client.currentUserID
+        XCTAssertEqual(stillSignedIn, me.id)
+        XCTAssertNotNil(KeychainStore.load(key: LiveStub.sessionKey))
+    }
+
+    func testEndingTheSessionReturnsTheAppToSignIn() async {
+        let deps = AppDependencies.makeMock(inMemory: true)
+        deps.session.currentUser = me
+        deps.session.needsProfileSetup = true
+        deps.session.pendingInviteCode = "CREW42"
+        deps.session.blockedUserIDs = [UUID()]
+        await deps.endSession()
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertFalse(deps.session.needsProfileSetup)
+        XCTAssertNil(deps.session.pendingInviteCode)
+        XCTAssertTrue(deps.session.blockedUserIDs.isEmpty)
+    }
+
     // MARK: Joining (QA-02)
 
     func testTooManyWrongInviteCodesSaysSoInsteadOfAGenericError() async throws {

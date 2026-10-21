@@ -37,6 +37,15 @@ final class DebugSettings {
     var simulateNotPostedToday = false
 }
 
+// MARK: - Session end relay
+
+/// Lets the Supabase client, built before the dependencies that own it,
+/// reach them when the server ends the session.
+@MainActor
+final class SessionEndRelay {
+    weak var dependencies: AppDependencies?
+}
+
 // MARK: - Dependencies
 
 /// Composition root. Views receive this through the SwiftUI environment and
@@ -102,6 +111,21 @@ final class AppDependencies {
         self.reminders = reminders
     }
 
+    /// Ends the session on this device (sign-out, account deletion, or the
+    /// server refusing the session) and leaves nothing of the account for
+    /// whoever signs in next.
+    func endSession() async {
+        session.currentUser = nil
+        session.needsProfileSetup = false
+        session.pendingInviteCode = nil
+        session.blockedUserIDs = []
+        // In the same main-actor turn as clearing the session: the next
+        // render swaps the main UI for onboarding, so no mounted screen
+        // reads a model after it's deleted.
+        try? auth.removeLocalData()
+        await reminders.refresh()
+    }
+
     static func makeMock(inMemory: Bool = false, terms: TermsAcceptance = TermsAcceptance()) -> AppDependencies {
         let container = Self.makeContainer(inMemory: inMemory)
         let context = container.mainContext
@@ -152,13 +176,16 @@ final class AppDependencies {
         // time against the real backend.
         dateProvider.reset()
 
-        let client = SupabaseClient(config: config)
+        let relay = SessionEndRelay()
+        let client = SupabaseClient(config: config) {
+            Task { @MainActor in await relay.dependencies?.endSession() }
+        }
         let store = SupabaseStore(context: context)
         let session = AppSession()
         let keyring = LivePhotoKeyring(client: client, session: session)
         let media = LiveMediaService(client: client, keyring: keyring)
 
-        return AppDependencies(
+        let dependencies = AppDependencies(
             isLive: true,
             modelContainer: container,
             engine: engine,
@@ -189,6 +216,8 @@ final class AppDependencies {
                 dateProvider: dateProvider
             )
         )
+        relay.dependencies = dependencies
+        return dependencies
     }
 
     private static func makeContainer(inMemory: Bool) -> ModelContainer {
