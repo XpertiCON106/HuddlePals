@@ -1,0 +1,15 @@
+{
+  "name": "huddlepals-supabase-tests",
+  "private": true,
+  "type": "module",
+  "description": "Database, RLS, storage-policy and RPC tests for supabase/schema.sql, run against an in-process Postgres (PGlite).",
+  "scripts": {
+    "test": "node --test --test-reporter=spec"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
