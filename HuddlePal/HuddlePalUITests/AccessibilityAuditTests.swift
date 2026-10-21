@@ -65,7 +65,9 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         var failing: [String] = []
         // The bottom chrome: the floating tab bar and the 64 pt above it.
         let tabBar = app.tabBars.firstMatch
-        let chromeTop = (tabBar.exists ? tabBar.frame.minY : app.frame.maxY) - 64
+        // (On iPad the tab bar is at the top: no bottom chrome then.)
+        let bottomBar = tabBar.exists && tabBar.frame.minY > app.frame.midY
+        let chromeTop = (bottomBar ? tabBar.frame.minY : app.frame.maxY) - 64
         let navBar = app.navigationBars.firstMatch
         let chromeBottom = navBar.exists ? navBar.frame.maxY + 40 : 0
         // Looked up per issue: the keyboard may still be animating in when

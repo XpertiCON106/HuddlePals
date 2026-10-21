@@ -18,8 +18,14 @@ final class JourneyTests: HuddleUITestCase {
         openHuddle("The Crew")
         let cta = waitFor(app.buttons["Add today's memory"])
         let tabBar = waitFor(app.tabBars.firstMatch)
-        XCTAssertLessThanOrEqual(cta.frame.maxY, tabBar.frame.minY + 1,
-                                 "the button sits under the floating tab bar")
+        if tabBar.frame.minY > app.frame.midY {
+            // iPhone: the floating tab bar is at the bottom.
+            XCTAssertLessThanOrEqual(cta.frame.maxY, tabBar.frame.minY + 1,
+                                     "the button sits under the floating tab bar")
+        } else {
+            // iPad: the tab bar is at the top; the button must still be on screen.
+            XCTAssertLessThanOrEqual(cta.frame.maxY, app.frame.maxY)
+        }
         XCTAssertGreaterThan(cta.frame.minY, 0)
     }
 
