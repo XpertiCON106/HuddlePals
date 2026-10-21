@@ -126,6 +126,14 @@ final class AppDependencies {
         await reminders.refresh()
     }
 
+    /// Live only with a filled-in config, and never inside a test run: the
+    /// unit tests are hosted by the app itself, and a bundled live config
+    /// must not send its launch-time sync (streak recompute, key sharing)
+    /// to the real backend from a test simulator.
+    static func usesLiveBackend(config: BackendConfig?, environment: [String: String]) -> Bool {
+        config != nil && environment["XCTestConfigurationFilePath"] == nil
+    }
+
     static func makeMock(inMemory: Bool = false, terms: TermsAcceptance = TermsAcceptance()) -> AppDependencies {
         let container = Self.makeContainer(inMemory: inMemory)
         let context = container.mainContext

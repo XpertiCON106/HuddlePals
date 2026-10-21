@@ -8,9 +8,11 @@ struct HuddlePalApp: App {
     @State private var router = AppRouter()
 
     init() {
-        // Live when a filled-in Supabase.plist is bundled; mock otherwise.
+        // Live when a filled-in Supabase.plist is bundled (and this isn't a
+        // test run); mock otherwise.
         let deps: AppDependencies
-        if let config = BackendConfig.load() {
+        let config = BackendConfig.load()
+        if let config, AppDependencies.usesLiveBackend(config: config, environment: ProcessInfo.processInfo.environment) {
             deps = AppDependencies.makeLive(config: config)
         } else {
             deps = AppDependencies.makeMock()

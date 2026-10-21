@@ -51,7 +51,9 @@ actor SupabaseClient {
     private let config: BackendConfig
     private let urlSession: URLSession
     private var session: Session?
-    private static let sessionKey = "supabase.session"
+    /// Keychain account holding the session. Tests use their own, so a run
+    /// never clears a real sign-in on the simulator.
+    private let sessionKey: String
 
     let decoder: JSONDecoder
     let encoder: JSONEncoder
@@ -74,15 +76,17 @@ actor SupabaseClient {
     init(
         config: BackendConfig,
         urlSession: URLSession = SupabaseClient.makeURLSession(),
-        onSessionEnded: @escaping @Sendable () -> Void = {}
+        onSessionEnded: @escaping @Sendable () -> Void = {},
+        sessionKey: String = "supabase.session"
     ) {
         self.config = config
         self.urlSession = urlSession
         self.onSessionEnded = onSessionEnded
+        self.sessionKey = sessionKey
         decoder = Self.makeDecoder()
         encoder = Self.makeEncoder()
 
-        if let data = KeychainStore.load(key: Self.sessionKey),
+        if let data = KeychainStore.load(key: sessionKey),
            let saved = try? decoder.decode(Session.self, from: data) {
             session = saved
         }
@@ -259,14 +263,14 @@ actor SupabaseClient {
         )
         session = new
         if let data = try? encoder.encode(new) {
-            KeychainStore.save(data, key: Self.sessionKey)
+            KeychainStore.save(data, key: sessionKey)
         }
         return new
     }
 
     private func clearSession() {
         session = nil
-        KeychainStore.delete(key: Self.sessionKey)
+        KeychainStore.delete(key: sessionKey)
     }
 
     private func authRequestVoid<B: Encodable>(path: String, body: B) async throws {

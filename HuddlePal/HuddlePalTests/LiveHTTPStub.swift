@@ -82,7 +82,9 @@ private extension Data {
 /// Wiring for live-service tests against `StubURLProtocol`.
 enum LiveStub {
     static let config = BackendConfig(url: URL(string: "https://stub.invalid")!, anonKey: "anon-key")
-    static let sessionKey = "supabase.session"
+    /// Not the app's own "supabase.session": a test run must never clear a
+    /// real sign-in on the simulator it runs on.
+    static let sessionKey = "supabase.session.tests"
 
     static func urlSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
@@ -98,7 +100,9 @@ enum LiveStub {
         onSessionEnded: @escaping @Sendable () -> Void = {}
     ) async throws -> SupabaseClient {
         KeychainStore.delete(key: sessionKey)
-        let client = SupabaseClient(config: config, urlSession: urlSession(), onSessionEnded: onSessionEnded)
+        let client = SupabaseClient(
+            config: config, urlSession: urlSession(), onSessionEnded: onSessionEnded, sessionKey: sessionKey
+        )
         StubURLProtocol.respond { _ in
             Reply(body: json([
                 "access_token": "access", "refresh_token": "refresh", "expires_in": expiresIn,
