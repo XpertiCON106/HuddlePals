@@ -78,7 +78,7 @@ private struct ArchiveContent: View {
         .sheet(isPresented: $showBackfillCompose) {
             ComposeView(huddle: viewModel.huddle, targetDayKey: viewModel.backfillDayKey) { success in
                 if success {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.handleBackfillSuccess() }
                 }
             }
         }

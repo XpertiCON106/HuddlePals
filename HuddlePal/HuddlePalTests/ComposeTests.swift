@@ -49,6 +49,30 @@ final class ComposeTests: XCTestCase {
         XCTAssertEqual(CameraPicker.availability(hasCamera: false, status: .notDetermined), .noCamera)
     }
 
+    func testBackfillingYesterdayFromTheArchiveRestoresTheStreakAtOnce() async throws {
+        // QA-15. Tomorrow, from the seed's point of view: today (yours
+        // missing) becomes the broken yesterday.
+        deps.dateProvider.dayOffset = 1
+        defer { deps.dateProvider.reset() }
+        let huddle = try await crew()
+        try await deps.huddleService.recomputeStreak(for: huddle, now: deps.dateProvider.now)
+        XCTAssertEqual(huddle.streakCount, 0, "yesterday is incomplete: the streak reads 0 inside the recovery window")
+
+        let archive = ArchiveViewModel(deps: deps, huddle: huddle)
+        await archive.refresh()
+        let yesterday = try XCTUnwrap(archive.backfillDayKey)
+        let compose = ComposeViewModel(deps: deps, huddle: huddle, targetDayKey: yesterday)
+        compose.setCapturedImage(capturedPhoto())
+        compose.continueToConfirm()
+        let posted = await compose.confirmAndPost()
+        XCTAssertTrue(posted)
+
+        await archive.handleBackfillSuccess()
+
+        XCTAssertEqual(huddle.streakCount, 7, "the seeded 6-day chain plus the repaired day")
+        XCTAssertNil(archive.backfillDayKey, "nothing left to backfill")
+    }
+
     func testADoubleTapPostsOnce() async throws {
         let huddle = try await crew()
         let viewModel = ComposeViewModel(deps: deps, huddle: huddle)

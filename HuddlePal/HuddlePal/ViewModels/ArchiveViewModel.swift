@@ -71,6 +71,15 @@ final class ArchiveViewModel {
         }
     }
 
+    /// Backfilling can complete yesterday and so restore the streak (what
+    /// the recovery window is for): recompute it now, as Home does after a
+    /// deposit, instead of at the huddle list's next daily recompute.
+    func handleBackfillSuccess() async {
+        try? await deps.huddleService.recomputeStreak(for: huddle, now: deps.dateProvider.now)
+        await refresh()
+        await deps.reminders.refresh()
+    }
+
     private static func group(_ deposits: [Deposit], engine: HuddleEngine) -> [MonthSection] {
         let byDay = Dictionary(grouping: deposits, by: \.dayKey)
         let days: [DaySection] = byDay.compactMap { key, items in
