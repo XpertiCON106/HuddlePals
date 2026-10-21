@@ -23,8 +23,9 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 step() { print -P "\n%F{cyan}== $1%f" }
 
 step "Credentials are git-ignored"
-for path in HuddlePal/HuddlePal/Supabase.plist Supabase.plist some/dir/Supabase.plist .env backend/.env.local AuthKey_ABC123.p8; do
-  git -C "$REPO" check-ignore -q --no-index "$path" || { print "not ignored: $path"; exit 1 }
+# (`candidate`, not `path`: in zsh, $path is PATH.)
+for candidate in HuddlePal/HuddlePal/Supabase.plist Supabase.plist some/dir/Supabase.plist .env backend/.env.local AuthKey_ABC123.p8; do
+  git -C "$REPO" check-ignore -q --no-index "$candidate" || { print "not ignored: $candidate"; exit 1 }
 done
 print "ok"
 
