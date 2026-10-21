@@ -17,6 +17,12 @@ final class HuddleHomeViewModel {
     /// Set for one render cycle when a deposit flips the gate open, to
     /// drive the lock-opening reveal.
     private(set) var playUnlockReveal = false
+    /// False until the first refresh lands: before that, an empty day is
+    /// unknown, not "nobody has posted".
+    private(set) var hasLoaded = false
+    /// The last refresh failed (offline, server error). The screen keeps
+    /// its last state and says so.
+    private(set) var loadError: String?
 
     var showCompose = false
 
@@ -52,6 +58,7 @@ final class HuddleHomeViewModel {
             members = []
             isUnlocked = false
             recovery = nil
+            hasLoaded = true
             return
         }
         do {
@@ -86,8 +93,12 @@ final class HuddleHomeViewModel {
                 skips: skips,
                 now: deps.dateProvider.now
             )
+            hasLoaded = true
+            loadError = nil
         } catch {
-            // Pull-based refresh: keep last state on transient failure.
+            // Pull-based refresh: keep last state on transient failure, and
+            // say it's stale rather than pass it off as current.
+            loadError = error.localizedDescription
         }
     }
 

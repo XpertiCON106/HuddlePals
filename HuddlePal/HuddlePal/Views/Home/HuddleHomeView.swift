@@ -53,7 +53,20 @@ private struct HomeContent: View {
                     }
                 }
 
-                if viewModel.todayDeposits.isEmpty && !viewModel.isUnlocked {
+                if let error = viewModel.loadError {
+                    LoadErrorBanner(message: error) {
+                        Task { await viewModel.refresh() }
+                    }
+                }
+
+                if !viewModel.hasLoaded {
+                    if viewModel.loadError == nil {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                            .accessibilityLabel("Loading today")
+                    }
+                } else if viewModel.todayDeposits.isEmpty && !viewModel.isUnlocked {
                     firstToDepositState
                 } else if viewModel.isUnlocked {
                     unlockedFeed

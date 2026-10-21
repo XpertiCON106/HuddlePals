@@ -22,6 +22,10 @@ final class ArchiveViewModel {
     private(set) var months: [MonthSection] = []
     /// Non-nil when "add to yesterday" should be offered.
     private(set) var backfillDayKey: String?
+    /// False until the first refresh lands (an empty archive is unknown until then).
+    private(set) var hasLoaded = false
+    /// The last refresh failed; the archive shown is the last one synced.
+    private(set) var loadError: String?
 
     init(deps: AppDependencies, huddle: Huddle) {
         self.deps = deps
@@ -32,6 +36,7 @@ final class ArchiveViewModel {
         guard let user = deps.session.currentUser else {
             months = []
             backfillDayKey = nil
+            hasLoaded = true
             return
         }
         do {
@@ -65,9 +70,12 @@ final class ArchiveViewModel {
             } else {
                 backfillDayKey = nil
             }
+            hasLoaded = true
+            loadError = nil
         } catch {
             // Pull-based refresh: keep the last-known archive on a transient
             // failure rather than collapsing to the misleading empty state.
+            loadError = error.localizedDescription
         }
     }
 
