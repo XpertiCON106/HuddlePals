@@ -34,8 +34,14 @@ actor SupabaseClient {
             case .invalidURL:
                 return "Something went wrong. Please try again."
             case .http(let status, _):
-                if status == 401 || status == 403 {
+                // 401: the token itself was refused. 403 is PostgREST's answer
+                // to an access rule saying no (e.g. a huddle you've left), not
+                // an expired session.
+                if status == 401 {
                     return "Your session has expired. Please sign in again."
+                }
+                if status == 403 {
+                    return "You don't have access to that any more."
                 }
                 return "Something went wrong. Please try again."
             }

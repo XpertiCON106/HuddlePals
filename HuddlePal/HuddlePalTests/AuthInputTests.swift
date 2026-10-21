@@ -96,6 +96,17 @@ final class AuthInputTests: XCTestCase {
         XCTAssertEqual(BackendConfig(plist: custom)?.emailCodeLength, 6)
     }
 
+    func testOnlyARefusedTokenIsCalledAnExpiredSession() {
+        // QA-25: an access rule saying no (403) isn't a sign-in problem.
+        typealias Failure = SupabaseClient.ClientError
+        XCTAssertEqual(Failure.http(status: 401, message: "JWT expired").errorDescription,
+                       "Your session has expired. Please sign in again.")
+        XCTAssertEqual(Failure.http(status: 403, message: "new row violates row-level security policy").errorDescription,
+                       "You don't have access to that any more.")
+        XCTAssertEqual(Failure.http(status: 500, message: "boom").errorDescription,
+                       "Something went wrong. Please try again.")
+    }
+
     func testBackendConfigStillRequiresARealHTTPSProject() {
         XCTAssertNil(BackendConfig(plist: ["SUPABASE_URL": "http://example.supabase.co", "SUPABASE_ANON_KEY": "key"]))
         XCTAssertNil(BackendConfig(plist: [
