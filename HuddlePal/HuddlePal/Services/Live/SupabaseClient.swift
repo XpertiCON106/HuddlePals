@@ -319,17 +319,21 @@ actor SupabaseClient {
         }
     }
 
+    /// `ignoreDuplicates`: an existing row is left alone (ON CONFLICT DO
+    /// NOTHING, which returns no row) instead of merged (DO UPDATE, which
+    /// needs an UPDATE policy: reactions and blocks deliberately have none).
     @discardableResult
     func upsert<B: Encodable, R: Decodable>(
         _ table: String,
         values: B,
-        onConflict: String? = nil
+        onConflict: String? = nil,
+        ignoreDuplicates: Bool = false
     ) async throws -> [R] {
         var query: [URLQueryItem] = []
         var prefer = "return=representation"
         if let onConflict {
             query.append(URLQueryItem(name: "on_conflict", value: onConflict))
-            prefer += ",resolution=merge-duplicates"
+            prefer += ignoreDuplicates ? ",resolution=ignore-duplicates" : ",resolution=merge-duplicates"
         }
         let data = try await rest(
             table: table, method: "POST", query: query,

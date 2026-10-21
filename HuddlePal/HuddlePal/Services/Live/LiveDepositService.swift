@@ -137,7 +137,9 @@ final class LiveDepositService: DepositServiceProtocol {
             let rows: [ReactionDTO] = try await client.upsert(
                 "reactions",
                 values: NewReaction(depositId: deposit.id, userId: user.id, emoji: emoji),
-                onConflict: "deposit_id,user_id,emoji"
+                onConflict: "deposit_id,user_id,emoji",
+                // Already there (a stale screen, a double tap): nothing to do.
+                ignoreDuplicates: true
             )
             if let dto = rows.first {
                 store.insertReactionLocally(dto, deposit: deposit, user: user)

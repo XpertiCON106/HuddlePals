@@ -258,6 +258,22 @@ describe('reactions and comments', () => {
     assert.equal(await affected(db, B, `update comments set body = 'edited'`), 0, 'comments have no update policy')
   })
 
+  it('re-adding a reaction or block that exists is a no-op with DO NOTHING; DO UPDATE is refused (QA-23)', async () => {
+    const { db, A, B, depB } = await world()
+    const react = (conflict) => q(db, A, `insert into reactions (deposit_id, user_id, emoji) values ($1, $2, '🔥')
+                                          on conflict (deposit_id, user_id, emoji) ${conflict} returning id`, [depB.id, A])
+    await react('do nothing')
+    assert.deepEqual(await react('do nothing'), [], 'what PostgREST runs for resolution=ignore-duplicates')
+    // resolution=merge-duplicates (what the app sent) becomes DO UPDATE, which
+    // needs an UPDATE policy these tables deliberately don't have.
+    await assert.rejects(react('do update set emoji = excluded.emoji'), RLS_DENIED)
+    const block = (conflict) => q(db, A, `insert into blocks (blocker_id, blocked_id) values ($1, $2)
+                                          on conflict (blocker_id, blocked_id) ${conflict}`, [A, B])
+    await block('do nothing')
+    await block('do nothing')
+    await assert.rejects(block('do update set blocked_id = excluded.blocked_id'), RLS_DENIED)
+  })
+
   it('enforces comment length and reaction uniqueness', async () => {
     const { db, A, depB } = await world()
     await assert.rejects(q(db, A, `insert into comments (deposit_id, user_id, body) values ($1, $2, $3)`, [depB.id, A, 'x'.repeat(501)]), /check constraint/)

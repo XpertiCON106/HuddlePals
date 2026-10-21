@@ -181,6 +181,33 @@ final class LiveServiceTests: XCTestCase {
         XCTAssertTrue(deps.session.blockedUserIDs.isEmpty)
     }
 
+    // MARK: Re-adding reactions and blocks (QA-23)
+
+    func testReactionsAndBlocksLeaveExistingRowsAlone() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        session.currentUser = me
+        let huddle = try store.apply(HuddleDTO(
+            id: UUID(), name: "Family", emoji: "🏔", inviteCode: "FAM123", notificationHour: 19, streakCount: 0
+        ))
+        let deposit = Deposit(huddle: huddle, author: me, localImagePath: "Media/x/y.jpg", dayKey: "2026-10-20")
+        container.mainContext.insert(deposit)
+        let other = User(displayName: "Other", avatarColorHex: "0091FF")
+        container.mainContext.insert(other)
+        // The server already has these rows: DO NOTHING returns none.
+        StubURLProtocol.respond { _ in .init(body: Data("[]".utf8)) }
+        let keyring = LivePhotoKeyring(client: client, session: session, identityStore: InMemoryIdentityStore())
+
+        try await LiveDepositService(client: client, store: store, keyring: keyring).toggleReaction("🔥", on: deposit, by: me)
+        try await LiveModerationService(client: client, session: session, keyring: keyring).block(other)
+
+        let writes = StubURLProtocol.requests.filter { $0.httpMethod == "POST" }
+        XCTAssertEqual(writes.count, 2)
+        for request in writes {
+            let prefer = request.value(forHTTPHeaderField: "Prefer") ?? ""
+            XCTAssertTrue(prefer.contains("resolution=ignore-duplicates"), "\(request.url!.path): \(prefer)")
+        }
+    }
+
     // MARK: Joining (QA-02)
 
     func testTooManyWrongInviteCodesSaysSoInsteadOfAGenericError() async throws {
