@@ -11,7 +11,7 @@ This document is the single place to understand everything: the product, the rul
 | Dependencies | **Zero** third-party packages — Apple frameworks + raw `URLSession` |
 | State | `@Observable` (Observation framework), no Combine |
 | Backends | Mock (seeded offline demo) and Live (Supabase) behind identical protocols |
-| Auth | Sign in with Apple, email + SMS codes (6 digits by default; mock code: `123456`) |
+| Auth | Sign in with Apple. Email + SMS codes are built but switched off (`FeatureFlags.emailAndPhoneSignInEnabled = false`) |
 | Design | Adaptive "gallery print": paper + ink in light, deep charcoal + paper-white in dark; system-following with in-app override |
 | Tests | Deterministic XCTests (⌘U): engine rules, critical mock flows, live sync reconciliation, profile editor |
 
@@ -108,7 +108,7 @@ flowchart TD
 
 | Screen | What it does |
 |---|---|
-| **Onboarding** | Terms of Service first: the full text with Agree / Decline; Agree unlocks only after scrolling to the end. Decline returns to the first concept card, and nothing past the cards opens until Agree (re-asked whenever `TermsOfService.version` changes). Then three concept cards → sign-in method (Apple / email / phone) → verification code → profile (name + avatar ink). Returning accounts skip the profile step. |
+| **Onboarding** | Terms of Service first: the full text with Agree / Decline; Agree unlocks only after scrolling to the end. Decline returns to the first concept card, and nothing past the cards opens until Agree (re-asked whenever `TermsOfService.version` changes). Then three concept cards → sign-in method (Apple; email / phone when the feature flag is on) → verification code → profile (name + avatar ink). Returning accounts skip the profile step. |
 | **Huddles shelf** | Every huddle you belong to: emoji, name, member stack, streak, lock state, "N waiting for you". Tap to step inside; create/join from the toolbar. |
 | **Huddle Home (Today)** | One huddle's day. Serif huddle name, member stack, streak badge, and — when a streak just broke — the 24h recovery banner with a live countdown. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards + "waiting on…" row. |
 | **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
@@ -231,7 +231,7 @@ Relationship notes: inverses are declared once, on the to-many side, with cascad
 
 ## 7. Authentication
 
-Three ways in, one account model. Email and phone send a **verification code** (6 digits unless the Supabase project is set to more — up to 10; the app's code boxes follow `EMAIL_OTP_LENGTH` / `SMS_OTP_LENGTH` in `Supabase.plist`); Apple uses the native sheet. All resolve to a Supabase `auth.users` row; the app's `profiles` row (name + avatar) is created on first sign-in by the onboarding profile step.
+Three ways in, one account model. **Today only Sign in with Apple is shown**: email and phone are built but hidden behind `FeatureFlags.emailAndPhoneSignInEnabled`. (The Supabase project's email provider may still accept codes server-side; turn it off there too if it shouldn't.) Email and phone send a **verification code** (6 digits unless the Supabase project is set to more — up to 10; the app's code boxes follow `EMAIL_OTP_LENGTH` / `SMS_OTP_LENGTH` in `Supabase.plist`); Apple uses the native sheet. All resolve to a Supabase `auth.users` row; the app's `profiles` row (name + avatar) is created on first sign-in by the onboarding profile step.
 
 ```mermaid
 sequenceDiagram
