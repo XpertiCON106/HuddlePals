@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Foundation
 import XCTest
 
@@ -7,6 +8,7 @@ import XCTest
 final class ProfileConfirmationTests: XCTestCase {
     private var deps: AppDependencies!
     private var auth: ProfileAuthSpy!
+    private var appleReauth: AppleReauthSpy!
     private var media: ProfileMediaSpy!
     private var user: User!
     private var viewModel: ProfileViewModel!
@@ -25,6 +27,7 @@ final class ProfileConfirmationTests: XCTestCase {
         base.session.currentUser = user
 
         auth = ProfileAuthSpy()
+        appleReauth = AppleReauthSpy()
         media = ProfileMediaSpy()
         deps = AppDependencies(
             modelContainer: base.modelContainer,
@@ -34,6 +37,7 @@ final class ProfileConfirmationTests: XCTestCase {
             debug: base.debug,
             appearance: base.appearance,
             auth: auth,
+            appleReauth: appleReauth,
             huddleService: base.huddleService,
             depositService: base.depositService,
             mediaService: media,
@@ -341,13 +345,78 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertNil(deps.session.pendingInviteCode)
         XCTAssertEqual(auth.removeLocalDataCalls, 1)
     }
+
+    // MARK: Apple confirms before deletion (QA-20)
+
+    func testDeletingTheAccountSendsAFreshAppleCode() async {
+        appleReauth.result = .success("fresh-code")
+        let deleted = await viewModel.deleteAccount()
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(appleReauth.calls, 1, "Apple is asked at the moment of deletion")
+        XCTAssertEqual(auth.deleteCodes, ["fresh-code"], "the server gets the code to revoke with")
+        XCTAssertNil(deps.session.currentUser)
+    }
+
+    func testClosingApplesSheetDeletesNothing() async {
+        appleReauth.result = .failure(CancellationError())
+        let deleted = await viewModel.deleteAccount()
+        XCTAssertFalse(deleted)
+        XCTAssertTrue(auth.deleteCodes.isEmpty)
+        XCTAssertFalse(viewModel.isAppleConfirmationFailurePresented, "backing out isn't an error")
+        XCTAssertNil(viewModel.statusMessage)
+        XCTAssertNotNil(deps.session.currentUser)
+        XCTAssertEqual(auth.removeLocalDataCalls, 0)
+        XCTAssertFalse(viewModel.isWorking)
+    }
+
+    func testWhenAppleCantConfirmTheAccountCanStillBeDeleted() async {
+        appleReauth.result = .failure(ASAuthorizationError(.failed))
+        let firstTry = await viewModel.deleteAccount()
+        XCTAssertFalse(firstTry)
+        XCTAssertTrue(viewModel.isAppleConfirmationFailurePresented, "offers to delete anyway")
+        XCTAssertTrue(auth.deleteCodes.isEmpty, "nothing is deleted until they choose to")
+        XCTAssertNotNil(deps.session.currentUser)
+
+        XCTAssertEqual(viewModel.requestExit(.deleteAccountWithoutApple), .deleteAccountWithoutApple)
+        let deleted = await viewModel.deleteAccountWithoutApple()
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(auth.deleteCodes, [nil], "deleted without a code to revoke with")
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertEqual(auth.removeLocalDataCalls, 1)
+    }
+
+    func testAFailedDeletionKeepsTheAccountSignedInAndSaysSo() async {
+        auth.failNextDelete = true
+        let deleted = await viewModel.deleteAccount()
+        XCTAssertFalse(deleted)
+        XCTAssertEqual(viewModel.statusMessage, "Something went wrong. Please try again.")
+        XCTAssertNotNil(deps.session.currentUser)
+        XCTAssertEqual(auth.removeLocalDataCalls, 0)
+    }
+}
+
+@MainActor
+private final class AppleReauthSpy: AppleReauthenticating {
+    var result: Result<String, Error> = .success("apple-code")
+    private(set) var calls = 0
+
+    func authorizationCode() async throws -> String {
+        calls += 1
+        return try result.get()
+    }
 }
 
 @MainActor
 private final class ProfileAuthSpy: AuthServiceProtocol {
     enum TestError: LocalizedError {
         case updateFailed
-        var errorDescription: String? { "The profile couldn't be saved." }
+        case deleteFailed
+        var errorDescription: String? {
+            switch self {
+            case .updateFailed: "The profile couldn't be saved."
+            case .deleteFailed: "Something went wrong. Please try again."
+            }
+        }
     }
 
     private(set) var updateCalls = 0
@@ -395,7 +464,15 @@ private final class ProfileAuthSpy: AuthServiceProtocol {
     }
 
     func signOut() async throws {}
-    func deleteAccount() async throws {}
+    private(set) var deleteCodes: [String?] = []
+    var failNextDelete = false
+    func deleteAccount(appleAuthorizationCode: String?) async throws {
+        if failNextDelete {
+            failNextDelete = false
+            throw TestError.deleteFailed
+        }
+        deleteCodes.append(appleAuthorizationCode)
+    }
 
     private(set) var removeLocalDataCalls = 0
     func removeLocalData() throws { removeLocalDataCalls += 1 }

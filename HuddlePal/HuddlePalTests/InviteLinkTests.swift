@@ -53,7 +53,7 @@ final class InviteLinkTests: XCTestCase {
         let base = AppDependencies.makeMock(inMemory: true)
         return AppDependencies(
             modelContainer: base.modelContainer, engine: base.engine, dateProvider: base.dateProvider,
-            session: session, debug: base.debug, auth: base.auth, huddleService: base.huddleService,
+            session: session, debug: base.debug, auth: base.auth, appleReauth: base.appleReauth, huddleService: base.huddleService,
             depositService: base.depositService, mediaService: base.mediaService,
             moderationService: base.moderationService, seeder: base.seeder, reminders: base.reminders
         )

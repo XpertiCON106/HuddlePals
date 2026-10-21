@@ -50,6 +50,18 @@ final class UnhappyPathTests: HuddleUITestCase {
         snapshot("23 notifications denied")
     }
 
+    /// QA-20: when Apple can't confirm the account, it can still be deleted,
+    /// and the dialog says how to remove HuddlePals from Sign in with Apple.
+    func testDeletingWhenAppleCantConfirmStillWorks() {
+        launchToShelf(arguments: ["-ui-testing-apple-unavailable"])
+        openTab("Profile")
+        tapAndConfirm("Delete account")
+        waitFor(app.staticTexts["Apple couldn't confirm it's you"], timeout: 10)
+        snapshot("24 apple confirmation failed")
+        waitFor(app.buttons["Delete account anyway"]).tap()
+        waitFor(app.buttons["Continue"], timeout: 20, "back on the welcome cards")
+    }
+
     func testDecliningTheTermsGoesNowhere() {
         launch()
         waitFor(app.buttons["Decline"], timeout: 20).tap()

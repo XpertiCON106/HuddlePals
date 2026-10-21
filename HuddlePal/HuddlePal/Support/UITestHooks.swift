@@ -10,6 +10,8 @@ import UIKit
 ///   -ui-testing-camera-denied   camera permission refused
 ///   -ui-testing-notifications-denied   notification permission refused
 ///                               (the Simulator can't reset a decided one)
+///   -ui-testing-apple-unavailable   Apple can't confirm the account at
+///                               deletion (no Apple Account, no network)
 enum UITestHooks {
     #if DEBUG
     private static let arguments = ProcessInfo.processInfo.arguments
@@ -18,12 +20,14 @@ enum UITestHooks {
     static let fakeCamera = arguments.contains("-ui-testing-fake-camera")
     static let cameraDenied = arguments.contains("-ui-testing-camera-denied")
     static let notificationsDenied = arguments.contains("-ui-testing-notifications-denied")
+    static let appleUnavailable = arguments.contains("-ui-testing-apple-unavailable")
     #else
     static let isUITesting = false
     static let resetsState = false
     static let fakeCamera = false
     static let cameraDenied = false
     static let notificationsDenied = false
+    static let appleUnavailable = false
     #endif
 
     /// Wipes what the app persists (settings, the local store, cached

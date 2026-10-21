@@ -131,7 +131,11 @@ protocol AuthServiceProtocol: AnyObject {
     /// Permanently deletes the signed-in account. Deposited photos remain in
     /// shared huddles as "Former member" (the archive is permanent); the
     /// user's profile, avatar, and login are removed and they're signed out.
-    func deleteAccount() async throws
+    /// `appleAuthorizationCode` is a fresh Sign in with Apple code (from
+    /// `AppleReauthenticating`) the server uses to revoke the app's Apple
+    /// tokens; nil when Apple couldn't confirm the person, and the account
+    /// is deleted all the same.
+    func deleteAccount(appleAuthorizationCode: String?) async throws
     /// After sign-out or deletion, once the session is cleared: forgets
     /// everything that account could see on this device (synced rows, cached
     /// photos), so the next person to sign in finds none of it.
@@ -259,10 +263,11 @@ final class MockAuthService: AuthServiceProtocol {
         UserDefaults.standard.set(true, forKey: Self.signedOutKey)
     }
 
-    func deleteAccount() async throws {
+    func deleteAccount(appleAuthorizationCode: String?) async throws {
         // No backend in mock mode: drop the session and the identity→user
         // mappings for the current user so they can't sign back in as them.
-        // (Live mode removes the server account, avatars, and Apple token.)
+        // (Live mode removes the server account and avatars, and revokes the
+        // Apple tokens with the code; here it has nowhere to go.)
         let defaults = UserDefaults.standard
         if let stored = defaults.string(forKey: Self.currentUserIDKey) {
             for (key, value) in defaults.dictionaryRepresentation()

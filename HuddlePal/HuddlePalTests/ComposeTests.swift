@@ -21,7 +21,7 @@ final class ComposeTests: XCTestCase {
         media = CountingMediaService()
         deps = AppDependencies(
             modelContainer: base.modelContainer, engine: base.engine, dateProvider: base.dateProvider,
-            session: base.session, debug: base.debug, auth: base.auth, huddleService: base.huddleService,
+            session: base.session, debug: base.debug, auth: base.auth, appleReauth: base.appleReauth, huddleService: base.huddleService,
             depositService: base.depositService, mediaService: media, moderationService: base.moderationService,
             seeder: base.seeder, reminders: base.reminders
         )

@@ -21,7 +21,7 @@ final class LoadStateTests: XCTestCase {
         deposits = SwitchableDepositService(inner: base.depositService)
         deps = AppDependencies(
             modelContainer: base.modelContainer, engine: base.engine, dateProvider: base.dateProvider,
-            session: base.session, debug: base.debug, auth: base.auth, huddleService: base.huddleService,
+            session: base.session, debug: base.debug, auth: base.auth, appleReauth: base.appleReauth, huddleService: base.huddleService,
             depositService: deposits, mediaService: base.mediaService, moderationService: base.moderationService,
             seeder: base.seeder, reminders: base.reminders
         )

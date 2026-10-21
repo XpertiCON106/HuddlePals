@@ -149,13 +149,18 @@ final class LiveAuthService: AuthServiceProtocol {
         keyring.reset()
     }
 
-    func deleteAccount() async throws {
-        // The edge function revokes the Apple token, deletes avatar objects,
-        // and deletes the auth user (cascades the profile and the user's
-        // user_keys / huddle_keys rows; deposits/comments keep their rows as
-        // "Former member"). Then drop the local session and identity key.
+    func deleteAccount(appleAuthorizationCode: String?) async throws {
+        // The edge function trades the code for the app's Apple tokens and
+        // revokes them, deletes avatar objects, releases the deposit photos
+        // this user uploaded, and deletes the auth user (cascades the profile
+        // and the user's user_keys / huddle_keys rows; deposits/comments keep
+        // their rows as "Former member"). Then drop the local session and
+        // identity key.
         let userID = await client.currentUserID
-        try await client.invokeFunction("delete-account")
+        let body = try SupabaseClient.makeEncoder().encode(
+            DeleteAccountRequestDTO(authorizationCode: appleAuthorizationCode)
+        )
+        try await client.invokeFunction("delete-account", body: body)
         if let userID { keyring.forgetIdentity(for: userID) }
         await client.signOut()
     }

@@ -113,6 +113,47 @@ final class LiveServiceTests: XCTestCase {
         )
     }
 
+    // MARK: Account deletion (QA-20)
+
+    func testDeletingTheAccountSendsApplesCodeToTheServer() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        StubURLProtocol.respond { _ in .init(body: Data(#"{"ok":true}"#.utf8)) }
+
+        try await authService(client).deleteAccount(appleAuthorizationCode: "c0de")
+
+        let call = try XCTUnwrap(StubURLProtocol.requests.first { $0.url!.path.hasSuffix("/functions/v1/delete-account") })
+        XCTAssertEqual(call.httpMethod, "POST")
+        let body = try JSONSerialization.jsonObject(with: try XCTUnwrap(call.httpBody)) as? [String: String]
+        XCTAssertEqual(body, ["authorization_code": "c0de"])
+        let userID = await client.currentUserID
+        XCTAssertNil(userID, "signed out on this device afterwards")
+    }
+
+    func testDeletingWithoutApplesConfirmationSendsNoCode() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        StubURLProtocol.respond { _ in .init(body: Data(#"{"ok":true}"#.utf8)) }
+
+        try await authService(client).deleteAccount(appleAuthorizationCode: nil)
+
+        let call = try XCTUnwrap(StubURLProtocol.requests.first { $0.url!.path.hasSuffix("/functions/v1/delete-account") })
+        let body = try JSONSerialization.jsonObject(with: try XCTUnwrap(call.httpBody)) as? [String: String]
+        XCTAssertEqual(body, [:])
+    }
+
+    func testAFailedServerDeletionKeepsTheSessionAndShowsNoServerDetail() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        StubURLProtocol.respond { _ in .init(status: 500, body: Data(#"{"error":"delete_failed"}"#.utf8)) }
+
+        do {
+            try await authService(client).deleteAccount(appleAuthorizationCode: "c0de")
+            XCTFail("a failed deletion must not look like success")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Something went wrong. Please try again.")
+        }
+        let userID = await client.currentUserID
+        XCTAssertEqual(userID, me.id, "still signed in: the account still exists")
+    }
+
     func testLaunchingOfflineKeepsTheStoredSessionSignedIn() async throws {
         let client = try await LiveStub.signedInClient(userID: me.id)
         StubURLProtocol.respond { _ in .init(error: URLError(.notConnectedToInternet)) }

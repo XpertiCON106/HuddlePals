@@ -73,6 +73,9 @@ final class ProfileViewModel {
     enum ExitAction: Equatable {
         case signOut
         case deleteAccount
+        /// After Apple couldn't confirm the person: delete without the
+        /// code, so the app's Apple tokens aren't revoked.
+        case deleteAccountWithoutApple
     }
 
     enum SaveCompletion: Equatable {
@@ -120,6 +123,10 @@ final class ProfileViewModel {
 
     var isSaveConfirmationPresented = false
     var isUnsavedChangesWarningPresented = false
+    /// Apple couldn't confirm the person before deletion (no Apple Account
+    /// on the device, Apple unreachable). Deleting must still be possible
+    /// (Apple TN3194), so the view offers it without the revocation.
+    var isAppleConfirmationFailurePresented = false
     private var confirmedDraft: ConfirmedDraft?
 
     var isWorking: Bool {
@@ -387,11 +394,34 @@ final class ProfileViewModel {
     }
 
     /// Returns true on success so the view can route back to onboarding.
+    /// Apple confirms it's them first; its fresh authorization code lets the
+    /// server revoke the app's Apple tokens (App Review 5.1.1(v)).
     func deleteAccount() async -> Bool {
         isPerformingAccountAction = true
         defer { isPerformingAccountAction = false }
+        let code: String
         do {
-            try await deps.auth.deleteAccount()
+            code = try await deps.appleReauth.authorizationCode()
+        } catch is CancellationError {
+            return false // closed Apple's sheet: nothing is deleted
+        } catch {
+            isAppleConfirmationFailurePresented = true
+            return false
+        }
+        return await performDeletion(appleAuthorizationCode: code)
+    }
+
+    /// Deletes without Apple's confirmation, once the person chose to after
+    /// it failed. They remove the app from Sign in with Apple themselves.
+    func deleteAccountWithoutApple() async -> Bool {
+        isPerformingAccountAction = true
+        defer { isPerformingAccountAction = false }
+        return await performDeletion(appleAuthorizationCode: nil)
+    }
+
+    private func performDeletion(appleAuthorizationCode: String?) async -> Bool {
+        do {
+            try await deps.auth.deleteAccount(appleAuthorizationCode: appleAuthorizationCode)
             await deps.endSession()
             return true
         } catch {

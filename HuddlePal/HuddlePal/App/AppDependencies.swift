@@ -68,6 +68,9 @@ final class AppDependencies {
     let terms: TermsAcceptance
 
     let auth: any AuthServiceProtocol
+    /// Apple's confirmation sheet, shown before account deletion for the
+    /// code that revokes the app's Apple tokens.
+    let appleReauth: any AppleReauthenticating
     let huddleService: any HuddleServiceProtocol
     let depositService: any DepositServiceProtocol
     let mediaService: any MediaServiceProtocol
@@ -87,6 +90,7 @@ final class AppDependencies {
         appearance: AppearanceSettings = AppearanceSettings(),
         terms: TermsAcceptance = TermsAcceptance(),
         auth: any AuthServiceProtocol,
+        appleReauth: any AppleReauthenticating,
         huddleService: any HuddleServiceProtocol,
         depositService: any DepositServiceProtocol,
         mediaService: any MediaServiceProtocol,
@@ -103,6 +107,7 @@ final class AppDependencies {
         self.appearance = appearance
         self.terms = terms
         self.auth = auth
+        self.appleReauth = appleReauth
         self.huddleService = huddleService
         self.depositService = depositService
         self.mediaService = mediaService
@@ -151,6 +156,7 @@ final class AppDependencies {
             debug: DebugSettings(),
             terms: terms,
             auth: MockAuthService(context: context),
+            appleReauth: MockAppleReauthenticator(),
             huddleService: MockHuddleService(
                 context: context, engine: engine, skipLedger: skipLedger, dateProvider: dateProvider
             ),
@@ -201,6 +207,7 @@ final class AppDependencies {
             session: session,
             debug: DebugSettings(),
             auth: LiveAuthService(client: client, store: store, keyring: keyring, media: media, config: config),
+            appleReauth: SystemAppleReauthenticator(),
             huddleService: LiveHuddleService(
                 client: client, store: store, engine: engine, dateProvider: dateProvider, keyring: keyring
             ),

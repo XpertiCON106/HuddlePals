@@ -112,6 +112,13 @@ struct BlockDTO: Codable {
     let blockedId: UUID
 }
 
+/// Body of the `delete-account` edge function. Without a code (Apple
+/// couldn't confirm the person) the key is left out and the account is
+/// deleted without revoking.
+struct DeleteAccountRequestDTO: Encodable {
+    let authorizationCode: String?
+}
+
 extension Array where Element == UUID {
     /// PostgREST `in.(a,b,c)` filter value.
     var postgrestInList: String {

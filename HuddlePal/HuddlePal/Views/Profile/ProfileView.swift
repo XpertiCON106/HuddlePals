@@ -55,6 +55,10 @@ struct ProfileView: View {
             Task {
                 if await viewModel.deleteAccount() { router.resetAll() }
             }
+        case .deleteAccountWithoutApple:
+            Task {
+                if await viewModel.deleteAccountWithoutApple() { router.resetAll() }
+            }
         }
     }
 }
@@ -156,6 +160,20 @@ private struct ProfileContent: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your account, name, and profile photos are permanently removed and you're signed out. Photos you already deposited stay in your shared huddles as \"Former member\" — a huddle's archive is permanent. This can't be undone.")
+        }
+        .confirmationDialog(
+            "Apple couldn't confirm it's you",
+            isPresented: $viewModel.isAppleConfirmationFailurePresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete account anyway", role: .destructive) {
+                if let action = viewModel.requestExit(.deleteAccountWithoutApple) {
+                    onCompleteExit(action)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can still delete your account. Afterwards, remove HuddlePals in Settings › your name › Sign-In & Security › Sign in with Apple.")
         }
     }
 
