@@ -89,20 +89,21 @@ private struct SettingsContent: View {
                                 .foregroundStyle(membership.role == .keeper ? Theme.accent : Theme.textSecondary)
                         }
                         Spacer()
-                        Label("\(membership.skipTokensRemaining)", systemImage: "ticket")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Theme.textSecondary)
+                        // Skip tokens aren't shown: nothing in the app spends
+                        // them yet (QA report, decision 4.4).
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Theme.textSecondary.opacity(0.6))
                     }
+                    // A plain-style button only takes taps where something
+                    // is drawn; without this the gap before the chevron
+                    // (most of the row) did nothing.
+                    .contentShape(Rectangle())
                 }
                 .listRowBackground(Theme.surface)
             }
         } header: {
             Text("Members")
-        } footer: {
-            Text("Skip tokens let a member miss a day without breaking the group streak. Two per member.")
         }
     }
 
