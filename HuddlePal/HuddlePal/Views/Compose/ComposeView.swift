@@ -47,10 +47,21 @@ struct ComposeView: View {
         }
         .interactiveDismissDisabled(viewModel?.isSaving ?? false)
         .fullScreenCover(isPresented: $showCamera) {
+            #if DEBUG
+            if UITestHooks.fakeCamera {
+                FakeCameraView { image in viewModel?.setCapturedImage(image) }
+            } else {
+                CameraPicker { image in
+                    viewModel?.setCapturedImage(image)
+                }
+                .ignoresSafeArea()
+            }
+            #else
             CameraPicker { image in
                 viewModel?.setCapturedImage(image)
             }
             .ignoresSafeArea()
+            #endif
         }
         .onAppear {
             if viewModel == nil {

@@ -40,6 +40,17 @@
                ReferencedContainer = "container:HuddlePal.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "AA0000000000000000000022"
+               BuildableName = "HuddlePalUITests.xctest"
+               BlueprintName = "HuddlePalUITests"
+               ReferencedContainer = "container:HuddlePal.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

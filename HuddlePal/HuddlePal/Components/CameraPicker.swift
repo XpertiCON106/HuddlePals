@@ -31,6 +31,8 @@ struct CameraPicker: UIViewControllerRepresentable {
         hasCamera: Bool = isAvailable,
         status: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
     ) -> Availability {
+        if UITestHooks.cameraDenied { return .denied }
+        if UITestHooks.fakeCamera { return .ready }
         switch status {
         case .denied: return .denied
         case .restricted: return .restricted
