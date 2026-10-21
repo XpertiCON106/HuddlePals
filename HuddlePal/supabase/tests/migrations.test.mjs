@@ -51,6 +51,25 @@ describe('migrations', () => {
     }
   })
 
+  it('huddles that lost their keeper before the fix get one back (QA-04)', async () => {
+    const { PGlite } = await import('@electric-sql/pglite')
+    const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto')
+    const { STUB_SQL, DEPLOYED_SQL, signUp, createHuddle, joinHuddle, affected } = await import('./harness.mjs')
+    const db = new PGlite({ extensions: { pgcrypto } })
+    await db.exec(STUB_SQL)
+    await db.exec(DEPLOYED_SQL)
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const C = await signUp(db, 'Cy')
+    const h = await createHuddle(db, A)
+    await joinHuddle(db, B, h.invite_code)
+    await joinHuddle(db, C, h.invite_code)
+    await affected(db, A, 'delete from memberships where user_id = $1', [A])
+    assert.deepEqual(await admin(db, `select 1 from memberships where role = 'keeper'`), [], 'the old schema loses the keeper')
+    for (const { sql } of migrations()) await db.exec(sql)
+    assert.deepEqual(await admin(db, `select user_id from memberships where role = 'keeper'`), [{ user_id: B }])
+  })
+
   it('every migration can be applied twice', async () => {
     const db = await freshDatabase({ mode: 'migrated' })
     for (const { name, sql } of migrations()) {

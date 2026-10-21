@@ -467,5 +467,5 @@ Honest edges, in rough priority order:
 5. **Storage orphans** — a removed profile photo, or an upload whose deposit insert then fails, leaves an unreferenced Storage object (harmless at this scale; a scheduled cleanup function fixes it).
 6. **Email deliverability** — Supabase's built-in mailer is rate-limited to a few messages/hour; configure SMTP before group testing. SMS requires a paid Twilio setup.
 7. **Home-screen widget** — planned post-MVP as a `Widgets/` extension target sharing the store via an app group.
-8. **Keeper succession** — if the keeper leaves, no one is promoted (server-side reassignment is a TODO in the leave flow).
+8. **Keeper succession** — when the keeper leaves or deletes their account, the longest-standing remaining member becomes keeper (the `memberships_after_delete` trigger). There is no way yet to hand the role over by choice.
 9. **Encryption edges** — one identity key per account: using two devices needs iCloud Keychain, otherwise the device that launched last is the one that can decrypt. A huddle's key isn't rotated when someone leaves. If every remaining member has lost the key, that huddle's photos are unrecoverable. Captions and comments are plaintext; encrypting them would mean sealing them with the huddle key on the client (as with photo keys) and losing server-side length checks and moderation visibility.

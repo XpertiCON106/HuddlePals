@@ -158,6 +158,21 @@ final class CriticalFlowTests: XCTestCase {
         XCTAssertEqual(crew.streakCount, before, "joining never resets the group's streak")
     }
 
+    func testWhenTheKeeperLeavesTheLongestStandingMemberTakesOver() async throws {
+        // QA-04, mirroring the server's memberships_after_delete trigger.
+        let keeper = try await signedInUser()
+        let huddles = try await deps.huddleService.huddles(for: keeper)
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == "CREW42" })
+        XCTAssertEqual(crew.sortedMemberships.first?.user?.id, keeper.id)
+        let expected = crew.sortedMemberships.dropFirst().min { $0.joinedAt < $1.joinedAt }?.user?.id
+
+        try await deps.huddleService.leaveHuddle(crew, user: keeper)
+
+        let keepers = crew.memberships.filter { $0.role == .keeper }
+        XCTAssertEqual(keepers.count, 1, "a huddle always has exactly one keeper")
+        XCTAssertEqual(keepers.first?.user?.id, expected)
+    }
+
     // MARK: Create / join
 
     func testCreateAndJoinHuddleFlow() async throws {

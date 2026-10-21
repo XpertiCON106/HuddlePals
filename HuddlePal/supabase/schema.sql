@@ -316,6 +316,26 @@ begin
   return next v_huddle;
 end $$;
 
+-- A huddle always has a keeper: when the keeper leaves (or deletes their
+-- account, which cascades here), the longest-standing remaining member
+-- takes over. Runs as the table owner, since members can't update roles.
+create or replace function public.handle_membership_removed()
+returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if old.role = 'keeper'
+     and not exists (select 1 from memberships where huddle_id = old.huddle_id and role = 'keeper') then
+    update memberships set role = 'keeper'
+      where id = (select id from memberships where huddle_id = old.huddle_id
+                  order by joined_at, id limit 1);
+  end if;
+  return old;
+end $$;
+
+create trigger memberships_after_delete
+  after delete on public.memberships
+  for each row execute function public.handle_membership_removed();
+
 -- Decrements the CALLER's token and records their skip, atomically.
 -- `p_user` is accepted for signature stability but deliberately ignored:
 -- the action always targets auth.uid(), so a member can never spend or
