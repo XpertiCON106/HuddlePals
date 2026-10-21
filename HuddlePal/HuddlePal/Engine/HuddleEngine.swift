@@ -291,7 +291,7 @@ struct HuddleEngine {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return String(trimmed.prefix(captionLimit))
+        return trimmed.prefix(serverLength: captionLimit)
     }
 
     /// 6-char alphanumeric code; ambiguous glyphs (0/O, 1/I/L) excluded.

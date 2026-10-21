@@ -146,7 +146,7 @@ extension AuthValidation {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return String(trimmed.prefix(bioLimit))
+        return trimmed.prefix(serverLength: bioLimit)
     }
 }
 

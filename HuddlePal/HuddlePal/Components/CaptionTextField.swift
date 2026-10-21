@@ -6,7 +6,7 @@ struct CaptionTextField: View {
     @Binding var text: String
     var placeholder = "Add a line… (optional)"
 
-    private var remaining: Int { HuddleEngine.captionLimit - text.count }
+    private var remaining: Int { HuddleEngine.captionLimit - text.serverLength }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
@@ -21,11 +21,11 @@ struct CaptionTextField: View {
                         .strokeBorder(Theme.hairline, lineWidth: 1)
                 )
                 .onChange(of: text) { _, newValue in
-                    if newValue.count > HuddleEngine.captionLimit {
-                        text = String(newValue.prefix(HuddleEngine.captionLimit))
+                    if newValue.serverLength > HuddleEngine.captionLimit {
+                        text = newValue.prefix(serverLength: HuddleEngine.captionLimit)
                     }
                 }
-            if text.count > HuddleEngine.captionLimit - 20 {
+            if text.serverLength > HuddleEngine.captionLimit - 20 {
                 Text("\(remaining)")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(remaining <= 5 ? Theme.destructive : Theme.textSecondary)

@@ -427,6 +427,11 @@ private struct ProfileStep: View {
             TextField("Your name", text: $viewModel.displayName)
                 .font(.system(size: 18, weight: .medium))
                 .textContentType(.name)
+                .onChange(of: viewModel.displayName) { _, newValue in
+                    if newValue.serverLength > TextLimit.displayName {
+                        viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
+                    }
+                }
                 .multilineTextAlignment(.center)
                 .focused($nameFocused)
                 .submitLabel(.done)

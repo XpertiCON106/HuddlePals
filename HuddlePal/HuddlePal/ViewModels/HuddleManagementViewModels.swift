@@ -17,7 +17,8 @@ final class CreateHuddleViewModel {
     static let emojiChoices = ["🏔", "🌊", "🌻", "🔥", "🐾", "🌙", "🍞", "🎒", "🏡", "🌵", "⛺️", "🫶"]
 
     var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isCreating
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (1...TextLimit.huddleName).contains(trimmed.serverLength) && !isCreating
     }
 
     /// Stub deep link shared via the share sheet.

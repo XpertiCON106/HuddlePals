@@ -56,6 +56,11 @@ private struct CreateHuddleContent: View {
             TextField("Huddle name", text: $viewModel.name)
                 .font(.system(size: 18, weight: .medium))
                 .multilineTextAlignment(.center)
+                .onChange(of: viewModel.name) { _, newValue in
+                    if newValue.serverLength > TextLimit.huddleName {
+                        viewModel.name = newValue.prefix(serverLength: TextLimit.huddleName)
+                    }
+                }
                 .padding(14)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(

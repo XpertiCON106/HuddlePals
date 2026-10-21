@@ -133,8 +133,8 @@ final class ProfileViewModel {
 
     var isDraftValid: Bool {
         let name = normalizedDisplayName
-        return (1...40).contains(name.count)
-            && bio.count <= AuthValidation.bioLimit
+        return (1...TextLimit.displayName).contains(name.serverLength)
+            && bio.serverLength <= AuthValidation.bioLimit
             && draftPhotos.count <= AuthValidation.maxProfilePhotos
     }
 
@@ -155,7 +155,7 @@ final class ProfileViewModel {
     /// When this device agreed to the current Terms of Service.
     var termsAcceptedAt: Date? { deps.terms.acceptedAt }
 
-    var bioRemaining: Int { AuthValidation.bioLimit - bio.count }
+    var bioRemaining: Int { AuthValidation.bioLimit - bio.serverLength }
     var canAddPhotos: Bool {
         draftPhotos.count < AuthValidation.maxProfilePhotos && !isWorking
     }

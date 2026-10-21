@@ -213,6 +213,11 @@ private struct DetailContent: View {
                 TextField("Add a comment…", text: $viewModel.commentDraft)
                     .font(.system(size: 15))
                     .focused($commentFocused)
+                    .onChange(of: viewModel.commentDraft) { _, newValue in
+                        if newValue.serverLength > TextLimit.comment {
+                            viewModel.commentDraft = newValue.prefix(serverLength: TextLimit.comment)
+                        }
+                    }
                     .submitLabel(.send)
                     .onSubmit { post() }
                     .padding(.horizontal, 14)

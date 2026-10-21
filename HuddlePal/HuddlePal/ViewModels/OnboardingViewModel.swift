@@ -105,7 +105,8 @@ final class OnboardingViewModel {
     var canVerify: Bool { codeInput.count == codeLength && !isWorking && !attemptsExhausted }
 
     var canCompleteProfile: Bool {
-        !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isWorking
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (1...TextLimit.displayName).contains(name.serverLength) && !isWorking
     }
 
     init(deps: AppDependencies) {
