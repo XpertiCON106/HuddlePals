@@ -456,7 +456,35 @@ private struct ProfileContent: View {
                 Text("Terms of Service")
             }
             .listRowBackground(Theme.surface)
+
+            externalLink("Privacy Policy", to: AppLinks.privacyPolicy)
+            externalLink("Help & Support", to: AppLinks.support)
+            externalLink("Contact Us", detail: AppLinks.contactEmail, to: AppLinks.contact)
+            externalLink("HuddlePals Website", to: AppLinks.website)
         }
+    }
+
+    /// A row that leaves the app (Safari or Mail), marked with ↗.
+    private func externalLink(_ title: String, detail: String? = nil, to url: URL) -> some View {
+        Link(destination: url) {
+            HStack {
+                Text(title)
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer()
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .listRowBackground(Theme.surface)
     }
 }
 

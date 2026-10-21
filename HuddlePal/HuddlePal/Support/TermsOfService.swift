@@ -30,8 +30,10 @@ struct TermsOfService {
     }
 
     /// The subset of Markdown the Terms use: `#` title, `##` headings,
-    /// `- ` bullets, paragraphs, and inline bold.
+    /// `- ` bullets, paragraphs, and inline bold. Web and email addresses
+    /// written out in the text become tappable links.
     init(markdown: String) {
+        let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
         var blocks: [Block] = []
         for line in markdown.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -41,14 +43,26 @@ struct TermsOfService {
                 else if trimmed.hasPrefix("# ") { (.title, trimmed.dropFirst(2)) }
                 else if trimmed.hasPrefix("- ") { (.bullet, trimmed.dropFirst(2)) }
                 else { (.paragraph, trimmed[...]) }
-            blocks.append(Block(id: blocks.count, kind: kind, text: Self.inline(String(body))))
+            blocks.append(Block(id: blocks.count, kind: kind, text: Self.inline(String(body), linkDetector: linkDetector)))
         }
         self.blocks = blocks
     }
 
-    private static func inline(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+    private static func inline(_ text: String, linkDetector: NSDataDetector?) -> AttributedString {
+        var attributed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
+        let plain = String(attributed.characters)
+        for match in linkDetector?.matches(in: plain, range: NSRange(plain.startIndex..., in: plain)) ?? [] {
+            guard let url = match.url, let range = Range(match.range, in: plain) else { continue }
+            let lower = attributed.index(
+                attributed.startIndex,
+                offsetByCharacters: plain.distance(from: plain.startIndex, to: range.lowerBound)
+            )
+            let upper = attributed.index(lower, offsetByCharacters: plain.distance(from: range.lowerBound, to: range.upperBound))
+            // The attribute's type, not `.link`: that key path isn't Sendable.
+            attributed[lower..<upper][AttributeScopes.FoundationAttributes.LinkAttribute.self] = url
+        }
+        return attributed
     }
 }
 

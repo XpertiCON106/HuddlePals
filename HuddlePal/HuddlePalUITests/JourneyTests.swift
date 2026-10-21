@@ -185,4 +185,19 @@ final class JourneyTests: HuddleUITestCase {
         signInWithMockApple()
         waitFor(app.textFields["Your name"], timeout: 20, "the deleted account is gone; this is a new one")
     }
+
+    /// 9. App Review 5.1.1(i) and 1.2: the privacy policy, support and a
+    /// contact address are one tap away in Profile → About.
+    func testProfileLinksToThePrivacyPolicyAndSupport() {
+        launchToShelf()
+        openTab("Profile")
+        for title in ["Privacy Policy", "Help & Support", "Contact Us", "HuddlePals Website"] {
+            // SwiftUI exposes a Link in a List row as a button.
+            let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+            scrollTo(row)
+            XCTAssertTrue(row.exists, "missing link: \(title)")
+        }
+        snapshot("25 profile about links")
+    }
+
 }

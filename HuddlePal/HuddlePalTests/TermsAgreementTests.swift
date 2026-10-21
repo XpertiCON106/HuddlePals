@@ -133,6 +133,25 @@ final class TermsAgreementTests: XCTestCase {
         XCTAssertFalse(text.contains("Drafting Notes"))
     }
 
+    func testAddressesWrittenInTheTermsAreTappable() {
+        let text = "See https://huddlepals.com/privacy, or write to help@example.com."
+        let block = TermsOfService(markdown: text).blocks[0].text
+        XCTAssertEqual(String(block.characters), text, "the wording is unchanged")
+        XCTAssertEqual(block.runs.compactMap(\.link), [
+            URL(string: "https://huddlepals.com/privacy")!,
+            URL(string: "mailto:help@example.com")!,
+        ], "trailing punctuation stays outside the links")
+    }
+
+    /// App Review 5.1.1(i) and 1.2: the Terms link the privacy policy and
+    /// give the same contact address as Profile → About.
+    func testTheBundledTermsLinkThePrivacyPolicyAndTheContactAddress() throws {
+        let terms = try XCTUnwrap(TermsOfService.current)
+        let links = Set(terms.blocks.flatMap { $0.text.runs.compactMap(\.link) })
+        XCTAssertTrue(links.contains(AppLinks.privacyPolicy))
+        XCTAssertTrue(links.contains(AppLinks.contact))
+    }
+
     /// Editing the Terms without bumping `TermsOfService.version` would let
     /// existing users skip agreeing to the new text.
     func testVersionMatchesTheTermsLastUpdatedDate() throws {
