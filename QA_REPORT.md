@@ -6,14 +6,14 @@ _QA sweep run 2026-10-21 on `polish` (branched from `main` at a06d8a7); every fi
 
 ## Executive summary
 
-**Verdict: yes, with caveats.** The `polish` app build is ready for TestFlight once the seven database migrations are applied and the updated `delete-account` edge function is deployed with its Apple secrets (section 3). **Apply migration 001 to production now**, independent of any app release: the profile-photo leak it closes (QA-01) is live today.
+**Verdict: yes, with caveats.** The `polish` app build is ready for TestFlight once the seven database migrations are applied, the updated `delete-account` edge function is deployed with its Apple secrets, and the website's privacy policy and contact address are updated (section 3). **Apply migration 001 to production now**, independent of any app release: the profile-photo leak it closes (QA-01) is live today.
 
 | | Before | After |
 |---|---|---|
-| iOS tests (unit + UI) | 78 / 78 (unit only) | **160 / 160** (135 unit + 25 UI). The 24-test UI suite was green 3 runs in a row; after QA-20 the 25-test suite ran green once |
+| iOS tests (unit + UI) | 78 / 78 (unit only) | **169 / 169** (142 unit + 27 UI). The 24-test UI suite was green 3 runs in a row; the current 27-test suite ran green once |
 | Database / RLS / RPC tests | none | **88 / 88** (71 database + 17 edge-function logic) on fresh `schema.sql` and on deployed schema + migrations |
 | App line coverage | 20.9% | **74.9%** |
-| Findings | — | **33**: 2 Critical, 3 High, 15 Medium, 13 Low. **31 fixed**, 2 open (QA-19 Low, QA-21 Medium) |
+| Findings | — | **38**: 2 Critical, 3 High, 18 Medium, 15 Low. **36 fixed**, 2 open (QA-19 Low, QA-21 Medium) |
 
 ## Progress (working checklist)
 
@@ -25,6 +25,7 @@ _QA sweep run 2026-10-21 on `polish` (branched from `main` at a06d8a7); every fi
 - [x] Phase 4b: final confirmation on the final commit **c0d313a**: `scripts/test-all.sh` (credentials check + DB 69/69 ×2 + iOS 152/152), UI suite 2 more runs (24/24 each, 3 in a row), clean Release build (0 warnings)
 - [x] Phase 5: report
 - [x] Follow-up on `main`: QA-20 fixed (da0723a edge function + migration 007, 82ed439 app). Results: DB + edge suite 88/88 ×2; unit 135/135; UI 25/25 (one full run, plus the new test rerun after a copy change); Release build 0 warnings; analyzer 0 issues; strict concurrency the same 20. Device matrix and coverage were not re-run
+- [x] App Review pass on `main` (QA-35…QA-39: 5a4a76f, 0b99a4e, c50f7b6, plus the docs commit). Results: unit 142/142; UI 27/27 on iPhone 17 Pro (one full run); on a new QA-iPadPro13 simulator, the 10 journey tests plus the main-screens accessibility audit passed; Release build 0 warnings; strict concurrency the same 20. The live website, the backend and App Store Connect were not changed
 
 ---
 
@@ -91,6 +92,11 @@ TBD sections below are filled after the final retest.
 | QA-32 | Low | DEBUG | Seeded demo photos had an unpainted white wedge | fixed ce5bd21 |
 | QA-33 | Medium | UX | Profile: after editing the (multi-line) bio the keyboard could not be dismissed and covered the tab bar | fixed 9b70501 |
 | QA-34 | Low | UX | Shelf row status truncated on small phones ("3 waiting fo…", iPhone SE) | fixed 5d24437 |
+| QA-35 | Medium | Compliance | No privacy policy link inside the app (App Review 5.1.1(i)) and no in-app way to reach the developer (1.2); the privacy URL in the Terms was plain, untappable text | fixed 0b99a4e |
+| QA-36 | Medium | Compliance | Only photos could be reported; comments and member profiles (name, bio, profile photos) are user content too, but couldn't be (1.2). No confirmation after a report | fixed c50f7b6 |
+| QA-37 | Low | Completeness | Huddle settings advertised skip tokens ("Two per member") that nothing in the app can spend (2.1) | fixed 5a4a76f (hidden; decision 4.4 stands) |
+| QA-38 | Medium | Compliance | The hosted privacy policy shows bracketed placeholders ("Operator: HuddlePals"), and the website's contact address differs from the in-app Terms | fixed in PRIVACY.md (docs commit, section 11); **the website still needs updating** (section 3) |
+| QA-39 | Low | UX | Huddle settings: member rows show a chevron but only opened the profile from the avatar, name or chevron; most of the row did nothing | fixed 5a4a76f |
 
 Process notes (honesty): 13be8ea was committed with a test that did not compile (my test runner exited 0 on a failed build); corrected in 99af9f4, runner fixed, no history rewritten. One probe command targeted `~/Library/Application Support/default.store*` for cleanup; the glob matched nothing and nothing was deleted; later probes used scratch paths only.
 
@@ -173,6 +179,8 @@ Verified locally: the whole DB suite passes on (a) fresh `schema.sql` and (b) de
 
 **App build:** every client fix needs a new TestFlight/App Store build (not done; you deploy).
 
+**Website (huddlepals.com, not in this repo; QA-38):** publish the current PRIVACY.md at `/privacy` (the live page still shows "HuddlePals" and "[hello@huddlepals.com]"), and change the contact address on `/terms` and the `mailto:` links on `/support` to hello@huddlepals.com, the address the app and its Terms use. The App Store badge on the home page still links to `idXXXXXXXXXX`; set it once the app has its App Store ID.
+
 **Edge function `delete-account` (changed for QA-20, not deployed):** run migration 007, set the four Apple secrets (`APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID=com.huddlepals.ios`, `APPLE_PRIVATE_KEY`), then `supabase functions deploy delete-account --project-ref <ref>` from `HuddlePal/`. DEVELOPMENT.md → "Account deletion and Apple token revocation" has the Apple key steps, the exact commands and a one-time device check. Order: migration 007 → secrets → function → app build. The new function works with the app already in people's hands: with no code in the body it deletes without revoking and logs why. The new app works with the old function too, but nothing is revoked until the new function is deployed.
 
 ---
@@ -182,7 +190,7 @@ Verified locally: the whole DB suite passes on (a) fresh `schema.sql` and (b) de
 1. **Who gets the photo key.** Members' apps automatically share the huddle key with **anyone who joins**, which also opens every past photo. QA-02 makes guessing a code impractical, but a leaked or forwarded code still works forever. Options: a keeper approves new members before keys are shared; invite codes that expire and can be re-generated ("rotate code" in Settings); a "who joined" notice to the keeper. *My recommendation: rotate plus expiry first (small), approval later.*
 2. **The reciprocity gate is client-side only.** RLS lets any member read today's rows (captions, wrapped keys) before posting; only the app hides them. Enforcing it server-side means a `can_see_today()` check in the deposits/storage policies, which also changes backfill and streak reads. It's a fairness mechanic, not a privacy one (members only), so I didn't change it.
 3. **"Today" is the device's day.** Members in different time zones can disagree at day edges; the server accepts today-2 … today+1 (UTC) so every zone works, which also lets a modified client backfill 2 days or post "tomorrow". A per-huddle home time zone fixes both.
-4. **Skip tokens can't be spent** anywhere in the UI (`spendSkipToken` is never called), yet Settings and the docs describe them. Ship a "use a skip" action, or hide the copy.
+4. **Skip tokens can't be spent** anywhere in the UI (`spendSkipToken` is never called). Huddle settings no longer shows them (QA-37); the Terms and docs still mention them. Ship a "use a skip" action, or keep them hidden.
 5. **Device-wide settings.** Terms acceptance and reminder preferences belong to the device, not the account, so a second account on a shared iPad inherits them. Fine for a family app; say so if not.
 6. **Email OTP server-side.** The app hides email/SMS sign-in, but the Supabase project probably still accepts `POST /auth/v1/otp` for email (default on). If it shouldn't, disable the provider in the dashboard.
 7. **iPad.** The app is Universal; it renders on iPad mini (screenshots), but layouts are phone-first. Keep Universal (needs iPad screenshots for review) or go iPhone-only.
@@ -264,8 +272,8 @@ App Store rules (check before launch): the **Small Business Program** charges **
 | Release build (clean) | ✅ success, 0 warnings | ✅ success, 0 warnings; no `Supabase.plist` in the bundle |
 | Static analyzer (`xcodebuild analyze`) | ✅ 0 issues | ✅ 0 issues |
 | Strict concurrency (diagnostic build, `SWIFT_STRICT_CONCURRENCY=complete`) | 20 unique Swift 6 warnings (not errors in Swift 5 mode) | 20, the same set (none new): Haptics main-actor calls, non-Sendable service existentials, static ISO8601 formatters, SwiftData `#Predicate` key paths. Swift 6 migration item, not a polish fix |
-| iOS unit tests | 78 / 78 passed, 0 skipped | **128 / 128** passed, 0 skipped; after QA-20 **135 / 135** |
-| UI tests | none existed | **24 / 24** passed in each of 3 consecutive runs (no flakes); after QA-20 **25 / 25** in one full run |
+| iOS unit tests | 78 / 78 passed, 0 skipped | **128 / 128** passed, 0 skipped; after QA-20 **135 / 135**; after the App Review pass **142 / 142** |
+| UI tests | none existed | **24 / 24** passed in each of 3 consecutive runs (no flakes); after QA-20 **25 / 25**, after the App Review pass **27 / 27** (one full run each) |
 | Device matrix (9 UI tests: first launch, CTA layout, posting, two-account join, XXXL text, dark mode, 13-screen accessibility audit) | — | iPhone SE 3 **9/9** · iPhone 17 Pro **9/9** · iPhone 17 Pro Max **9/9** · iPad mini **9/9** |
 | DB / RLS / RPC tests | none existed (first run of the new suite: 53 / 62 passed, the 9 failures = QA-01/02/04/05/06) | **69 / 69** on fresh `schema.sql` **and** 69 / 69 on deployed schema + migrations (clean `npm ci`); after QA-20 **88 / 88** in both (+2 SQL, +17 edge-function logic) |
 | App code coverage (line) | 20.9% (2549 / 12209) | **74.9%** (9678 / 12920), final commit |
@@ -370,3 +378,10 @@ App Store rules (check before launch): the **Small Business Program** charges **
 - `da0723a` fix(delete-account): revoke Apple tokens with a fresh authorization code [QA-20]
 - `82ed439` fix(profile): confirm with Apple before deleting the account [QA-20]
 - this report update, with the setup and deploy steps in DEVELOPMENT.md / DEPLOYMENT.md
+
+### App Review pass on `main` (pushed)
+
+- `5a4a76f` fix(huddle-settings): hide unusable skip tokens; make member rows tappable [QA-37] [QA-39]
+- `0b99a4e` fix(profile): link the privacy policy, support and contact from About [QA-35]
+- `c50f7b6` fix(moderation): let people report comments and profiles, and thank them [QA-36]
+- the docs commit: PRIVACY.md placeholders filled (QA-38), DEPLOYMENT.md "Submit for App Review" step, this report

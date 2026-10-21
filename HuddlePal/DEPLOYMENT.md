@@ -127,6 +127,36 @@ seeded **mock** world. No code changes to switch.
      processing. **This is your friends-and-family test. Stop here.**
    - External Testing (later, optional): needs a short beta review.
 6. Testers install via the TestFlight app from the invite email.
+7. **Submit for App Review** (the version page in App Store Connect):
+   - **Privacy Policy URL** `https://huddlepals.com/privacy` (publish the
+     current PRIVACY.md there first) and **Support URL**
+     `https://huddlepals.com/support`. The app links both from
+     Profile → About, with the contact address in `Support/AppLinks.swift`;
+     keep the website's contact address the same.
+   - **App Privacy** answers matching `PrivacyInfo.xcprivacy`; **age
+     rating** with "user-generated content" answered yes; **screenshots**
+     for iPhone and for 13-inch iPad (the app is Universal).
+   - **Account deletion** must work on the live backend: migrations
+     001–007, the Apple secrets and the `delete-account` function
+     (DEVELOPMENT.md), then delete a test account on the TestFlight build.
+   - **App Review notes.** Sign in with Apple is the only sign-in, so no
+     demo account is needed. Reviewers can't see the core loop alone, so
+     consider a demo huddle where a test account posts daily, and paste
+     something like this:
+
+     > HuddlePals is a private, invite-only photo app for small groups (up
+     > to 8 people who know each other). Sign in with Apple is the only
+     > sign-in. To try it: agree to the Terms, sign in, create a huddle and
+     > take today's photo. Other members' photos for today unlock once you
+     > post yours. To see a group with other members, join with invite
+     > code <CODE>. Content safeguards (guideline 1.2): everyone agrees to
+     > the Terms (zero tolerance for objectionable content) before signing
+     > in; any photo (••• menu), comment (touch and hold) or profile (•••
+     > menu) can be reported; members can be blocked; we review reports
+     > within 24 hours. Photos are end-to-end encrypted; a report sends us
+     > that one photo's key so we can review it. Account deletion: Profile
+     > → Delete account (Apple confirms, then the account is deleted and
+     > its Sign in with Apple token revoked).
 
 ## Phase 4 — Two-phone smoke test (~10 minutes)
 

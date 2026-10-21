@@ -1,6 +1,6 @@
 # HuddlePals — Privacy Policy
 
-_Last updated: 2026-10-19_
+_Last updated: 2026-10-21_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
@@ -102,4 +102,4 @@ updated" date above.
 
 ## Contact
 
-**HuddlePals** — **hello@huddlepals.com**
+**HuddlePals** — **hello@huddlepals.com** · [huddlepals.com/support](https://huddlepals.com/support)
