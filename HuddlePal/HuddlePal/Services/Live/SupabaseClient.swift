@@ -50,7 +50,17 @@ actor SupabaseClient {
     let decoder: JSONDecoder
     let encoder: JSONEncoder
 
-    init(config: BackendConfig, urlSession: URLSession = .shared) {
+    /// No HTTP cache: `URLSession.shared` keeps responses (rows with
+    /// captions and comments, profile photos) on disk under Library/Caches,
+    /// where sign-out can't reach them. Photos have their own cache.
+    static func makeURLSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }
+
+    init(config: BackendConfig, urlSession: URLSession = SupabaseClient.makeURLSession()) {
         self.config = config
         self.urlSession = urlSession
         decoder = Self.makeDecoder()

@@ -69,6 +69,11 @@ final class MockMediaService: MediaServiceProtocol {
         try? fileManager.removeItem(at: imageURL(for: relativePath))
     }
 
+    /// Deletes everything under Documents/Media.
+    func removeAll() {
+        try? fileManager.removeItem(at: documentsURL.appendingPathComponent(Self.mediaDirectoryName))
+    }
+
     // Offline, there is no server to hide photos from and every member is
     // on this device, so there are no keys to make or share.
     func saveDepositPhoto(_ data: Data, preferredName: String, huddleID: UUID) async throws -> StoredDepositPhoto {

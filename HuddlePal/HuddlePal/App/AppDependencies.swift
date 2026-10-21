@@ -165,7 +165,7 @@ final class AppDependencies {
             dateProvider: dateProvider,
             session: session,
             debug: DebugSettings(),
-            auth: LiveAuthService(client: client, store: store, keyring: keyring, config: config),
+            auth: LiveAuthService(client: client, store: store, keyring: keyring, media: media, config: config),
             huddleService: LiveHuddleService(
                 client: client, store: store, engine: engine, dateProvider: dateProvider, keyring: keyring
             ),

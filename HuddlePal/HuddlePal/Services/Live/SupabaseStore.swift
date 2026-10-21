@@ -284,6 +284,21 @@ final class SupabaseStore {
         try context.save()
     }
 
+    /// Sign-out / account deletion: every synced row goes, so nothing the
+    /// previous account could see is left for the next one.
+    func removeAllLocalData() throws {
+        // Object by object, parents first, so the cascade rules run: a batch
+        // `delete(model:)` refuses rows that others still point at.
+        for huddle in try context.fetch(FetchDescriptor<Huddle>()) { context.delete(huddle) }
+        for user in try context.fetch(FetchDescriptor<User>()) { context.delete(user) }
+        // Anything left without a parent.
+        for deposit in try context.fetch(FetchDescriptor<Deposit>()) { context.delete(deposit) }
+        for membership in try context.fetch(FetchDescriptor<Membership>()) { context.delete(membership) }
+        for reaction in try context.fetch(FetchDescriptor<Reaction>()) { context.delete(reaction) }
+        for comment in try context.fetch(FetchDescriptor<Comment>()) { context.delete(comment) }
+        try context.save()
+    }
+
     /// Only a format this build can decrypt; anything else (a newer
     /// `enc_version`) renders as the locked placeholder.
     private static func wrappedPhotoKey(of dto: DepositDTO) -> String? {

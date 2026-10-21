@@ -10,13 +10,21 @@ final class LiveAuthService: AuthServiceProtocol {
     private let client: SupabaseClient
     private let store: SupabaseStore
     private let keyring: LivePhotoKeyring
+    private let media: LiveMediaService
     private let emailCodeLength: Int
     private let phoneCodeLength: Int
 
-    init(client: SupabaseClient, store: SupabaseStore, keyring: LivePhotoKeyring, config: BackendConfig) {
+    init(
+        client: SupabaseClient,
+        store: SupabaseStore,
+        keyring: LivePhotoKeyring,
+        media: LiveMediaService,
+        config: BackendConfig
+    ) {
         self.client = client
         self.store = store
         self.keyring = keyring
+        self.media = media
         emailCodeLength = config.emailCodeLength
         phoneCodeLength = config.phoneCodeLength
     }
@@ -131,6 +139,14 @@ final class LiveAuthService: AuthServiceProtocol {
         try await client.invokeFunction("delete-account")
         if let userID { keyring.forgetIdentity(for: userID) }
         await client.signOut()
+    }
+
+    /// The synced store holds co-members' profiles, captions and comments;
+    /// the cache holds every huddle photo (ciphertext) and profile photo
+    /// (plaintext) this account opened.
+    func removeLocalData() throws {
+        try store.removeAllLocalData()
+        media.removeLocalCache()
     }
 
     /// Authenticated → signed in if the profile row exists, otherwise the

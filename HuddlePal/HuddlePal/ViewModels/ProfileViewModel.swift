@@ -383,8 +383,7 @@ final class ProfileViewModel {
 
     func signOut() async {
         try? await deps.auth.signOut()
-        deps.session.currentUser = nil
-        deps.session.needsProfileSetup = false
+        await endSession()
     }
 
     /// Returns true on success so the view can route back to onboarding.
@@ -393,13 +392,25 @@ final class ProfileViewModel {
         defer { isPerformingAccountAction = false }
         do {
             try await deps.auth.deleteAccount()
-            deps.session.currentUser = nil
-            deps.session.needsProfileSetup = false
+            await endSession()
             return true
         } catch {
             statusMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// Leaves nothing of the account behind for whoever signs in next.
+    private func endSession() async {
+        deps.session.currentUser = nil
+        deps.session.needsProfileSetup = false
+        deps.session.pendingInviteCode = nil
+        deps.session.blockedUserIDs = []
+        // In the same main-actor turn as clearing the session: the next
+        // render swaps the main UI for onboarding, so no mounted screen
+        // reads a model after it's deleted.
+        try? deps.auth.removeLocalData()
+        await deps.reminders.refresh()
     }
 
     // MARK: State helpers

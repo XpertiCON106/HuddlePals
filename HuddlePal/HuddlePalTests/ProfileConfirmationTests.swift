@@ -318,6 +318,29 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertTrue(viewModel.hasUnsavedChanges)
         XCTAssertTrue(router.huddlesPath.isEmpty)
     }
+
+    // MARK: Ending the session (QA-10)
+
+    func testSignOutLeavesNothingOfTheAccountForTheNextPerson() async {
+        deps.session.pendingInviteCode = "CREW42"
+        deps.session.blockedUserIDs = [UUID()]
+
+        await viewModel.signOut()
+
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertNil(deps.session.pendingInviteCode, "an invite parked by this account must not carry over")
+        XCTAssertTrue(deps.session.blockedUserIDs.isEmpty)
+        XCTAssertEqual(auth.removeLocalDataCalls, 1, "synced rows and cached photos are forgotten")
+    }
+
+    func testDeletingTheAccountAlsoForgetsLocalData() async {
+        deps.session.pendingInviteCode = "CREW42"
+        let deleted = await viewModel.deleteAccount()
+        XCTAssertTrue(deleted)
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertNil(deps.session.pendingInviteCode)
+        XCTAssertEqual(auth.removeLocalDataCalls, 1)
+    }
 }
 
 @MainActor
@@ -373,6 +396,9 @@ private final class ProfileAuthSpy: AuthServiceProtocol {
 
     func signOut() async throws {}
     func deleteAccount() async throws {}
+
+    private(set) var removeLocalDataCalls = 0
+    func removeLocalData() throws { removeLocalDataCalls += 1 }
 }
 
 private final class ProfileMediaSpy: MediaServiceProtocol {

@@ -90,6 +90,11 @@ final class LiveMediaService: MediaServiceProtocol {
         return data
     }
 
+    /// Sign-out / account deletion: drops every cached photo.
+    func removeLocalCache() {
+        localCache.removeAll()
+    }
+
     func deleteImage(at relativePath: String) {
         // Local cache only. Unreferenced uploads (e.g. a removed profile
         // photo) leave an orphaned object in Storage — harmless at this scale.

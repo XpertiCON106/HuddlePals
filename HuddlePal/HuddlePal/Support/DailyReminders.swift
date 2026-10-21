@@ -44,7 +44,23 @@ final class ReminderSettings {
 /// uploaded, while (b) keeping reminders alive for upcoming days even if
 /// the app isn't reopened. ~3 notifications/day × 7 days stays well under
 /// the iOS 64-pending limit.
-final class DailyReminderScheduler {
+/// What `ReminderCoordinator` needs from the notification scheduler; a
+/// protocol so tests can watch what gets scheduled or cancelled.
+protocol ReminderScheduling: AnyObject {
+    func authorizationStatus() async -> UNAuthorizationStatus
+    func requestAuthorization() async -> Bool
+    func cancelAll()
+    func reschedule(
+        enabled: Bool,
+        hour: Int,
+        minute: Int,
+        suppressToday: Bool,
+        calendar: Calendar,
+        now: Date
+    ) async
+}
+
+final class DailyReminderScheduler: ReminderScheduling {
     /// How many days ahead to keep scheduled.
     static let windowDays = 7
     /// Gentle nudges after the chosen time if still not uploaded (the cap).
@@ -171,7 +187,7 @@ final class DailyReminderScheduler {
 @Observable
 final class ReminderCoordinator {
     let settings: ReminderSettings
-    private let scheduler: DailyReminderScheduler
+    private let scheduler: any ReminderScheduling
     private let session: AppSession
     private let engine: HuddleEngine
     private let dateProvider: DateProviding
@@ -182,7 +198,7 @@ final class ReminderCoordinator {
 
     init(
         settings: ReminderSettings,
-        scheduler: DailyReminderScheduler,
+        scheduler: any ReminderScheduling,
         session: AppSession,
         engine: HuddleEngine,
         dateProvider: DateProviding
@@ -236,6 +252,11 @@ final class ReminderCoordinator {
     /// Recompute and reschedule. Cheap; safe to call often.
     func refresh() async {
         await updateAuthorizationStatus()
+        // Signed out: nobody to remind. (Days 1–6 used to stay scheduled.)
+        guard session.currentUser != nil else {
+            scheduler.cancelAll()
+            return
+        }
         await scheduler.reschedule(
             enabled: settings.isEnabled,
             hour: settings.hour,
