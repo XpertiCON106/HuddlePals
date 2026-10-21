@@ -70,6 +70,15 @@ export async function admin(db, sql, params = []) {
   return (await db.query(sql, params)).rows
 }
 
+/** One statement as the service role (an edge function's admin client). */
+export async function service(db, sql, params = []) {
+  const result = await db.transaction(async (tx) => {
+    await tx.exec('set local role service_role')
+    return tx.query(sql, params)
+  })
+  return result.rows
+}
+
 export async function serverToday(db, offsetDays = 0) {
   const rows = await admin(
     db,

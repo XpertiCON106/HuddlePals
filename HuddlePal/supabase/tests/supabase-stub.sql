@@ -40,11 +40,16 @@ create table storage.buckets (
   public boolean default false
 );
 
+-- owner is the uploader's user id (the Storage API sets it from the JWT),
+-- owner_id the same as text. Storage versions that still keep
+-- objects_owner_fkey refuse to delete a user who owns objects; the stub
+-- keeps it, so the tests cover that worst case.
 create table storage.objects (
   id uuid primary key default gen_random_uuid(),
   bucket_id text references storage.buckets (id),
   name text not null,
-  owner uuid,
+  owner uuid constraint objects_owner_fkey references auth.users (id),
+  owner_id text,
   created_at timestamptz default now(),
   unique (bucket_id, name)
 );

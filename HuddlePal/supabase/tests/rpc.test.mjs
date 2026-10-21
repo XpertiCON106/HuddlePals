@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   freshDatabase, q, affected, admin, serverToday, signUp, createHuddle, joinHuddle,
-  deposit, WRAPPED_KEY, PUBLIC_KEY, randomUUID,
+  deposit, service, WRAPPED_KEY, PUBLIC_KEY, randomUUID,
 } from './harness.mjs'
 
 const RESET_SQL = readFileSync(new URL('../scripts/reset_database.sql', import.meta.url), 'utf8')
@@ -308,6 +308,40 @@ describe('account deletion (what the delete-account function triggers)', () => {
     await joinHuddle(db, B, h.invite_code)
     await admin(db, 'delete from auth.users where id = $1', [A])
     assert.deepEqual(await admin(db, 'select user_id, role from memberships where huddle_id = $1', [h.id]), [{ user_id: B, role: 'keeper' }])
+  })
+
+  it('someone who deposited photos can be deleted once their objects are released; the photos stay (QA-20)', async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const h = await createHuddle(db, A)
+    await joinHuddle(db, B, h.invite_code)
+    const dep = await deposit(db, B, h.id, await serverToday(db))
+    // Ownership as the Storage API records it on upload.
+    const own = `insert into storage.objects (bucket_id, name, owner, owner_id) values ('deposits', $1, $2, $3)`
+    const othersPhoto = `${h.id}/${randomUUID()}.jpg`
+    await admin(db, own, [dep.storage_path, B, B])
+    await admin(db, own, [othersPhoto, A, A])
+
+    await assert.rejects(admin(db, 'delete from auth.users where id = $1', [B]), /objects_owner_fkey/, 'owning an object blocks deleteUser')
+
+    assert.deepEqual(await service(db, 'select release_storage_objects($1) as released', [B]), [{ released: 1 }])
+    await admin(db, 'delete from auth.users where id = $1', [B]) // auth.admin.deleteUser
+    const objects = await admin(db, 'select name, owner, owner_id from storage.objects order by name = $1 desc', [dep.storage_path])
+    assert.deepEqual(objects, [
+      { name: dep.storage_path, owner: null, owner_id: null },
+      { name: othersPhoto, owner: A, owner_id: A },
+    ], 'the photo stays, with no owner; nobody else’s ownership changes')
+    assert.equal((await q(db, A, 'select * from deposits')).length, 1)
+  })
+
+  it('only the service role can release storage objects', async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    for (const caller of [null, A, B]) {
+      await assert.rejects(q(db, caller, 'select release_storage_objects($1)', [B]), /permission denied/, `caller ${caller}`)
+    }
   })
 
   it('a deleted author’s Former-member rows never block that day for anyone else', async () => {

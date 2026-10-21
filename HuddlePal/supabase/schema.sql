@@ -457,6 +457,26 @@ create policy deposits_storage_update on storage.objects for update
     and (storage.foldername(name))[2] = auth.uid()::text
   );
 
+-- Account deletion: the delete-account edge function calls this before
+-- auth.admin.deleteUser. The Storage API records the uploader as each
+-- object's owner, and where storage.objects.owner still references
+-- auth.users that blocks deleting anyone who ever deposited a photo. Those
+-- photos stay (the archive is permanent), so they're left with no owner.
+-- Runs as the caller: only the service role may execute it, and it alone
+-- bypasses RLS on storage.objects.
+create or replace function public.release_storage_objects(p_user_id uuid)
+returns integer
+language sql set search_path = '' as $$
+  with released as (
+    update storage.objects set owner = null, owner_id = null
+     where owner = p_user_id or owner_id = p_user_id::text
+    returning 1
+  )
+  select count(*)::integer from released;
+$$;
+revoke execute on function public.release_storage_objects(uuid) from public, anon, authenticated;
+grant execute on function public.release_storage_objects(uuid) to service_role;
+
 -- ============================================ moderation (UGC safeguards)
 -- App Store guideline 1.2 requires user-generated-content apps to let users
 -- report objectionable content and block other users. Monitor `reports`
