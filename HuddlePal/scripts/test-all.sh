@@ -3,15 +3,20 @@
 # deployed schema + migrations), the iOS unit tests, and the UI journeys.
 #
 #   HuddlePal/scripts/test-all.sh                  # everything
-#   SIMULATOR="iPhone 17" HuddlePal/scripts/test-all.sh
+#   SIMULATOR="My Test iPhone" HuddlePal/scripts/test-all.sh
 #
 # Builds always leave Supabase.plist out (EXCLUDED_SOURCE_FILE_NAMES), so
 # no test run can reach the live backend, even when the plist is present.
+#
+# The UI tests wipe HuddlePals' data on the simulator they run on (every
+# journey starts from a first launch). Point SIMULATOR at one you keep for
+# testing, never one you're signed in on. Create one with:
+#   xcrun simctl create "HuddlePals Tests" "iPhone 17 Pro"
 set -euo pipefail
 
 ROOT="${0:A:h:h}"                     # HuddlePal/
 REPO="${ROOT:h}"
-SIMULATOR="${SIMULATOR:-iPhone 17 Pro}"
+SIMULATOR="${SIMULATOR:-HuddlePals Tests}"
 DERIVED="${DERIVED_DATA:-$ROOT/build/test-all}"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 

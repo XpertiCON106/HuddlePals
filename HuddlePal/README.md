@@ -161,7 +161,7 @@ Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (
 HuddlePal/scripts/test-all.sh
 ```
 
-It builds with `Supabase.plist` excluded, so a test run can never reach the live backend. The database suite alone is `cd supabase/tests && npm install && npm test`: it runs `schema.sql` and the migrations on an in-process Postgres (PGlite) and checks every access rule both ways.
+It builds with `Supabase.plist` excluded, so a test run can never reach the live backend. The UI tests reset HuddlePals' data on the simulator they use, so run them on a test-only simulator (`SIMULATOR="HuddlePals Tests"` by default; the script header shows how to create it). The database suite alone is `cd supabase/tests && npm install && npm test`: it runs `schema.sql` and the migrations on an in-process Postgres (PGlite) and checks every access rule both ways.
 
 ⌘U runs the app's XCTest suites:
 
