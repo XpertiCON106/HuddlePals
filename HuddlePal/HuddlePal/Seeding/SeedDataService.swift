@@ -52,13 +52,7 @@ final class SeedDataService {
     }
 
     private func wipe() async throws {
-        try context.delete(model: Reaction.self)
-        try context.delete(model: Comment.self)
-        try context.delete(model: Deposit.self)
-        try context.delete(model: Membership.self)
-        try context.delete(model: Huddle.self)
-        try context.delete(model: User.self)
-        try context.save()
+        try context.deleteAllHuddleData()
         skipLedger.removeAll()
     }
 

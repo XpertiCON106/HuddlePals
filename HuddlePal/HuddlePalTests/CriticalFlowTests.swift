@@ -158,6 +158,17 @@ final class CriticalFlowTests: XCTestCase {
         XCTAssertEqual(crew.streakCount, before, "joining never resets the group's streak")
     }
 
+    func testRegeneratingTheSeedWorldOverExistingDataWorks() async throws {
+        // QA-24: setUp regenerates on an empty store; the DEBUG menu
+        // regenerates over a full one.
+        _ = try await signedInUser()
+        try await deps.seeder.regenerate()
+        let huddles = try deps.modelContainer.mainContext.fetch(FetchDescriptor<Huddle>())
+        XCTAssertEqual(huddles.count, 2, "a clean rebuild, not a duplicate world")
+        let user = try await signedInUser()
+        XCTAssertEqual(user.displayName, SeedDataService.currentUserName)
+    }
+
     func testWhenTheKeeperLeavesTheLongestStandingMemberTakesOver() async throws {
         // QA-04, mirroring the server's memberships_after_delete trigger.
         let keeper = try await signedInUser()
