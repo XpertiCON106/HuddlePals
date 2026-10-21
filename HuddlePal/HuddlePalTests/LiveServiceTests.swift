@@ -249,6 +249,42 @@ final class LiveServiceTests: XCTestCase {
         }
     }
 
+    // MARK: Reporting comments and profiles (App Review 1.2)
+
+    func testReportingACommentOrAProfileDisclosesNoPhotoKey() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        session.currentUser = me
+        let huddle = try store.apply(HuddleDTO(
+            id: UUID(), name: "Family", emoji: "🏔", inviteCode: "FAM123", notificationHour: 19, streakCount: 0
+        ))
+        let other = User(displayName: "Other", avatarColorHex: "0091FF")
+        container.mainContext.insert(other)
+        let deposit = Deposit(huddle: huddle, author: other, localImagePath: "Media/x/y.jpg", dayKey: "2026-10-20")
+        container.mainContext.insert(deposit)
+        let comment = Comment(deposit: deposit, user: other, text: String(repeating: "🙂", count: 400))
+        container.mainContext.insert(comment)
+        StubURLProtocol.respond { _ in .init(body: Data("[]".utf8)) }
+        let keyring = LivePhotoKeyring(client: client, session: session, identityStore: InMemoryIdentityStore())
+        let moderation = LiveModerationService(client: client, session: session, keyring: keyring)
+
+        try await moderation.report(comment: comment)
+        try await moderation.report(user: other)
+
+        let bodies = try StubURLProtocol.requests.filter { $0.url!.path.hasSuffix("/rest/v1/reports") }.map {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap($0.httpBody)) as? [String: String])
+        }
+        XCTAssertEqual(bodies.count, 2)
+        let commentReason = try XCTUnwrap(bodies[0]["reason"])
+        XCTAssertTrue(commentReason.hasPrefix("Comment \(comment.id.uuidString.lowercased()): 🙂"), "names the comment")
+        XCTAssertEqual(commentReason.serverLength, 300, "fits reports.reason (≤ 300)")
+        XCTAssertEqual(bodies[0]["deposit_id"], deposit.id.uuidString)
+        XCTAssertEqual(bodies[0]["reported_user_id"], other.id.uuidString)
+        XCTAssertNil(bodies[0]["photo_key"], "a comment report opens no photo")
+        XCTAssertEqual(bodies[1], [
+            "reporter_id": me.id.uuidString, "reported_user_id": other.id.uuidString, "reason": "Profile",
+        ])
+    }
+
     // MARK: Joining (QA-02)
 
     func testTooManyWrongInviteCodesSaysSoInsteadOfAGenericError() async throws {

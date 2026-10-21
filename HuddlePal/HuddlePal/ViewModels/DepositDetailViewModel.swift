@@ -13,6 +13,9 @@ final class DepositDetailViewModel {
     private(set) var isPosting = false
     private(set) var errorMessage: String?
     private(set) var didReport = false
+    private(set) var reportedCommentIDs: Set<UUID> = []
+    /// Thanks the reporter once a report has gone through.
+    var isReportConfirmationPresented = false
 
     init(deps: AppDependencies, deposit: Deposit) {
         self.deps = deps
@@ -44,6 +47,24 @@ final class DepositDetailViewModel {
         do {
             try await deps.moderationService.report(deposit: deposit, reason: nil)
             didReport = true
+            isReportConfirmationPresented = true
+            Haptics.success()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Anyone else's comment can be reported, a Former member's included.
+    func canReport(_ comment: Comment) -> Bool {
+        guard let me = deps.session.currentUser?.id else { return false }
+        return comment.user?.id != me
+    }
+
+    func report(_ comment: Comment) async {
+        do {
+            try await deps.moderationService.report(comment: comment)
+            reportedCommentIDs.insert(comment.id)
+            isReportConfirmationPresented = true
             Haptics.success()
         } catch {
             errorMessage = error.localizedDescription

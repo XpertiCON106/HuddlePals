@@ -97,6 +97,10 @@ struct UserProfileView: View {
             if let viewModel, !viewModel.isSelf {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button(viewModel.didReport ? "Reported" : "Report \(user.displayName)", systemImage: "flag") {
+                            Task { await viewModel.report() }
+                        }
+                        .disabled(viewModel.didReport)
                         Button(
                             viewModel.isBlocked ? "Unblock \(user.displayName)" : "Block \(user.displayName)",
                             systemImage: viewModel.isBlocked ? "hand.raised.slash" : "hand.raised",
@@ -126,6 +130,17 @@ struct UserProfileView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("You won't see their photos or comments anymore. They won't be told.")
+        }
+        .alert(
+            viewModel?.didReport == false ? "Couldn't send the report" : ReportFeedback.title,
+            isPresented: Binding(
+                get: { viewModel?.isReportAlertPresented ?? false },
+                set: { viewModel?.isReportAlertPresented = $0 }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel?.didReport == false ? "Check your connection and try again." : ReportFeedback.message)
         }
     }
 

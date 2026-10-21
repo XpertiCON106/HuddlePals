@@ -137,7 +137,7 @@ Key decisions:
 | `HuddleServiceProtocol` | SwiftData CRUD; invite-code lookup in store; `SkipLedger` in memory | `huddles`/`memberships` tables; create + join as RPCs (server-generated code, 8-member cap); `skips` table + `spend_skip_token`; `recompute_streak` RPC (the server's streak is canonical) |
 | `DepositServiceProtocol` | SwiftData insert-only (permanence enforced) | `deposits` plain insert, unique `(huddle_id, author_id, day_key)`; `reactions` toggle via delete-or-insert; `comments`; one-query "who posted today" for the huddle list |
 | `MediaServiceProtocol` | Writes JPEGs to `Documents/Media/` | Insert-only upload to Storage bucket `deposits`; huddle photos **end-to-end encrypted** first (ciphertext in Storage and in the local cache, decrypted in memory for display); local files are the offline cache; authenticated download on cache miss |
-| `ModerationServiceProtocol` | Reports logged (DEBUG); blocks in UserDefaults | `reports` + `blocks` tables; a report carries the reported photo's own key |
+| `ModerationServiceProtocol` | Reports logged (DEBUG); blocks in UserDefaults | `reports` + `blocks` tables; photo, comment and profile reports; only a photo report carries a key (that photo's own) |
 | _(reminders)_ | Per-user local `UNUserNotificationCenter` reminders in `Support/DailyReminders.swift` (not a backend service) | Same; later: server-driven APNs ("everyone else has deposited") |
 
 Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (stub `huddlepal://join/{code}` → universal link) and orphaned Storage cleanup in `LiveMediaService`. The remaining TODOs in the mock services are notes on what their live twins do.

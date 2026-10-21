@@ -200,4 +200,17 @@ final class JourneyTests: HuddleUITestCase {
         snapshot("25 profile about links")
     }
 
+    /// 10. App Review 1.2: a member's profile can be reported from its menu,
+    /// and the reporter is thanked.
+    func testReportingAMembersProfile() {
+        launchToShelf()
+        openHuddle("The Crew")
+        waitFor(app.buttons["Huddle settings"]).tap()
+        waitFor(app.staticTexts["Members"])
+        waitFor(app.buttons["Maya"]).tap()
+        waitFor(app.buttons["More options"]).tap()
+        waitFor(app.buttons["Report Maya"]).tap()
+        waitFor(app.staticTexts["Thanks for reporting"], timeout: 10)
+        snapshot("26 profile reported")
+    }
 }

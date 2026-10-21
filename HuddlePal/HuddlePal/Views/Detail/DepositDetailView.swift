@@ -125,6 +125,11 @@ private struct DetailContent: View {
         } message: {
             Text("You won't see their photos or comments anymore. They won't be told.")
         }
+        .alert(ReportFeedback.title, isPresented: $viewModel.isReportConfirmationPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(ReportFeedback.message)
+        }
     }
 
     private var reactionRow: some View {
@@ -195,6 +200,20 @@ private struct DetailContent: View {
                                 .foregroundStyle(Theme.textPrimary.opacity(0.9))
                         }
                     }
+                    .contextMenu {
+                        if viewModel.canReport(comment) {
+                            let reported = viewModel.reportedCommentIDs.contains(comment.id)
+                            Button(reported ? "Reported" : "Report comment", systemImage: "flag") {
+                                Task { await viewModel.report(comment) }
+                            }
+                            .disabled(reported)
+                        }
+                    }
+                }
+                if viewModel.sortedComments.contains(where: viewModel.canReport) {
+                    Text("Touch and hold a comment to report it.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
         }
