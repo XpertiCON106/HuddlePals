@@ -32,17 +32,21 @@ HuddlePal/
 │   │                                   Deposit, Reaction, Comment (+ MembershipRole)
 │   ├── Engine/
 │   │   └── HuddleEngine.swift           Pure logic: dayKey, gate, streaks, backfill,
-│   │                                   permanence, recovery window, invite codes
+│   │                                   permanence, recovery window, captions
 │   ├── Services/
 │   │   ├── AuthService.swift           AuthServiceProtocol + MockAuthService
 │   │   ├── HuddleService.swift          HuddleServiceProtocol + MockHuddleService + SkipLedger
 │   │   ├── DepositService.swift        DepositServiceProtocol + MockDepositService
 │   │   ├── MediaService.swift          MediaServiceProtocol + MockMediaService
 │   │   ├── ModerationService.swift     ModerationServiceProtocol + MockModerationService
+│   │   ├── PushTokenService.swift      PushTokenServiceProtocol + MockPushTokenService
 │   │   ├── Live/                       SupabaseClient, SupabaseStore, DTOs, KeychainStore,
-│   │   │                               BackendConfig, Live*Service ×5, and E2EE photos:
-│   │   │                               PhotoCrypto, IdentityKeychain, LivePhotoKeyring
-│   │   (notifications: see Support/DailyReminders.swift — per-user reminders)
+│   │   │                               BackendConfig, Live*Service ×6, and E2EE photos:
+│   │   │                               PhotoCrypto, InviteCrypto, IdentityKeychain,
+│   │   │                               LivePhotoKeyring
+│   │   (notifications: Support/DailyReminders.swift — local reminders;
+│   │    Support/PushNotifications.swift — server pushes through APNs;
+│   │    Support/InviteCode.swift — the invite code format)
 │   ├── Seeding/
 │   │   ├── SeedDataService.swift       First-launch world: 4 users, 30 days, mixed participation
 │   │   └── PlaceholderImageGenerator.swift  Gradient + SF Symbol via UIGraphicsImageRenderer
@@ -134,13 +138,14 @@ Key decisions:
 | Protocol | Mock | Live (Supabase) |
 |---|---|---|
 | `AuthServiceProtocol` | Auto-signs-in seeded "You"; fake code `123456` for email/phone | GoTrue: Sign in with Apple (native id_token + nonce), email/SMS OTP (code length from `Supabase.plist`, default 6), Keychain sessions with auto-refresh; account deletion via the `delete-account` edge function |
-| `HuddleServiceProtocol` | SwiftData CRUD; invite-code lookup in store; `SkipLedger` in memory | `huddles`/`memberships` tables; create + join as RPCs (server-generated code, 8-member cap); `skips` table + `spend_skip_token`; `recompute_streak` RPC (the server's streak is canonical) |
+| `HuddleServiceProtocol` | SwiftData CRUD; invite-code lookup in store; `SkipLedger` in memory | `huddles`/`memberships` tables; create as an RPC; join with `redeem_huddle_invite` (the invite carries the huddle key; 8-member cap); invite show / reset; `skips` table + `spend_skip_token`; `recompute_streak` RPC (the server's streak is canonical) |
 | `DepositServiceProtocol` | SwiftData insert-only (permanence enforced) | `deposits` plain insert, unique `(huddle_id, author_id, day_key)`; `reactions` toggle via delete-or-insert; `comments`; one-query "who posted today" for the huddle list |
 | `MediaServiceProtocol` | Writes JPEGs to `Documents/Media/` | Insert-only upload to Storage bucket `deposits`; huddle photos **end-to-end encrypted** first (ciphertext in Storage and in the local cache, decrypted in memory for display); local files are the offline cache; authenticated download on cache miss |
 | `ModerationServiceProtocol` | Reports logged (DEBUG); blocks in UserDefaults | `reports` + `blocks` tables; photo, comment and profile reports; only a photo report carries a key (that photo's own) |
-| _(reminders)_ | Per-user local `UNUserNotificationCenter` reminders in `Support/DailyReminders.swift` (not a backend service) | Same; later: server-driven APNs ("everyone else has deposited") |
+| `PushTokenServiceProtocol` | Remembers the token in memory (nothing sends) | `device_tokens` upsert / delete; database triggers call the `send-push` edge function, which sends through APNs |
+| _(reminders)_ | Per-user local `UNUserNotificationCenter` reminders in `Support/DailyReminders.swift` (not a backend service) | Same |
 
-Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (stub `huddlepal://join/{code}` → universal link) and orphaned Storage cleanup in `LiveMediaService`. The remaining TODOs in the mock services are notes on what their live twins do.
+Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (`huddlepal://join/{code}` → universal link) and orphaned Storage cleanup in `LiveMediaService`. The remaining TODOs in the mock services are notes on what their live twins do.
 
 ## Business rules (as implemented)
 
@@ -150,7 +155,7 @@ Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (
 - **Reciprocity gate** — unlocked ⇔ current user has a deposit with today's dayKey. Locked cards show author name + avatar over a frosted stand-in tinted with the author's color; the actual image bytes are never loaded while locked. Previous days are always visible.
 - **Group streak** — a day counts when every member it waits on deposited **or** spent a skip token. A day waits on members who joined *before* it: your join day is free, so joining never breaks a streak, and you count from the next day. Counting runs backward from today (if complete) or yesterday (an in-progress today never breaks the streak); the first incomplete *ended* day stops it. Recomputed on launch and after every deposit.
 - **Backfill** — a past day can receive a deposit within 48h of that day's start (in practice: yesterday), surfaced in Archive as "Add to yesterday". The next full-history recompute picks the backfilled day up — that's how the recovery window restores a streak.
-- **End-to-end encrypted photos (live)** — the backend only ever holds ciphertext. Each photo has its own key, sealed with its huddle's key, which each member's device holds wrapped to that member's identity key (iCloud Keychain). A new member sees "Waiting for a huddle member to share access" until another member's app shares the huddle key — automatically, on foreground or huddle open. Reporting a photo discloses that one photo's key so it can be reviewed. Captions, comments, and profiles are not encrypted.
+- **End-to-end encrypted photos (live)** — the backend only ever holds ciphertext. Each photo has its own key, sealed with its huddle's key, which each member's device holds wrapped to that member's identity key (iCloud Keychain). A new member's invite code carries the huddle key, sealed so only the code's secret opens it: they see every photo the moment they join, with nobody else online, and the server never holds the secret. Reporting a photo discloses that one photo's key so it can be reviewed. Captions, comments, and profiles are not encrypted.
 - **Former member** — photos and comments outlive their author: a deleted account (or a member who left, whose profile you can no longer read) shows as "Former member". The photo stays, and stays reportable.
 
 ## Testing

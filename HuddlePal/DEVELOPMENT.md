@@ -67,19 +67,23 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   `HuddlePalApp.init`, injected via `.environment(...)`. Holds: ModelContainer,
   `HuddleEngine`, `AppDateProvider` (injectable clock w/ debug `dayOffset`),
   `AppSession` (currentUser, blockedUserIDs, pendingInviteCode,
-  needsProfileSetup, isReady), `DebugSettings`, `AppearanceSettings`, the
-  five services, the seeder, `reminders` (ReminderCoordinator), and `isLive`.
+  pendingHuddleID, needsProfileSetup, isReady), `DebugSettings`,
+  `AppearanceSettings`, the five services, the seeder, `reminders`
+  (ReminderCoordinator), `push` (PushCoordinator), and `isLive`.
 - **Services (protocol → mock / live)**: `AuthServiceProtocol`,
   `HuddleServiceProtocol`, `DepositServiceProtocol`, `MediaServiceProtocol`,
-  `ModerationServiceProtocol` (report/block, UGC safeguards).
+  `ModerationServiceProtocol` (report/block, UGC safeguards), plus
+  `PushTokenServiceProtocol` (this device's APNs token; owned by
+  `deps.push`, not passed around).
   All `@MainActor` except Media. Live mode adds `LivePhotoKeyring` (E2EE
-  keys), shared by the live services and deliberately NOT a protocol: the
-  mock has no server to hide photos from, so it has nothing to mirror. Notifications are NOT a service: the
-  single notification path is the backend-agnostic per-user
-  `ReminderCoordinator` (`Support/DailyReminders.swift`, on `deps.reminders`).
-  The old per-huddle `NotificationService` was removed once the per-user
-  reminder superseded it — Huddle Settings' hour picker now only stores the
-  huddle's `notificationHour`, it doesn't schedule anything.
+  keys and invites), shared by the live services and deliberately NOT a
+  protocol: the mock has no server to hide photos from, so it has nothing to
+  mirror. Two notification paths: daily upload reminders are local and
+  backend-agnostic (`ReminderCoordinator`, `Support/DailyReminders.swift`, on
+  `deps.reminders`); activity notifications are pushed by the server through
+  APNs (`PushCoordinator`, `Support/PushNotifications.swift`, on `deps.push`;
+  see "Push notifications (APNs)"). Huddle Settings' hour picker only stores
+  the huddle's `notificationHour`, it doesn't schedule anything.
 - **Navigation (v2, multi-huddle)**: two tabs — Huddles / Profile. The Huddles
   tab is one `NavigationStack` (`router.huddlesPath`): HuddleListView →
   huddleHome(Huddle) → archive/detail/settings/userProfile. Home, Archive,
@@ -89,7 +93,9 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   INFOPLIST_FILE — kept OUTSIDE the synchronized folders, otherwise the
   build copies it as a resource too and fails with "Multiple commands
   produce Info.plist") lands in JoinHuddle prefilled via
-  `session.pendingInviteCode`.
+  `session.pendingInviteCode`. A tapped push notification sets
+  `session.pendingHuddleID`; the shelf opens that huddle once it's loaded
+  (`HuddleListViewModel.takeNotifiedHuddle`).
 - **View pattern**: screen view holds `@State private var viewModel: VM?`,
   creates it in `.onAppear` with `deps` from environment, inner
   `*Content` struct takes `@Bindable var viewModel`.
@@ -167,17 +173,47 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   with no copy at all, `init_huddle_key` (refuses once any current member
   holds one — a key is shared, never replaced) → `huddle_key_recipients` +
   `share_huddle_key` for members with no copy or a stale one (wrapped for a
-  public key they've since replaced). Identity: created on first sign-in
+  public key they've since replaced) — now only a fallback, since joiners
+  get the key from their invite (below). Identity: created on first sign-in
   on a device; if the server holds a different public key (lost key, or
   another device without iCloud Keychain), this device publishes its own
   and members re-share. Display: `LocalDepositImage(deposit:)` →
-  `loadDepositPhoto` (cache-only huddle key, no network) → nil shows the
-  locked placeholder "Waiting for a huddle member to share access", retried
-  whenever the keyring bumps `session.photoKeysVersion`. Reports attach that
-  one photo's key (`reports.photo_key`); operators decrypt with
+  `loadDepositPhoto` (cache-only huddle key, no network) → nil shows a lock
+  (normally only for the moment before a cold launch's key sync finishes),
+  retried whenever the keyring bumps `session.photoKeysVersion`. Reports
+  attach that one photo's key (`reports.photo_key`); operators decrypt with
   `tools/decrypt_reported_photo`. Mock mode stores photos as-is
   (`wrappedPhotoKey` nil). NOT encrypted: captions, comments, reactions,
-  profiles, avatars, all metadata.
+  profiles, avatars, huddle names, all metadata.
+- **Instant join: invites carry the huddle key (v7, live)**: an invite code
+  (`Support/InviteCode.swift`) is a 6-character lookup part plus a
+  26-character secret (≈128.8 bits), 32 characters of the unambiguous
+  alphabet, shown as `XXXX-XXXX-…` (8 groups) and shared as
+  `huddlepal://join/<32 chars>` with the code in the message. The server
+  stores only the lookup (`huddles.invite_code`). `InviteCrypto` derives two
+  things from the secret with HKDF-SHA256: the **proof** (the server keeps
+  its SHA-256 in `huddle_invite_keys.proof_hash`, to check a code without
+  being able to forge one) and, with a random 32-byte salt, the **wrapping
+  key** that AES-GCM seals the huddle key with (`sealed_key`). The secret is
+  also stored sealed with the huddle key (`sealed_secret`), so every
+  member's app can show and share the code. Joining
+  (`LiveHuddleService.joinHuddle`): `redeem_huddle_invite(lookup, proof)`
+  (10 misses/hour shared with old codes; refuses existing members, a full
+  huddle, and anyone a member has blocked) → the keyring opens the sealed
+  key with the secret → wraps it for this user's identity key and stores it
+  with `save_own_huddle_key`, retried by every sync until the server has it.
+  Nobody else needs to be online and every photo opens at once. Issuing:
+  the creator's app right after `init_huddle_key`, and any member's app
+  that opens a huddle still on an old code (`create_huddle_invite`, which
+  retires the old code via `huddles.legacy_invite = false`). Keeper: Huddle
+  Settings → **New invite code** (`reset_huddle_invite`) revokes the old code
+  and deletes its sealed copy. If a huddle ever gets a new key
+  (`init_huddle_key` when nobody left holds the old one — the only time the
+  key changes), its invite is dropped and the next member to open it issues
+  a fresh one sealed with the new key. Old 6-character codes: old app builds
+  keep joining with them (`join_huddle`) until the huddle is upgraded; this
+  build refuses them locally with `.inviteCodeOutdated`. Mock: stores the
+  whole code in `Huddle.inviteCode`, same rules otherwise.
 - **Moderation — report/block (v4, UGC req. 1.2)**: `ModerationServiceProtocol`
   (+ Mock/Live). `reports` + `blocks` tables. Blocked ids live in
   `session.blockedUserIDs` (loaded at sign-in/launch; mutated by block
@@ -234,9 +270,11 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
 - **Backfill**: a *past* dayKey can receive a deposit while `now <
   dayStart + 48h` (practically: yesterday). Surfaced in Archive. No special
   streak repair, but full-history recompute naturally sees backfilled days.
-- **Invite codes**: 6 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`. Captions:
-  ≤80 chars (UI + `HuddleEngine.sanitizedCaption` + DB check). Member cap: 8,
-  enforced only server-side (`join_huddle` RPC). Notification hour default 19.
+- **Invite codes**: 32 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (6-char
+  lookup + 26-char secret; see "Instant join"). Captions: ≤80 chars (UI +
+  `HuddleEngine.sanitizedCaption` + DB check). Member cap: 8, enforced only
+  server-side (`redeem_huddle_invite` / `join_huddle`). Notification hour
+  default 19.
 
 ## Auth (the newest subsystem)
 
@@ -308,17 +346,23 @@ Mock → SwiftData + Documents/Media          Live → Supabase + same local sto
   UPDATE policy that huddle paths don't (and mustn't) have, and overwriting
   a photo would break permanence. Download via `/object/authenticated/...`.
   RLS gates by first path folder (huddle UUID, or `avatars/<user_id>`).
-- Schema: 11 tables (profiles, huddles, memberships, deposits, reactions,
-  comments, skips, reports, blocks, user_keys, huddle_keys), SECURITY DEFINER helpers (`is_huddle_member` etc. — the
-  standard fix for RLS recursion), 7 RPCs (`create_huddle`, `join_huddle`,
-  `spend_skip_token`, `recompute_streak`, `init_huddle_key`,
-  `huddle_key_recipients`, `share_huddle_key`). `huddle_keys` has a
-  select-own policy only; its writers are the two key RPCs (an upsert of a
-  row you can't SELECT fails under RLS). `schema.sql` builds a fresh
-  database; `supabase/migrations/` (001–007, see its README) upgrades the
-  one already deployed, and `supabase/scripts/reset_database.sql` wipes an
-  older database so `schema.sql` can run fresh. Deposits insert policy clamps
-  dayKey to a UTC-anchored ~48h window.
+- Schema: 14 tables (profiles, huddles, memberships, deposits, reactions,
+  comments, skips, reports, blocks, user_keys, huddle_keys,
+  huddle_invite_keys, device_tokens, join_attempts), SECURITY DEFINER
+  helpers (`is_huddle_member` etc. — the standard fix for RLS recursion),
+  client RPCs `create_huddle`, `join_huddle` (old codes), `spend_skip_token`,
+  `recompute_streak`, `init_huddle_key`, `huddle_key_recipients`,
+  `share_huddle_key`, `redeem_huddle_invite`, `huddle_invite`,
+  `create_huddle_invite`, `reset_huddle_invite`, `save_own_huddle_key`, and
+  service-role-only `release_storage_objects` and `push_targets`.
+  `huddle_keys` has a select-own policy only; its writers are the key RPCs
+  (an upsert of a row you can't SELECT fails under RLS).
+  `huddle_invite_keys` has no policies and no table privileges at all.
+  `schema.sql` builds a fresh database; `supabase/migrations/` (001–009, see
+  its README) upgrades the one already deployed, and
+  `supabase/scripts/reset_database.sql` wipes an older database so
+  `schema.sql` can run fresh. Deposits insert policy clamps dayKey to a
+  UTC-anchored ~48h window.
 - Config: `BackendConfig.load()` reads bundled `Supabase.plist`
   (SUPABASE_URL / SUPABASE_ANON_KEY); placeholders ⇒ nil ⇒ mock mode. The
   plist is gitignored; example at `supabase/Supabase.example.plist`. Anon
@@ -346,6 +390,7 @@ Apple must revoke the app's Apple tokens. How it runs (QA-20):
    - exchanges the code at `https://appleid.apple.com/auth/token`;
    - checks the ID token's `sub` is this user's Apple ID;
    - revokes the refresh token at `https://appleid.apple.com/auth/revoke`;
+   - deletes the user's `device_tokens` (no more notifications);
    - deletes `avatars/<user id>/…`;
    - calls `release_storage_objects` (migration 007), so the user's deposit
      photos stop pointing at them and can't block the deletion;
@@ -448,10 +493,148 @@ On the app side:
 
 Apple's real servers and sheet are not covered; do the device check above.
 
+## Push notifications (APNs)
+
+The server tells members about activity in their huddles: a new photo
+(every other member), a comment or a reaction on your photo (you), and
+someone joining (everyone already there). Never the person who did it,
+never across a block (either direction), and only current members. Daily
+upload reminders stay local (`ReminderCoordinator`).
+
+How it runs:
+
+1. **App** (`Support/PushNotifications.swift`, `deps.push`). The app asks
+   for notification permission once the person has created or joined a
+   huddle (`CreateHuddleViewModel` / `JoinHuddleViewModel` →
+   `PushCoordinator.huddleJoined`), never at launch. When allowed and
+   signed in, it registers with APNs on launch, foreground and sign-in;
+   `AppDelegate` hands the token to `PushCoordinator.didRegister`, which
+   upserts `device_tokens (user_id, token, environment)` through
+   `LivePushTokenService`. The environment is `sandbox` for builds signed
+   for development (Xcode, the Simulator) and `production` for TestFlight
+   and the App Store (read from the embedded provisioning profile).
+   Profile → Notifications → **Huddle activity** turns it off for this
+   device (deletes the row). Sign-out deletes this device's row before the
+   session ends; account deletion deletes all of the user's rows (and the
+   FK cascades). A tap opens the huddle named in the payload's `huddle_id`.
+2. **Database** (migration 009 / `schema.sql`). AFTER INSERT triggers on
+   `deposits`, `comments`, `reactions` and `memberships` call
+   `notify_push`, which queues a `pg_net` POST of `{"kind", "id"}` to the
+   `send-push` function with a shared secret, read from Vault. It does
+   nothing until both Vault secrets exist, and a failure never blocks the
+   insert. `push_targets(kind, id)` (service role only) decides who is told
+   what; a token registered by two accounts counts only for the newer.
+3. **`send-push` edge function** (`supabase/functions/send-push/`:
+   `index.ts` wires Supabase in, `handler.ts` checks the secret and sends,
+   `apns.ts` signs the ES256 provider token and talks to APNs over HTTP/2).
+   One alert per device to `api.push.apple.com` or
+   `api.sandbox.push.apple.com` by the token's environment; tokens APNs
+   reports as invalid (410 Unregistered, 400 BadDeviceToken) are deleted.
+   The provider token is reused for 50 minutes per warm instance.
+
+What a notification says: the huddle's emoji and name as the title, and
+"Maya posted a photo." / "Maya commented on your photo." / "Maya reacted 🔥
+to your photo." / "Sam joined the huddle." Huddle names, display names and
+reaction emoji aren't end-to-end encrypted (see "End-to-end encrypted
+photos"), so showing them leaks nothing new; captions and comment text are
+never sent, and photos are only ever ciphertext on the server. No
+Notification Service Extension is needed.
+
+### One-time setup: Apple
+
+1. [developer.apple.com](https://developer.apple.com/account) →
+   Certificates, Identifiers & Profiles → **Identifiers** →
+   `com.huddlepals.ios` → tick **Push Notifications** → **Save**. (No
+   certificates: token-based auth uses a key.)
+2. **Keys** → **+** → name it (e.g. "HuddlePals APNs"), tick **Apple Push
+   Notifications service (APNs)**, choose **Sandbox & Production**, then
+   **Continue** → **Register**. Download `AuthKey_<KEY_ID>.p8` (offered
+   once; keep it in a password manager, never in the repo) and note the
+   10-character **Key ID**. The **Team ID** is under Account → Membership
+   details (the same one as the Sign in with Apple key).
+3. Xcode: the app's entitlements already carry `aps-environment`
+   (`HuddlePal/HuddlePal.entitlements`), which is the Push Notifications
+   capability. With automatic signing, select the HuddlePal target →
+   Signing & Capabilities and check **Push Notifications** is listed and
+   the profile has no errors; Xcode regenerates the profile once the App ID
+   has the capability. Archives for TestFlight switch the entitlement to
+   production on their own.
+
+### Set the secrets
+
+Function secrets (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are
+injected automatically). Make up a long random webhook secret first, for
+example with `openssl rand -hex 32`:
+
+```bash
+supabase secrets set --project-ref <project-ref> APNS_KEY_ID=<KEY_ID> APNS_TEAM_ID=<TEAM_ID> APNS_BUNDLE_ID=com.huddlepals.ios PUSH_WEBHOOK_SECRET=<webhook-secret>
+```
+
+```bash
+supabase secrets set --project-ref <project-ref> APNS_PRIVATE_KEY="$(cat /path/to/AuthKey_<KEY_ID>.p8)"
+```
+
+Vault secrets the triggers read (SQL editor; the same webhook secret):
+
+```sql
+select vault.create_secret('https://<project-ref>.supabase.co/functions/v1/send-push', 'push_function_url');
+select vault.create_secret('<webhook-secret>', 'push_webhook_secret');
+```
+
+- The key may keep its real newlines or use `\n` escapes; both work.
+- To change a Vault secret later: `select vault.update_secret(id, '<new value>')`
+  with the id from `select id, name from vault.secrets`.
+- Without the APNS_* secrets the function logs `push_skipped` and sends
+  nothing; without the Vault secrets the triggers send nothing at all.
+
+### Deploy
+
+1. **Database.** Run `supabase/migrations/008_invite_keys.sql`, then
+   `009_push_notifications.sql`, in the SQL editor (009 enables `pg_net`;
+   if your project refuses, enable it under Database → Extensions and run
+   009 again). A fresh project gets both from `schema.sql`.
+2. **The function**, from `HuddlePal/`, with JWT verification off (the
+   database sends no user token; the shared secret is the check):
+
+   ```bash
+   supabase functions deploy send-push --no-verify-jwt --project-ref <project-ref>
+   ```
+
+### Check it on a device
+
+The Simulator registers with APNs too (sandbox), but a real device is the
+proper check.
+
+1. Install a development build on device A and B (two accounts) or a
+   TestFlight build. Create a huddle on A: allow notifications when asked.
+2. Join on B with the invite code: A gets "… joined the huddle".
+3. Post on B: A gets "… posted a photo." Tap it: the huddle opens.
+4. Supabase → Edge Functions → `send-push` → Logs shows
+   `push_sent deposit sent=1 …`; `select * from net._http_response order by
+   created desc limit 5` shows the triggers' calls.
+5. Profile → Notifications off on A: post on B again, and A gets nothing.
+
+### Tests
+
+- `supabase/tests/push.test.mjs`: device-token RLS, who gets notified for
+  each kind (never the actor, never across a block, only members, the
+  newest owner of a shared token), and the triggers (one request per event,
+  nothing without Vault secrets, an insert never blocked).
+- `supabase/tests/send-push.test.mjs`: the provider token (signature
+  verified with the key's public half, 50-minute reuse), the exact APNs
+  request per environment, invalid-token handling, the secret check, and
+  nothing secret in the logs.
+- `PushNotificationTests`: permission only after a huddle, registration and
+  upload, the toggle, sign-out removing the token first, a tap opening the
+  right huddle, and the `device_tokens` requests.
+
+APNs itself and a real device are not covered; do the device check above.
+
 ## Mock world & debug
 
 Seed (first launch, mock only; `Seeding/SeedDataService.swift`): huddle
-"The Crew" 🏔, code `CREW42`; users You (keeper) / Maya / Sam / Riley with
+"The Crew" 🏔, code `CREW-427K-Q9MW-…` (`SeedDataService.crewInviteCode`);
+users You (keeper) / Maya / Sam / Riley with
 ink-ramp avatar hexes; 30 days history — misses at offsets −24 (Riley) and
 −7 (Maya), skip-token day −14 (Sam, so he has 1 token left) recorded in the
 in-memory `SkipLedger` (re-seeded each launch, drifts with real days —
@@ -534,8 +717,10 @@ App icon generated by `tools/generate_icon.swift` (must stay 1024×1024
   (`LivePhotoKeyring`) writes.
 - E2EE wire formats are pinned by DB check constraints: public keys are
   44-char base64 (32 raw bytes), wrapped keys 80-char base64 (60-byte
-  AES-GCM combined box). HKDF info uses lowercased UUIDs (Postgres prints
-  them lowercase, Swift uppercase).
+  AES-GCM combined box). Invites: proof and salt 44-char base64 (32
+  bytes), `sealed_key` 80 chars, `sealed_secret` 72 chars (12 + 26 + 16
+  bytes); the server stores `sha256(proof)` as 64 hex chars. HKDF info uses
+  lowercased UUIDs (Postgres prints them lowercase, Swift uppercase).
 - User model carries `bio: String?` + `profilePhotoPaths: [String]` (≤3,
   "Media/avatars/<user_id>/…"); profiles table mirrors with `bio` +
   `photo_paths jsonb`. Storage bucket "deposits" has TWO path namespaces:
@@ -549,7 +734,9 @@ App icon generated by `tools/generate_icon.swift` (must stay 1024×1024
 Verified: the app builds in Xcode 26.1.1 and the full XCTest suite passes
 on the iPhone 17 Pro simulator (engine rules, critical mock flows,
 `SupabaseStore` reconciliation incl. Former member, profile editor,
-E2EE crypto + identity Keychain); icon
+E2EE crypto + identity Keychain, invite joins against an in-process fake
+server, push coordination); the invite and push SQL runs in the PGlite
+suite (fresh schema and deployed schema + migrations); icon
 is 1024 opaque RGB.
 **Not verified by tests**: anything over HTTP. The live layer is being
 exercised by hand against the real project, but these still deserve a
@@ -562,7 +749,9 @@ the end-to-end encryption SQL in `schema.sql` and
 `supabase/scripts/reset_database.sql` have not been run against Postgres
 here; the CryptoKit layer is unit-tested
 (`PhotoEncryptionTests`), the key sharing between two real accounts is
-not. Apple sign-in needs the paid
+not. Push notifications have not reached APNs or a device yet, and
+`pg_net` / Vault are stubbed in the test database: do the device check in
+"Push notifications (APNs)". Apple sign-in needs the paid
 account + provider config; SMS needs Twilio. DEPLOYMENT.md's last section
 tracks this.
 

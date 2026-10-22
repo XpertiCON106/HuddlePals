@@ -82,7 +82,7 @@ A subtle consequence, verified by test: if yesterday broke the streak but *today
 
 **Backfill.** A past day can receive a deposit within 48 hours of that day's start — in practice, yesterday. Surfaced in the Archive and by the recovery banner.
 
-**Invite codes.** 6 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` — ambiguous glyphs (0/O, 1/I/L) excluded. Server-generated and uniqueness-checked in live mode. The seeded huddle's code is `CREW42`.
+**Invite codes.** 32 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` — ambiguous glyphs (0/O, 1/I/L) excluded — shown as eight groups of four. The first 6 are a lookup the server stores; the other 26 are a secret (≈128.8 bits) that in live mode unlocks the huddle's key, so whoever holds the code sees every photo the moment they join (§10a). The keeper can replace the code; the old one then stops working. Old 6-character codes are retired the first time a member opens the huddle in this build. The seeded huddle's code starts `CREW-427K`.
 
 **Captions.** Optional, hard-capped at 80 characters (enforced in the UI field, the engine sanitizer, and the database constraint).
 
@@ -114,10 +114,10 @@ flowchart TD
 | **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
 | **Archive** | Full history: month headers → day rows → horizontal photo strips. Today appears only once unlocked. Pull-to-refresh. Backfill banner when eligible. |
 | **Deposit Detail** | Framed photo, caption, author, date, 5-emoji reaction row (tap toggles yours), comment thread + input bar. |
-| **Create Huddle** | Name + emoji picker → server-generated invite code → ShareLink with a working `huddlepal://join/{code}` deep link (the app registers the scheme and prefills Join). |
-| **Join Huddle** | 6-char code entry with error states (not found / already member / huddle full). |
-| **Huddle Settings** | Members with roles + skip tokens, streak detail, the huddle's preferred reminder hour (stored only — notification delivery is the per-user reminder in Profile), invite code with copy, leave huddle (destructive, confirmed). |
-| **Your profile** | Up to 3 profile photos (the first is your profile picture/avatar), display name, 160-char bio, curated identity color (6 solids + 2 gradients), daily-reminder toggle + time, light/dark appearance picker, sign out, **delete account** (both confirmed) — and in mock mode only, the DEBUG section. Profile photos, avatar color, name, and bio stay in a local draft until the user confirms **Save Changes**. A dirty exit attempt is blocked before navigation; Keep Editing preserves the draft and Discard restores the saved state, with both actions remaining on Profile. |
+| **Create Huddle** | Name + emoji picker → the new invite code → ShareLink with a working `huddlepal://join/{code}` deep link and the code in the message (the app registers the scheme and prefills Join). Then the notification permission prompt, the first time. |
+| **Join Huddle** | Code entry (paste, type, or arrive by link; dashes and case don't matter) with error states (not found / old code / already member / huddle full / can't join). |
+| **Huddle Settings** | Members with roles + skip tokens, streak detail, the huddle's preferred reminder hour (stored only — notification delivery is the per-user reminder in Profile), invite code with copy and share, **New invite code** for the keeper (confirmed), leave huddle (destructive, confirmed). |
+| **Your profile** | Up to 3 profile photos (the first is your profile picture/avatar), display name, 160-char bio, curated identity color (6 solids + 2 gradients), activity-notifications toggle, daily-reminder toggle + time, light/dark appearance picker, sign out, **delete account** (both confirmed) — and in mock mode only, the DEBUG section. Profile photos, avatar color, name, and bio stay in a local draft until the user confirms **Save Changes**. A dirty exit attempt is blocked before navigation; Keep Editing preserves the draft and Discard restores the saved state, with both actions remaining on Profile. |
 | **Report / block** | Any other person's photo has a "•••" menu (Deposit Detail) with **report** — including a Former member's photo — and **block** while the author still has an account; anyone else's comment can be reported by touching and holding it; any member's profile menu offers **report** and **block/unblock**. Every report ends with a "Thanks for reporting" confirmation. Blocking hides that person's photos/comments from you (presentational only — never changes the huddle or streak). UGC safeguards for App Review (guideline 1.2). |
 | **Member profile** | Opened by tapping any name or avatar anywhere: swipeable photo pager, bio, and the huddles + streaks you share with them. |
 
@@ -147,7 +147,7 @@ flowchart TD
 
 Key decisions and why:
 
-- **`AppDependencies` is the composition root** ([App/AppDependencies.swift](HuddlePal/App/AppDependencies.swift)). Built once in `HuddlePalApp.init`, injected via SwiftUI Environment. It owns the ModelContainer, the engine, the injectable clock (`AppDateProvider`), the observable `AppSession` (current user, blocked user ids, pending invite code, profile-setup flag, readiness), `DebugSettings`, `AppearanceSettings`, the five services, the seeder, and the per-user reminder coordinator (`deps.reminders`). `makeMock()` and `makeLive(config:)` are the only two wirings.
+- **`AppDependencies` is the composition root** ([App/AppDependencies.swift](HuddlePal/App/AppDependencies.swift)). Built once in `HuddlePalApp.init`, injected via SwiftUI Environment. It owns the ModelContainer, the engine, the injectable clock (`AppDateProvider`), the observable `AppSession` (current user, blocked user ids, pending invite code, the huddle a tapped notification is about, profile-setup flag, readiness), `DebugSettings`, `AppearanceSettings`, the five services, the seeder, the per-user reminder coordinator (`deps.reminders`), and the push coordinator (`deps.push`). `makeMock()` and `makeLive(config:)` are the only two wirings.
 - **The engine is value-typed.** It consumes `DepositSnapshot` structs (id, huddleID, authorID, dayKey, createdAt) — never SwiftData models — plus an injected `Calendar` and explicit `now: Date`. That's what makes the math deterministic and testable.
 - **View models are `@MainActor @Observable` classes**, created by their views via `@State` and handed `deps` from the environment. SwiftUI re-renders automatically when their properties change — no manual refresh plumbing.
 - **Navigation** is a typed `Route` enum over per-tab `NavigationStack` paths, owned by an `@Observable AppRouter` ([App/AppRouter.swift](HuddlePal/App/AppRouter.swift)). `@Model` classes are `Hashable` by identity, so models ride in the path directly.
@@ -160,17 +160,17 @@ The decision happens once, at launch, in `HuddlePalApp.init`: if a `HuddlePal/Hu
 | Concern | Mock | Live |
 |---|---|---|
 | Accounts | Identity → local user map in UserDefaults; code always `123456`; first launch auto-signs-in seeded "You" | GoTrue: Apple id_token, email/SMS OTP; session in Keychain with auto-refresh |
-| Huddle CRUD | SwiftData inserts; invite lookup in-store | `create_huddle` / `join_huddle` RPCs (atomic code generation, 8-member cap) |
+| Huddle CRUD | SwiftData inserts; invite lookup in-store | `create_huddle` RPC, `redeem_huddle_invite` to join (proof of the code's secret, 8-member cap, blocks) |
 | Deposits | Insert-only; a second same-day deposit throws `alreadyDepositedToday` | Plain insert; the `(huddle_id, author_id, day_key)` unique constraint refuses a repeat (→ `alreadyDepositedToday`) |
 | Images | JPEG to `Documents/Media/` | Huddle photos end-to-end encrypted (§10a), then insert-only upload to Storage bucket `deposits` (never overwritten) + the same ciphertext as local cache; profile photos plain JPEG |
 | Streak | `HuddleEngine.computeStreak` on-device | `recompute_streak` RPC — server is the single source of truth so all phones agree |
 | Skips | In-memory `SkipLedger`, seeded | `skips` table + `spend_skip_token` RPC |
-| Notifications | Per-user local reminders (`ReminderCoordinator`) — identical in both modes | Same |
+| Notifications | Per-user local reminders (`ReminderCoordinator`); push permission and registration run, but nothing sends | Same reminders, plus activity pushes: `device_tokens` + database triggers → `send-push` edge function → APNs |
 | Seeding / DEBUG | 30 days of history; debug tools visible | Disabled / hidden |
 
 ## 6. Data model
 
-Six SwiftData `@Model` classes ([Models/SchemaModels.swift](HuddlePal/Models/SchemaModels.swift)), mirrored by Postgres tables in [schema.sql](supabase/schema.sql). The server also has `skips`, `reports`, `blocks`, and the encryption keys (`user_keys`, `huddle_keys`), which have no local model:
+Six SwiftData `@Model` classes ([Models/SchemaModels.swift](HuddlePal/Models/SchemaModels.swift)), mirrored by Postgres tables in [schema.sql](supabase/schema.sql). The server also has `skips`, `reports`, `blocks`, the encryption keys (`user_keys`, `huddle_keys`, `huddle_invite_keys`), and `device_tokens`, which have no local model:
 
 ```mermaid
 erDiagram
@@ -301,13 +301,14 @@ Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤8 people
 - **What**: the Huddles shelf stays light because it refreshes on every appear and foreground. It reads the huddle rows plus a single `deposits?select=huddle_id,author_id&day_key=eq.<today>` across all huddles (`DepositServiceProtocol.depositorIDs`), and recomputes each huddle's streak at most once per day. A stored streak only goes stale when a day ends or a deposit lands, and deposits recompute on their own. Full history — deposits, reactions, comments, and any profiles not yet cached — syncs when a huddle's Home or Archive opens.
 - **How**: live services fetch DTOs (PostgREST rows), then [`SupabaseStore`](HuddlePal/Services/Live/SupabaseStore.swift) reconciles them into SwiftData — upsert by id, update fields in place, and **prune** local rows that vanished remotely (left members, removed reactions and comments). Rows whose author can't be resolved are kept with a nil author ("Former member", see §6). Views keep rendering the same SwiftData models they always did; reconciliation is the entire trick that kept the UI identical across backends.
 - **Images**: cache-first. `Documents/Media/<huddle>/<file>.jpg` is checked before a Storage download; your own uploads are written locally immediately so they render instantly. In live mode a huddle photo's cached bytes are the same ciphertext Storage holds, decrypted in memory for display.
-- **Not yet**: Supabase Realtime (live updates without refresh) and APNs pushes — both are documented upgrades, not architecture changes.
+- **Push**: inserts of photos, comments, reactions and memberships fire database triggers that ask the `send-push` edge function to notify the right members through APNs (DEVELOPMENT.md, "Push notifications (APNs)"). A tapped notification opens its huddle, which then syncs as usual.
+- **Not yet**: Supabase Realtime (live updates without refresh) — a documented upgrade, not an architecture change.
 
 ## 10. The Supabase backend
 
 Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sql](supabase/schema.sql)) run once in the Supabase SQL editor. Three pillars:
 
-**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
+**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `join_attempts`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
 
 **Row Level Security** — privacy *is* the product, so the database enforces it even against a malicious client (the anon key ships in the binary by design; RLS is the boundary):
 
@@ -320,7 +321,9 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | reactions / comments | wherever you can see the deposit | your own |
 | reports / blocks | your own | your own |
 | user_keys | your own + co-members' public keys | only your own row |
-| huddle_keys | only your own wrapped copies | via `init_huddle_key` / `share_huddle_key` only |
+| huddle_keys | only your own wrapped copies | via `init_huddle_key` / `save_own_huddle_key` / `share_huddle_key` only |
+| huddle_invite_keys | nobody (no policies, no privileges) | via the invite RPCs only |
+| device_tokens | your own | your own |
 | storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
 
 Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, `can_see_deposit`) are `SECURITY DEFINER` — the standard way to avoid the memberships-policy-reads-memberships RLS recursion trap.
@@ -330,14 +333,18 @@ Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, 
 | Function | Purpose |
 |---|---|
 | `create_huddle(name, emoji, day_key)` | Huddle + keeper membership + unique invite code in one transaction |
-| `join_huddle(code, day_key)` | Validates the code, enforces the 8-member cap, inserts membership |
+| `join_huddle(code, day_key)` | Old secret-less codes only (old app builds), until the huddle gets a new-format invite |
+| `redeem_huddle_invite(lookup, proof, day_key)` | Checks the code's proof (10 misses/hour), the 8-member cap and blocks, inserts membership, returns the huddle key sealed for the code |
+| `huddle_invite(huddle)` | For members: the lookup, the secret sealed with the huddle key, and whether the huddle is still on an old code |
+| `create_huddle_invite` / `reset_huddle_invite` | Issue the first new-format invite (any member holding the key) / replace it (keeper); both retire the previous code |
+| `save_own_huddle_key(huddle, wrapped key…)` | A member who joined with an invite stores their own copy; never over a working one |
 | `spend_skip_token(huddle, user, day)` | Decrements tokens and records the skip atomically |
 | `recompute_streak(huddle, today)` | Walks full deposit+skip history day by day (`huddle_day_complete`) — mirrors `HuddleEngine` exactly; the server's answer is canonical so every phone agrees |
 | `init_huddle_key(huddle, wrapped key…)` | Stores a huddle's *first* key, wrapped for the caller; refuses once any member holds a copy (a key is shared, never replaced) |
-| `huddle_key_recipients(huddle)` | Members still waiting for the huddle key: no copy yet, or one wrapped for a public key they've replaced |
+| `huddle_key_recipients(huddle)` | Members without a working copy (joined with an old code, or replaced their identity key): the fallback |
 | `share_huddle_key(huddle, user, wrapped key…)` | A member stores a copy for a fellow member's current public key; never overwrites someone else's working copy |
 
-Both join RPCs take the caller's local today (`day_key`) and store it as the membership's `joined_day_key`. The server trusts it within ±1 day of its own date (`client_day_key`), the same window `recompute_streak` allows. If it's missing or out of range, the server's date is used instead.
+The join RPCs take the caller's local today (`day_key`) and store it as the membership's `joined_day_key`. The server trusts it within ±1 day of its own date (`client_day_key`), the same window `recompute_streak` allows. If it's missing or out of range, the server's date is used instead.
 
 ### 10a. End-to-end encrypted photos
 
@@ -347,24 +354,23 @@ The operator — anyone with the Supabase dashboard — must not be able to view
 - **Huddle key** — a random 256-bit key made by the creator's device. Each member has a copy in `huddle_keys`, wrapped to their public key: an ephemeral X25519 agreement, then HKDF-SHA256 bound to the huddle and member ids, then AES-GCM.
 - **Photo key** — fresh per photo. The JPEG is AES-GCM sealed with it, and that box is the Storage object. The photo key is itself sealed with the huddle key into `deposits.wrapped_photo_key`. A report discloses only this key (`reports.photo_key`), so the operator can review one reported photo with [tools/decrypt_reported_photo](tools/decrypt_reported_photo/README.md) and nothing else.
 
-The server can't hand a joiner the huddle key, so members' apps do it ([LivePhotoKeyring](HuddlePal/Services/Live/LivePhotoKeyring.swift), on every foreground and huddle open):
+The invite code carries the huddle key, so a joiner needs nobody else online ([InviteCrypto](HuddlePal/Services/Live/InviteCrypto.swift), [LivePhotoKeyring](HuddlePal/Services/Live/LivePhotoKeyring.swift)). The code's secret never reaches the server; from it both apps derive, with HKDF-SHA256, a **proof** (the server keeps only its hash) and a **wrapping key** (with a random salt) that seals the huddle key:
 
 ```mermaid
 sequenceDiagram
-    participant B as Joiner's app
+    participant A as Inviting app
     participant DB as Supabase
-    participant A as Member's app
-    B->>DB: publish public key (user_keys), join_huddle
-    B->>DB: huddle open: my huddle_keys copy? none → locked placeholder
-    A->>DB: foreground / huddle open: huddle_key_recipients(huddle)
-    DB-->>A: B + B's public key
-    A->>A: wrap huddle key for B (X25519 → HKDF → AES-GCM)
-    A->>DB: share_huddle_key(huddle, B, wrapped copy)
-    B->>DB: next refresh: fetch own copy
-    B->>B: unwrap with identity key → decrypt photos
+    participant B as Joiner's app
+    A->>A: new code = lookup + secret; seal huddle key with HKDF(secret, salt)
+    A->>DB: create_huddle_invite(lookup, proof, salt, sealed key, secret sealed with huddle key)
+    A-->>B: code, shared out of band (link or paste)
+    B->>DB: redeem_huddle_invite(lookup, proof)
+    DB-->>B: membership + salt + sealed key
+    B->>B: open huddle key with HKDF(secret, salt) → decrypt every photo
+    B->>DB: save_own_huddle_key(copy wrapped for B's identity key)
 ```
 
-A user who loses their identity key (for example a new phone with iCloud Keychain off) gets a new one on sign-in. Their old copies go stale, and the same pass re-shares every huddle key to the new public key. Until then their photos show "Waiting for a huddle member to share access". Captions, comments, reactions, profiles, and avatars are *not* encrypted.
+From then on B's access is its own `huddle_keys` copy, as for every member. Members' apps still wrap the key for anyone without a working copy ([`share_huddle_key`](supabase/schema.sql), on foreground and huddle open) — people who joined with an old 6-character code, and a user who loses their identity key (for example a new phone with iCloud Keychain off), whose old copies go stale until that pass re-shares them. Captions, comments, reactions, huddle names, profiles, and avatars are *not* encrypted.
 
 The Swift side talks to all of this through [`SupabaseClient`](HuddlePal/Services/Live/SupabaseClient.swift) — a ~400-line, zero-dependency `URLSession` client for exactly the GoTrue/PostgREST/Storage surface HuddlePals needs, with snake_case Codable mapping and ISO-8601 date handling.
 
@@ -452,7 +458,7 @@ HuddlePal/
 ## 15. Project configuration
 
 - **Modes**: no `Supabase.plist` → mock; filled-in plist → live. The plist is gitignored; the anon key it holds is publishable (RLS is the security boundary). A Release-only build phase fails any Release build or Archive that lacks a real plist, so the mock world can't ship.
-- **Entitlements**: `HuddlePal.entitlements` carries Sign in with Apple; wired via `CODE_SIGN_ENTITLEMENTS`. Registering the capability needs the paid Apple Developer Program.
+- **Entitlements**: `HuddlePal.entitlements` carries Sign in with Apple and Push Notifications (`aps-environment`); wired via `CODE_SIGN_ENTITLEMENTS`. Registering the capabilities needs the paid Apple Developer Program.
 - **App Store readiness**: 1024px opaque icon, privacy manifest (no tracking; photos/name/user-id collected for app functionality only), `ITSAppUsesNonExemptEncryption = NO` (the photo encryption uses only Apple's CryptoKit; see DEPLOYMENT.md "Export compliance").
 - **Build**: `GENERATE_INFOPLIST_FILE = YES`, merged with the small partial `Config/Info.plist` (kept outside the synchronized folders), iOS 17.0 target, Swift 5 language mode, Universal device family (iPhone + iPad; iPhone-only is an open decision), synchronized folder groups (drop a file in, it's in the build).
 
@@ -463,9 +469,9 @@ Honest edges, in rough priority order:
 1. **Identity linking** — email X and phone Y create two different accounts today. GoTrue identity linking unifies them.
 2. **Timezones** — dayKey is device-local and the server trusts the client's "today" (clamped to a 48h window). Same-timezone groups: fine. Split groups need a huddle "home timezone".
 3. **Realtime** — others' deposits appear on foreground/pull-to-refresh; Supabase Realtime subscriptions would make them instant.
-4. **Push notifications** — the daily reminder is local-only; server-driven APNs ("everyone else has deposited!") needs an APNs key + an edge function.
+4. **Push notifications** — activity pushes (new photos, comments and reactions on yours, new members) are live once the APNs key and secrets are set; there's no per-huddle mute yet, and "everyone else has deposited!" isn't one of them.
 5. **Storage orphans** — a removed profile photo, or an upload whose deposit insert then fails, leaves an unreferenced Storage object (harmless at this scale; a scheduled cleanup function fixes it).
 6. **Email deliverability** — Supabase's built-in mailer is rate-limited to a few messages/hour; configure SMTP before group testing. SMS requires a paid Twilio setup.
 7. **Home-screen widget** — planned post-MVP as a `Widgets/` extension target sharing the store via an app group.
 8. **Keeper succession** — when the keeper leaves or deletes their account, the longest-standing remaining member becomes keeper (the `memberships_after_delete` trigger). There is no way yet to hand the role over by choice.
-9. **Encryption edges** — one identity key per account: using two devices needs iCloud Keychain, otherwise the device that launched last is the one that can decrypt. A huddle's key isn't rotated when someone leaves. If every remaining member has lost the key, that huddle's photos are unrecoverable. Captions and comments are plaintext; encrypting them would mean sealing them with the huddle key on the client (as with photo keys) and losing server-side length checks and moderation visibility.
+9. **Encryption edges** — one identity key per account: using two devices needs iCloud Keychain, otherwise the device that launched last is the one that can decrypt. A huddle's key isn't rotated when someone leaves (a former member can't download new photos — Storage is members-only — but anyone who kept the key and colluded with the operator could open them), and they may still hold the invite code until the keeper makes a new one. If every remaining member has lost the key, that huddle's photos are unrecoverable. Captions and comments are plaintext; encrypting them would mean sealing them with the huddle key on the client (as with photo keys) and losing server-side length checks and moderation visibility.

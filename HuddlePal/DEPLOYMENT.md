@@ -48,14 +48,19 @@ seeded **mock** world. No code changes to switch.
    and run up your bill.
 4. **SQL Editor** → *New query* → paste the entire contents of
    [`supabase/schema.sql`](supabase/schema.sql) → Run. This creates the
-   eleven tables (profiles, huddles, memberships, deposits, reactions,
-   comments, skips, **reports, blocks, user_keys, huddle_keys**), every RLS
-   policy + column grant, the storage policies, and seven RPCs
-   (`create_huddle`, `join_huddle`, `spend_skip_token`, `recompute_streak`,
-   and the end-to-end encryption trio `init_huddle_key`,
-   `huddle_key_recipients`, `share_huddle_key`, plus their helpers). The
-   security hardening (skip-token auth, crypto invite codes, streak-tamper
-   protection), join-day streaks, and encrypted photos are baked in.
+   tables (profiles, huddles, memberships, deposits, reactions, comments,
+   skips, **reports, blocks, user_keys, huddle_keys, huddle_invite_keys,
+   device_tokens**), every RLS policy + column grant, the storage policies,
+   the RPCs (`create_huddle`, `join_huddle`, `spend_skip_token`,
+   `recompute_streak`, the end-to-end encryption functions
+   `init_huddle_key`, `huddle_key_recipients`, `share_huddle_key`, the
+   invite functions `redeem_huddle_invite`, `huddle_invite`,
+   `create_huddle_invite`, `reset_huddle_invite`, `save_own_huddle_key`, and
+   their helpers), and the push triggers. The security hardening (skip-token
+   auth, crypto invite codes, streak-tamper protection), join-day streaks,
+   encrypted photos and instant join are baked in. Push notifications need
+   the APNs key, secrets and `send-push` function from DEVELOPMENT.md
+   ("Push notifications (APNs)").
    The file only builds a fresh database. If the project already ran an
    older copy, start over: run `supabase/scripts/reset_database.sql`
    (destructive — it drops every app table, function, and storage policy,
@@ -163,13 +168,11 @@ seeded **mock** world. No code changes to switch.
 1. Phone A: onboard with an email code (or Apple) → Create a Huddle →
    share the invite code.
 2. Phone B: onboard with a different account → Join a Huddle with that code.
-3. Phone A: foreground the app (or pull-to-refresh) after B joined — A's
-   app shares the huddle key with B. Phone A: deposit a photo. Phone B:
-   pull-to-refresh on Today → A's deposit shows **blurred**; B's huddle is
-   LOCKED.
-4. Phone B: deposit → unlock animation → both photos visible (a photo that
-   says "Waiting for a huddle member to share access" means A's app hasn't
-   shared the key yet — foreground the app on A, then refresh on B); streak
+3. Phone A: deposit a photo (with notifications set up, B gets "… posted
+   a photo"). Phone B: pull-to-refresh on Today → A's deposit shows
+   **blurred**; B's huddle is LOCKED. B never needed A's app to be open:
+   the invite code carried the huddle key.
+4. Phone B: deposit → unlock animation → both photos visible; streak
    shows 1 the next day (server-computed, so both phones agree).
    Dashboard → Storage → `deposits` → the huddle's folder: the files don't
    open as images (ciphertext).
@@ -209,8 +212,10 @@ seeded **mock** world. No code changes to switch.
   hour by default, and the built-in mailer caps at a few emails per hour
   until you configure SMTP.
 - **Refresh model.** Deposits from others appear on app-foreground and
-  pull-to-refresh. No realtime push yet (Supabase Realtime is the upgrade);
-  no APNs ("everyone has deposited!") yet — the daily reminder is local.
+  pull-to-refresh (Supabase Realtime is the upgrade). Activity push
+  notifications (new photos, comments and reactions on yours, new members)
+  arrive through APNs once DEVELOPMENT.md's push setup is done; the daily
+  reminder is local.
 - **Timezones.** dayKey is the *device's* calendar day, and the server
   trusts the client's "today" for streaks (RLS only clamps deposits to a
   48h window). Same-timezone groups: no issue. Split-timezone groups can
@@ -230,15 +235,18 @@ seeded **mock** world. No code changes to switch.
 - **End-to-end encrypted photos.** Neither you nor Supabase can view
   deposited photos; you can view a reported one with the key its report
   carries. The keys live on members' devices: each user's identity key is
-  in their iCloud Keychain. A member who loses it (new phone with iCloud
-  Keychain off, or a reinstall without it) gets a new one and sees the
-  locked placeholder until another member's app re-shares each huddle key.
+  in their iCloud Keychain. New members get the huddle key from their
+  invite code, so they see every photo at once. A member who loses their
+  identity key (new phone with iCloud Keychain off, or a reinstall without
+  it) gets a new one and sees locked photos until another member's app
+  re-shares each huddle key.
   If *nobody* left in a huddle still holds its key, its photos are
   unrecoverable — by design, no one else can open them. Using one account
   on two devices needs iCloud Keychain on; without it, the device that
   launched most recently is the one that can decrypt. Leaving a huddle
-  doesn't rotate its key (a former member keeps their wrapped copy, but
-  Storage RLS stops them downloading new photos). Captions, comments,
+  doesn't rotate its key (Storage RLS stops a former member downloading
+  new photos), and they may still hold the invite code: the keeper can make
+  a new one in Huddle Settings. Captions, comments,
   reactions, profiles, and avatars are not encrypted.
 - **Streak source of truth** is the `recompute_streak` RPC (server-side).
   The local `HuddleEngine` math stays as the mock/test implementation —

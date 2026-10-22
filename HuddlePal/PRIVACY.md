@@ -1,6 +1,6 @@
 # HuddlePals — Privacy Policy
 
-_Last updated: 2026-10-21_
+_Last updated: 2026-10-22_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
@@ -22,6 +22,7 @@ end-to-end encrypted and can be viewed only by the members of that huddle.
 | **Deposited photos and captions** | The core function — shared with your huddle's members. Photos are end-to-end encrypted; captions are not | Yes |
 | **Encryption public key** | Lets your huddle's members share the huddle's photo key with your device. Your private key stays on your devices (iCloud Keychain) | Yes |
 | **Reactions and comments** | The core function | Yes |
+| **Push notification token** (only if you allow notifications) | To notify your device about activity in your huddles: new photos, comments and reactions on your photos, and new members | Yes |
 
 We do **not** use third-party advertising or tracking, we do **not** sell your
 data, and we do **not** collect location, contacts, or device-tracking
@@ -41,9 +42,18 @@ the keys to decrypt it. Supabase stores only the encrypted file, and **we
 (the operator) cannot view your photos** — with one exception: when someone
 **reports** a photo, their device sends that one photo's key with the report
 so we can review it. That key opens only the reported photo, never the rest
-of the huddle. Your encryption key is kept in your iCloud Keychain; if you lose
-it, another member of each huddle restores your access automatically, and if
-no one can, those photos cannot be recovered — not even by us.
+of the huddle. A huddle's invite code carries what a new member needs to
+decrypt its photos, without our servers ever seeing it, so share the code
+only with people you'd invite; the huddle's keeper can replace it at any
+time. Your encryption key is kept in your iCloud Keychain; if you lose it,
+another member of each huddle restores your access automatically, and if no
+one can, those photos cannot be recovered — not even by us.
+
+**Notifications** are delivered through Apple's push notification service.
+They name the huddle and the member who posted, commented, reacted or
+joined, and never include photos, captions or comment text. You can turn
+them off in Profile → Notifications or in iOS Settings; signing out or
+turning them off removes your device's token.
 
 Not end-to-end encrypted: captions, comments, reactions, your display name,
 bio, and profile photos, and information such as who is in which huddle and
@@ -62,8 +72,9 @@ photos you are comfortable making a permanent part of your group's record.
 You can **delete your account at any time** from **Profile → Delete account**.
 When you do:
 
-- Your account, login, display name, bio, profile photos, and encryption
-  keys are **permanently removed**, and you are signed out.
+- Your account, login, display name, bio, profile photos, push notification
+  tokens, and encryption keys are **permanently removed**, and you are
+  signed out.
 - If you used Sign in with Apple, we revoke your Apple sign-in token.
 - **Photos you already deposited remain in your shared huddles**, shown as
   "Former member" rather than under your name. This is required to keep the
