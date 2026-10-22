@@ -5,8 +5,8 @@ import XCTest
 /// screen. Every issue found is attached to the result; any issue outside
 /// `knownOpen` fails the test.
 final class AccessibilityAuditTests: HuddleUITestCase {
-    /// Issue types accepted for now, each tied to an open finding in
-    /// QA_REPORT.md. Nothing else may appear.
+    /// Issue types accepted for now, each tied to an open issue in
+    /// DEVELOPMENT.md ("Open issues"). Nothing else may appear.
     private let knownOpen: XCUIAccessibilityAuditType = [
         .dynamicType,   // QA-21: the app sets fixed point sizes everywhere (open, needs a design pass)
     ]
@@ -18,7 +18,7 @@ final class AccessibilityAuditTests: HuddleUITestCase {
     /// - Contrast / clipping measured on colour-emoji glyphs (huddle emoji):
     ///   the audit measures the glyph box, and the screenshots show them whole.
     /// - "Contrast nearly passed": Apple's near-threshold warning, reported
-    ///   in the attachment and QA_REPORT.md, not failed.
+    ///   in the attachment, not failed.
     /// - Contrast / clipping on content under the floating tab bar or in the
     ///   band just above it (comment bar, the bar's glass): the audit measures
     ///   it against the overlay; scrolled clear, it's the same text that passes

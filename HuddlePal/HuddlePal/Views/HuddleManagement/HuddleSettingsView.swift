@@ -92,7 +92,8 @@ private struct SettingsContent: View {
                         }
                         Spacer()
                         // Skip tokens aren't shown: nothing in the app spends
-                        // them yet (QA report, decision 4.4).
+                        // them yet, so a count would promise a feature that
+                        // isn't there.
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Theme.textSecondary.opacity(0.6))

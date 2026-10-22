@@ -37,7 +37,7 @@ class HuddleUITestCase: XCTestCase {
         app.launch()
     }
 
-    /// A screenshot kept in the result bundle (the QA report's screens).
+    /// A screenshot kept in the result bundle, for checking screens by eye.
     func snapshot(_ name: String) {
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = name
