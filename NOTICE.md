@@ -1,6 +1,6 @@
 ## ⚖️ Copyright & Proprietary Notice
 
-**Copyright © 2026 HuddlePals All rights reserved.**
+**Copyright © 2026 HuddlePals. All rights reserved.**
 
 This is **proprietary software — not open source.** The entire contents of this repository — source code, architecture, database schemas, documentation, designs, product concepts, and the "HuddlePals" name and branding — are the exclusive property of the copyright holder. **No license of any kind is granted** by the availability of this repository.
 

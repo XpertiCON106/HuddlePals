@@ -95,7 +95,7 @@ TBD sections below are filled after the final retest.
 | QA-35 | Medium | Compliance | No privacy policy link inside the app (App Review 5.1.1(i)) and no in-app way to reach the developer (1.2); the privacy URL in the Terms was plain, untappable text | fixed 0b99a4e |
 | QA-36 | Medium | Compliance | Only photos could be reported; comments and member profiles (name, bio, profile photos) are user content too, but couldn't be (1.2). No confirmation after a report | fixed c50f7b6 |
 | QA-37 | Low | Completeness | Huddle settings advertised skip tokens ("Two per member") that nothing in the app can spend (2.1) | fixed 5a4a76f (hidden; decision 4.4 stands) |
-| QA-38 | Medium | Compliance | The hosted privacy policy shows bracketed placeholders ("Operator: HuddlePals"), and the website's contact address differs from the in-app Terms | fixed in PRIVACY.md (docs commit, section 11); **the website still needs updating** (section 3) |
+| QA-38 | Medium | Compliance | The hosted privacy policy shows bracketed placeholders around the operator name and contact address, and the website's contact address differs from the in-app Terms | fixed in PRIVACY.md (docs commit, section 11); **the website still needs updating** (section 3) |
 | QA-39 | Low | UX | Huddle settings: member rows show a chevron but only opened the profile from the avatar, name or chevron; most of the row did nothing | fixed 5a4a76f |
 
 Process notes (honesty): 13be8ea was committed with a test that did not compile (my test runner exited 0 on a failed build); corrected in 99af9f4, runner fixed, no history rewritten. One probe command targeted `~/Library/Application Support/default.store*` for cleanup; the glob matched nothing and nothing was deleted; later probes used scratch paths only.
@@ -179,7 +179,7 @@ Verified locally: the whole DB suite passes on (a) fresh `schema.sql` and (b) de
 
 **App build:** every client fix needs a new TestFlight/App Store build (not done; you deploy).
 
-**Website (huddlepals.com, not in this repo; QA-38):** publish the current PRIVACY.md at `/privacy` (the live page still shows "HuddlePals" and "[hello@huddlepals.com]"), and change the contact address on `/terms` and the `mailto:` links on `/support` to hello@huddlepals.com, the address the app and its Terms use. The App Store badge on the home page still links to `idXXXXXXXXXX`; set it once the app has its App Store ID.
+**Website (huddlepals.com, not in this repo; QA-38):** publish the current PRIVACY.md at `/privacy` (the live page still shows the operator and contact in square-bracket placeholders), and change the contact address on `/terms` and the `mailto:` links on `/support` to hello@huddlepals.com, the address the app and its Terms use. The App Store badge on the home page still links to `idXXXXXXXXXX`; set it once the app has its App Store ID.
 
 **Edge function `delete-account` (changed for QA-20, not deployed):** run migration 007, set the four Apple secrets (`APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID=com.huddlepals.ios`, `APPLE_PRIVATE_KEY`), then `supabase functions deploy delete-account --project-ref <ref>` from `HuddlePal/`. DEVELOPMENT.md → "Account deletion and Apple token revocation" has the Apple key steps, the exact commands and a one-time device check. Order: migration 007 → secrets → function → app build. The new function works with the app already in people's hands: with no code in the body it deletes without revoking and logs why. The new app works with the old function too, but nothing is revoked until the new function is deployed.
 

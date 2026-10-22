@@ -4,7 +4,7 @@ Last updated: October 20, 2026
 
 ## 1. Agreement to These Terms
 
-These Terms of Service (the "Terms") are a legally binding agreement between you and HuddlePals doing business as HuddlePals, and any successor entity (together with their employees, contractors, licensors, and affiliates, "HuddlePals," "we," "us," or "our"). They govern your access to and use of the HuddlePals mobile application, the website at huddlepals.com, and all related features, content, and services (together, the "Service"). Effective date: October 20, 2026.
+These Terms of Service (the "Terms") are a legally binding agreement between you and HuddlePals and any successor entity (together with their employees, contractors, licensors, and affiliates, "HuddlePals," "we," "us," or "our"). They govern your access to and use of the HuddlePals mobile application, the website at huddlepals.com, and all related features, content, and services (together, the "Service"). Effective date: October 20, 2026.
 
 **PLEASE READ SECTION 12 CAREFULLY. EXCEPT AS PROVIDED IN SECTION 12, YOU AND HUDDLEPALS AGREE TO RESOLVE ALL DISPUTES THROUGH FINAL AND BINDING INDIVIDUAL ARBITRATION, AND YOU WAIVE YOUR RIGHT TO A JURY TRIAL AND TO PARTICIPATE AS A PLAINTIFF OR CLASS MEMBER IN ANY CLASS ACTION, CLASS ARBITRATION, OR REPRESENTATIVE PROCEEDING. YOU MAY OPT OUT OF ARBITRATION WITHIN 30 DAYS AS DESCRIBED IN SECTION 12.7.**
 
@@ -184,7 +184,7 @@ If you downloaded the app from Apple's App Store, you and HuddlePals acknowledge
 - (e) Apple is not responsible for addressing any claims by you or any third party relating to the app or your possession or use of it, including product liability claims, claims that the app fails to conform to any legal or regulatory requirement, and claims arising under consumer protection, privacy, or similar legislation;
 - (f) if a third party claims that the app or your possession and use of it infringes that third party's intellectual property rights, Apple will not be responsible for the investigation, defense, settlement, or discharge of that claim; as between HuddlePals and Apple, HuddlePals is responsible to the extent required by these Terms;
 - (g) you represent and warrant that you are not located in a country subject to a U.S. Government embargo or designated by the U.S. Government as a "terrorist supporting" country, and that you are not listed on any U.S. Government list of prohibited or restricted parties;
-- (h) questions, complaints, or claims about the app should be directed to HuddlePals, hello@huddlepals.com;
+- (h) questions, complaints, or claims about the app should be directed to HuddlePals at hello@huddlepals.com;
 - (i) you must comply with any applicable third-party terms when using the app, such as your wireless data service agreement; and
 - (j) Apple and its subsidiaries are third-party beneficiaries of these Terms, and once you accept these Terms, Apple will have the right (and will be deemed to have accepted the right) to enforce them against you as a third-party beneficiary.
 
