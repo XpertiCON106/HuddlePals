@@ -78,4 +78,10 @@ final class MockModerationService: ModerationServiceProtocol {
         guard let key = blocksKey else { return [] }
         return Set((UserDefaults.standard.stringArray(forKey: key) ?? []).compactMap(UUID.init))
     }
+
+    /// Whom any mock account has blocked, for the join check the server
+    /// makes in redeem_huddle_invite.
+    static func blockedIDs(by blockerID: UUID) -> Set<UUID> {
+        Set((UserDefaults.standard.stringArray(forKey: blocksKeyPrefix + blockerID.uuidString) ?? []).compactMap(UUID.init))
+    }
 }

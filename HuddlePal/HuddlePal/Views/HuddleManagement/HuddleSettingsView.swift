@@ -34,6 +34,7 @@ private struct SettingsContent: View {
 
     @State private var notificationHour: Int
     @State private var showLeaveConfirmation = false
+    @State private var showResetConfirmation = false
     @State private var copied = false
 
     init(viewModel: HuddleSettingsViewModel, onLeft: @escaping () -> Void) {
@@ -52,6 +53,7 @@ private struct SettingsContent: View {
         }
         .scrollContentBackground(.hidden)
         .background(Theme.background)
+        .task { await viewModel.loadInvite() }
         .confirmationDialog(
             "Leave \(viewModel.huddle.name)?",
             isPresented: $showLeaveConfirmation,
@@ -141,25 +143,78 @@ private struct SettingsContent: View {
     }
 
     private var inviteSection: some View {
-        Section("Invite code") {
-            HStack {
-                Text(viewModel.huddle.inviteCode)
-                    .font(.system(size: 20, weight: .bold, design: .monospaced))
-                    .kerning(3)
+        Section {
+            if let code = viewModel.inviteCode {
+                Text(code.displayed)
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
                     .foregroundStyle(Theme.accent)
-                Spacer()
-                Button {
-                    UIPasteboard.general.string = viewModel.huddle.inviteCode
-                    copied = true
-                    Haptics.success()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
-                } label: {
-                    Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 13, weight: .semibold))
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("inviteCode")
+                    .listRowBackground(Theme.surface)
+                HStack {
+                    Button {
+                        UIPasteboard.general.string = code.displayed
+                        copied = true
+                        Haptics.success()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+                    } label: {
+                        Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    Spacer()
+                    if let url = viewModel.inviteShareURL {
+                        ShareLink(item: url, message: Text(viewModel.inviteShareMessage)) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
-                .buttonStyle(.bordered)
+                .listRowBackground(Theme.surface)
+                if viewModel.isKeeper {
+                    Button {
+                        showResetConfirmation = true
+                    } label: {
+                        Label("New invite code", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(viewModel.isResettingInvite)
+                    .listRowBackground(Theme.surface)
+                    .confirmationDialog(
+                        "Make a new invite code?",
+                        isPresented: $showResetConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("New code", role: .destructive) {
+                            Task { await viewModel.resetInvite() }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("The current code stops working at once. Anyone who hasn't joined yet will need the new one.")
+                    }
+                }
+            } else if viewModel.isLoadingInvite {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Theme.surface)
+            } else {
+                Button("Try again") {
+                    Task { await viewModel.loadInvite() }
+                }
+                .listRowBackground(Theme.surface)
             }
-            .listRowBackground(Theme.surface)
+            if let message = viewModel.inviteMessage {
+                Text(message)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.destructive)
+                    .listRowBackground(Theme.surface)
+            }
+        } header: {
+            Text("Invite code")
+        } footer: {
+            Text(viewModel.isKeeper
+                 ? "Anyone with this code can join and see every photo. Make a new one to stop the old code working."
+                 : "Anyone with this code can join and see every photo.")
         }
     }
 

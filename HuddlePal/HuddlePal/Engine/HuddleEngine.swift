@@ -283,7 +283,7 @@ struct HuddleEngine {
         return yesterday
     }
 
-    // MARK: Captions & invite codes
+    // MARK: Captions
 
     /// Trims whitespace, enforces the 80-character cap, returns nil for
     /// empty input.
@@ -292,11 +292,5 @@ struct HuddleEngine {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return trimmed.prefix(serverLength: captionLimit)
-    }
-
-    /// 6-char alphanumeric code; ambiguous glyphs (0/O, 1/I/L) excluded.
-    static func generateInviteCode(length: Int = 6) -> String {
-        let alphabet = Array("ABCDEFGHJKMNPQRSTUVWXYZ23456789")
-        return String((0..<length).compactMap { _ in alphabet.randomElement() })
     }
 }

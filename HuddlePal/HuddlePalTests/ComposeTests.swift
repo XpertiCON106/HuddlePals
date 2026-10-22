@@ -29,7 +29,7 @@ final class ComposeTests: XCTestCase {
 
     private func crew() async throws -> Huddle {
         let huddles = try await deps.huddleService.huddles(for: deps.session.currentUser!)
-        return try XCTUnwrap(huddles.first { $0.inviteCode == "CREW42" })
+        return try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
     }
 
     private func capturedPhoto() -> UIImage {

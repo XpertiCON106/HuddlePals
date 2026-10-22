@@ -7,6 +7,10 @@ import XCTest
 @MainActor
 final class InviteLinkTests: XCTestCase {
     func testOnlyWellFormedJoinLinksCarryACode() {
+        let code = InviteCode.generate()
+        XCTAssertEqual(InviteLink.code(from: InviteLink.url(for: code)), code.compact)
+        XCTAssertEqual(InviteLink.code(from: URL(string: "huddlepal://join/\(code.displayed.lowercased())")!), code.compact)
+        // Old codes still open Join, which explains they're out of date.
         XCTAssertEqual(InviteLink.code(from: URL(string: "huddlepal://join/crew42")!), "CREW42")
         XCTAssertEqual(InviteLink.code(from: URL(string: "huddlepal://join/PASTA7")!), "PASTA7")
         for bad in [
@@ -14,6 +18,8 @@ final class InviteLinkTests: XCTestCase {
             "huddlepal://join/ABCDEFGH",    // too long: used to leave a dead button
             "huddlepal://join/AB%20CDE",
             "huddlepal://join/ABC-12",
+            "huddlepal://join/\(code.compact.dropLast())",
+            "huddlepal://join/\(code.compact.dropLast())O", // not in the alphabet
             "huddlepal://other/CREW42",
             "https://join/CREW42",
         ] {

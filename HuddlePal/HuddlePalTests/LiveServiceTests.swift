@@ -291,7 +291,7 @@ final class LiveServiceTests: XCTestCase {
         let client = try await LiveStub.signedInClient(userID: me.id)
         StubURLProtocol.respond { _ in LiveStub.postgrestError("too_many_attempts") }
         do {
-            _ = try await huddleService(client).joinHuddle(inviteCode: "ABCDEF", user: me)
+            _ = try await huddleService(client).joinHuddle(inviteCode: InviteCode.generate().displayed, user: me)
             XCTFail("expected a refusal")
         } catch HuddleServiceError.tooManyAttempts {
             XCTAssertNotNil(HuddleServiceError.tooManyAttempts.errorDescription)
@@ -303,14 +303,40 @@ final class LiveServiceTests: XCTestCase {
         // The server answers an unknown code with no row (it records the miss).
         StubURLProtocol.respond { _ in .init(body: Data("[]".utf8)) }
         do {
-            _ = try await huddleService(client).joinHuddle(inviteCode: "ZZZZZZ", user: me)
+            _ = try await huddleService(client).joinHuddle(inviteCode: InviteCode.generate().displayed, user: me)
             XCTFail("expected a refusal")
         } catch HuddleServiceError.inviteCodeNotFound {}
         // Servers still running the old function raise instead.
         StubURLProtocol.respond { _ in LiveStub.postgrestError("invite_code_not_found") }
         do {
-            _ = try await huddleService(client).joinHuddle(inviteCode: "ZZZZZZ", user: me)
+            _ = try await huddleService(client).joinHuddle(inviteCode: InviteCode.generate().displayed, user: me)
             XCTFail("expected a refusal")
         } catch HuddleServiceError.inviteCodeNotFound {}
+    }
+
+    func testAnOldCodeIsExplainedWithoutAskingTheServer() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        StubURLProtocol.respond { _ in .init(body: Data("[]".utf8)) }
+        do {
+            _ = try await huddleService(client).joinHuddle(inviteCode: "crew42", user: me)
+            XCTFail("expected a refusal")
+        } catch HuddleServiceError.inviteCodeOutdated {}
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty, "no request, so no recorded miss")
+    }
+
+    func testRefusalsFromTheRedeemFunctionMapToTheirOwnMessages() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        let cases: [(String, HuddleServiceError)] = [
+            ("already_member", .alreadyMember), ("huddle_full", .huddleFull), ("blocked", .cannotJoin),
+        ]
+        for (raised, expected) in cases {
+            StubURLProtocol.respond { _ in LiveStub.postgrestError(raised) }
+            do {
+                _ = try await huddleService(client).joinHuddle(inviteCode: InviteCode.generate().displayed, user: me)
+                XCTFail("expected \(raised)")
+            } catch let error as HuddleServiceError {
+                XCTAssertEqual(error.errorDescription, expected.errorDescription, raised)
+            }
+        }
     }
 }

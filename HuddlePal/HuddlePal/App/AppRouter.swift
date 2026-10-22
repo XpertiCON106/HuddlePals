@@ -20,13 +20,18 @@ enum Route: Hashable {
 
 /// The shareable invite link, huddlepal://join/<CODE>.
 enum InviteLink {
-    /// The code a link carries, uppercased: 6 letters or digits, the shape
-    /// join_huddle generates and the Join screen accepts. nil otherwise.
+    static func url(for code: InviteCode) -> URL {
+        URL(string: "huddlepal://join/\(code.compact)")!
+    }
+
+    /// The code a link carries, uppercased, for the Join screen: a whole
+    /// `InviteCode` (dashes and case don't matter), or an old 6-character
+    /// code, which Join then explains is out of date. nil otherwise.
     static func code(from url: URL) -> String? {
         guard url.scheme == "huddlepal", url.host == "join" else { return nil }
-        let code = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard code.count == 6, code.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return nil }
-        return code
+        let text = url.lastPathComponent
+        if let code = InviteCode(text) { return code.compact }
+        return InviteCode.isLegacy(text) ? InviteCode.normalized(text) : nil
     }
 }
 

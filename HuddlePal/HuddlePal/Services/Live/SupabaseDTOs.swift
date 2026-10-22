@@ -100,10 +100,31 @@ struct HuddleKeyDTO: Codable {
     var recipientPublicKey: String
 }
 
-/// A row of the `huddle_key_recipients` RPC: a member waiting for the key.
+/// A row of the `huddle_key_recipients` RPC: a member without a working copy
+/// of the key (joined before invites carried it, or replaced their identity key).
 struct KeyRecipientDTO: Codable {
     let userId: UUID
     var publicKey: String
+}
+
+/// A row of the `huddle_invite` RPC: what a member's app needs to show the
+/// huddle's invite code.
+struct HuddleInviteDTO: Codable {
+    /// The code's lookup part (`huddles.invite_code`).
+    let lookup: String
+    /// The huddle still runs on an old secret-less code.
+    let legacy: Bool
+    /// The code's secret sealed with the huddle key; nil when the huddle has
+    /// no active invite (an old code, or one dropped with a replaced key).
+    let sealedSecret: String?
+}
+
+/// A row of `redeem_huddle_invite`: the huddle just joined, and its key
+/// sealed for the invite code.
+struct InviteRedemptionDTO: Codable {
+    let joinedHuddleId: UUID
+    let inviteSalt: String
+    let inviteSealedKey: String
 }
 
 struct BlockDTO: Codable {

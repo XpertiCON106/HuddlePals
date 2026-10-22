@@ -142,7 +142,7 @@ final class CriticalFlowTests: XCTestCase {
     func testJoiningAHuddleKeepsItsStreak() async throws {
         let user = try await signedInUser()
         let huddles = try await deps.huddleService.huddles(for: user)
-        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == "CREW42" })
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
         let now = deps.dateProvider.now
         try await deps.huddleService.recomputeStreak(for: crew, now: now)
         let before = crew.streakCount
@@ -150,7 +150,8 @@ final class CriticalFlowTests: XCTestCase {
 
         let newcomer = User(displayName: "Newcomer", avatarColorHex: "46A758")
         deps.modelContainer.mainContext.insert(newcomer)
-        _ = try await deps.huddleService.joinHuddle(inviteCode: "CREW42", user: newcomer)
+        let code = try XCTUnwrap(InviteCode(SeedDataService.crewInviteCode))
+        _ = try await deps.huddleService.joinHuddle(inviteCode: code.displayed, user: newcomer)
         let membership = try XCTUnwrap(crew.memberships.first { $0.user?.id == newcomer.id })
         XCTAssertEqual(membership.joinedDayKey, deps.engine.todayKey(now: now))
 
@@ -163,7 +164,7 @@ final class CriticalFlowTests: XCTestCase {
         let keeper = try await signedInUser()
         deps.session.currentUser = keeper
         let huddles = try await deps.huddleService.huddles(for: keeper)
-        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == "CREW42" })
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
         let settings = HuddleSettingsViewModel(deps: deps, huddle: crew)
         XCTAssertTrue(settings.isKeeper)
         await settings.setNotificationHour(7)
@@ -190,7 +191,7 @@ final class CriticalFlowTests: XCTestCase {
         // QA-04, mirroring the server's memberships_after_delete trigger.
         let keeper = try await signedInUser()
         let huddles = try await deps.huddleService.huddles(for: keeper)
-        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == "CREW42" })
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
         XCTAssertEqual(crew.sortedMemberships.first?.user?.id, keeper.id)
         let expected = crew.sortedMemberships.dropFirst().min { $0.joinedAt < $1.joinedAt }?.user?.id
 
@@ -208,15 +209,15 @@ final class CriticalFlowTests: XCTestCase {
         let huddle = try await deps.huddleService.createHuddle(
             name: "Smoke Huddle", emoji: "🔥", keeper: keeper
         )
-        XCTAssertEqual(huddle.inviteCode.count, 6)
+        let code = try XCTUnwrap(InviteCode(huddle.inviteCode), "a new-format code")
         XCTAssertEqual(huddle.memberships.first?.role, .keeper)
 
         let friend = User(displayName: "Friend", avatarColorHex: "0091FF")
         deps.modelContainer.mainContext.insert(friend)
 
-        // Codes are case-insensitive on join.
+        // Case, dashes and spaces don't matter on join.
         let joined = try await deps.huddleService.joinHuddle(
-            inviteCode: huddle.inviteCode.lowercased(), user: friend
+            inviteCode: " " + code.displayed.lowercased(), user: friend
         )
         XCTAssertEqual(joined.id, huddle.id)
         XCTAssertEqual(joined.memberships.count, 2)
@@ -229,11 +230,96 @@ final class CriticalFlowTests: XCTestCase {
         }
 
         do {
-            _ = try await deps.huddleService.joinHuddle(inviteCode: "ZZZZZZ", user: friend)
+            _ = try await deps.huddleService.joinHuddle(inviteCode: InviteCode.generate().displayed, user: friend)
             XCTFail("an unknown code must be refused")
         } catch HuddleServiceError.inviteCodeNotFound {
             // expected
         }
+
+        do {
+            _ = try await deps.huddleService.joinHuddle(inviteCode: code.lookup, user: friend)
+            XCTFail("an old 6-character code no longer joins")
+        } catch HuddleServiceError.inviteCodeOutdated {
+            // expected
+        }
+    }
+
+    func testOnlyTheKeeperMakesANewInviteCodeAndTheOldOneStopsWorking() async throws {
+        let keeper = try await signedInUser()
+        let huddles = try await deps.huddleService.huddles(for: keeper)
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
+        let current = try await deps.huddleService.inviteCode(for: crew)
+        let old = try XCTUnwrap(current)
+        let member = try XCTUnwrap(crew.members.first { $0.id != keeper.id })
+
+        do {
+            _ = try await deps.huddleService.resetInviteCode(for: crew, by: member)
+            XCTFail("only the keeper")
+        } catch HuddleServiceError.notKeeper {}
+
+        let fresh = try await deps.huddleService.resetInviteCode(for: crew, by: keeper)
+        XCTAssertNotEqual(fresh, old)
+        let newcomer = User(displayName: "Newcomer", avatarColorHex: "46A758")
+        deps.modelContainer.mainContext.insert(newcomer)
+        do {
+            _ = try await deps.huddleService.joinHuddle(inviteCode: old.displayed, user: newcomer)
+            XCTFail("the old code is revoked")
+        } catch HuddleServiceError.inviteCodeNotFound {}
+        _ = try await deps.huddleService.joinHuddle(inviteCode: fresh.displayed, user: newcomer)
+    }
+
+    func testSettingsShowTheInviteAndTheKeeperCanReplaceIt() async throws {
+        let keeper = try await signedInUser()
+        deps.session.currentUser = keeper
+        let huddles = try await deps.huddleService.huddles(for: keeper)
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
+        let settings = HuddleSettingsViewModel(deps: deps, huddle: crew)
+
+        await settings.loadInvite()
+        let shown = try XCTUnwrap(settings.inviteCode)
+        XCTAssertEqual(shown.compact, SeedDataService.crewInviteCode)
+        XCTAssertEqual(settings.inviteShareURL, InviteLink.url(for: shown))
+        XCTAssertTrue(settings.inviteShareMessage.contains(shown.displayed), "the code travels with the link")
+
+        await settings.resetInvite()
+        XCTAssertNotEqual(settings.inviteCode, shown)
+        XCTAssertNil(settings.inviteMessage)
+
+        deps.session.currentUser = try XCTUnwrap(crew.members.first { $0.id != keeper.id })
+        let replaced = settings.inviteCode
+        await settings.resetInvite()
+        XCTAssertEqual(settings.inviteCode, replaced, "members can't")
+    }
+
+    func testAHuddleOnAnOldCodeGetsANewFormatOne() async throws {
+        let keeper = try await signedInUser()
+        let huddles = try await deps.huddleService.huddles(for: keeper)
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
+        crew.inviteCode = "CREW42" // a store from before invites carried a secret
+
+        let upgraded = try await deps.huddleService.inviteCode(for: crew)
+        let code = try XCTUnwrap(upgraded)
+
+        XCTAssertEqual(crew.inviteCode, code.compact)
+        let again = try await deps.huddleService.inviteCode(for: crew)
+        XCTAssertEqual(again, code, "upgraded once")
+    }
+
+    func testSomeoneAMemberBlockedCantJoin() async throws {
+        let keeper = try await signedInUser()
+        deps.session.currentUser = keeper
+        let huddles = try await deps.huddleService.huddles(for: keeper)
+        let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
+        let stranger = User(displayName: "Stranger", avatarColorHex: "46A758")
+        deps.modelContainer.mainContext.insert(stranger)
+        try await deps.moderationService.block(stranger)
+
+        do {
+            _ = try await deps.huddleService.joinHuddle(inviteCode: SeedDataService.crewInviteCode, user: stranger)
+            XCTFail("a member blocked them")
+        } catch HuddleServiceError.cannotJoin {}
+        XCTAssertFalse(crew.memberships.contains { $0.user?.id == stranger.id })
+        try await deps.moderationService.unblock(stranger)
     }
 
     // MARK: Sign out / sign in round trip

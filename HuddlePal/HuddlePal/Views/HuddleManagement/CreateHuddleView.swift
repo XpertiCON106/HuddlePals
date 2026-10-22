@@ -118,20 +118,35 @@ private struct CreateHuddleContent: View {
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
 
-            Text(huddle.inviteCode)
-                .font(.system(size: 34, weight: .bold, design: .monospaced))
-                .kerning(6)
-                .foregroundStyle(Theme.accent)
-                .padding(.vertical, 14)
-                .frame(maxWidth: .infinity)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Theme.hairline, lineWidth: 1)
-                )
+            if let code = viewModel.inviteCode {
+                Text(code.displayedOnTwoLines)
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .kerning(1)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Theme.accent)
+                    .textSelection(.enabled)
+                    .accessibilityLabel(code.displayed)
+                    .accessibilityIdentifier("inviteCode")
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                    )
+                Text("Anyone with this code can join and see every photo, so share it only with people you'd invite.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text("The invite code will be in the huddle's settings once it's ready.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
 
             if let url = viewModel.shareURL {
-                ShareLink(item: url, message: Text("Join our huddle \"\(huddle.name)\" on HuddlePals")) {
+                ShareLink(item: url, message: Text(viewModel.shareMessage)) {
                     Label("Share invite link", systemImage: "square.and.arrow.up")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.background)

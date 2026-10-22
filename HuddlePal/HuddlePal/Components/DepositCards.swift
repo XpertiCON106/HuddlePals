@@ -15,8 +15,9 @@ struct LocalDepositImage: View {
     /// 1440px deposit decodes to ~10 MB of RAM behind a 110pt tile.
     var maxPixelSize: CGFloat? = nil
     /// Set for huddle photos — use `init(deposit:)`. They're end-to-end
-    /// encrypted in live mode, and one this device can't open yet shows the
-    /// locked placeholder. Nil for profile photos, which aren't encrypted.
+    /// encrypted in live mode; one whose key isn't loaded yet (a cold launch,
+    /// before the huddle's key sync finishes) shows a lock until it is. Nil
+    /// for profile photos, which aren't encrypted.
     var deposit: Deposit? = nil
 
     @State private var image: UIImage?
@@ -32,7 +33,7 @@ struct LocalDepositImage: View {
                         .resizable()
                         .scaledToFill()
                 } else if isLocked {
-                    lockedPlaceholder(showsText: proxy.size.width >= 140)
+                    lockedPlaceholder
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -43,7 +44,7 @@ struct LocalDepositImage: View {
         .accessibilityLabel(accessibilityDescription)
         .accessibilityAddTraits(.isImage)
         // A huddle photo that couldn't be opened retries whenever this device
-        // gains a huddle key (a member shared it).
+        // gains a huddle key (the launch-time sync, or an invite).
         .task(id: deposit == nil ? relativePath : "\(relativePath)#\(deps.session.photoKeysVersion)") {
             // Reload when the path changes (remote sync can re-path a row);
             // skip when already loaded.
@@ -75,24 +76,16 @@ struct LocalDepositImage: View {
 
     private var accessibilityDescription: String {
         guard let deposit else { return "Profile photo" }
-        if isLocked { return "Photo locked. Waiting for a huddle member to share access." }
+        if isLocked { return "Photo locked" }
         return "Photo by \(deposit.author?.displayName ?? "Former member")"
     }
 
-    private func lockedPlaceholder(showsText: Bool) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 20, weight: .medium))
-            if showsText {
-                Text("Waiting for a huddle member to share access")
-                    .font(.system(size: 13, weight: .medium))
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .foregroundStyle(Theme.textSecondary)
-        .padding(16)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Photo locked. Waiting for a huddle member to share access.")
+    private var lockedPlaceholder: some View {
+        Image(systemName: "lock.fill")
+            .font(.system(size: 20, weight: .medium))
+            .foregroundStyle(Theme.textSecondary)
+            .padding(16)
+            .accessibilityLabel("Photo locked")
     }
 
     /// ImageIO thumbnail decode: never materializes the full-size bitmap.

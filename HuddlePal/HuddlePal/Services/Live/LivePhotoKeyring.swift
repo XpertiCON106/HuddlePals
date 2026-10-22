@@ -8,18 +8,20 @@ enum PhotoKeyError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .huddleKeyUnavailable:
-            "This huddle's key hasn't reached this device yet. It's shared automatically when another member opens HuddlePals — try again soon."
+            "This huddle's key isn't on this device yet, so its photos can't be posted or opened here. Try again in a moment."
         case .photoTooLarge:
             "That photo is too large to upload."
         }
     }
 }
 
-/// Live end-to-end key management (the scheme is in `PhotoCrypto`): this
-/// device's identity key, the huddle keys it has unwrapped — in memory only,
-/// never UserDefaults or SwiftData — and the automatic sharing of huddle keys
-/// with members still waiting for one. Every network step is best effort:
-/// the next foreground or huddle open retries it.
+/// Live end-to-end key management (the scheme is in `PhotoCrypto` and
+/// `InviteCrypto`): this device's identity key, the huddle keys it has
+/// unwrapped and the invite codes it has opened — in memory only, never
+/// UserDefaults or SwiftData — plus issuing and redeeming invites, and
+/// sharing huddle keys with members who joined before invites carried them.
+/// Every network step is best effort: the next foreground or huddle open
+/// retries it.
 @MainActor
 final class LivePhotoKeyring {
     private let client: SupabaseClient
@@ -30,6 +32,11 @@ final class LivePhotoKeyring {
     /// The user whose public key the server is known to hold, this launch.
     private var publishedUserID: UUID?
     private var huddleKeys: [UUID: SymmetricKey] = [:]
+    /// Full invite codes (with their secrets), opened or issued this launch.
+    private var inviteCodes: [UUID: InviteCode] = [:]
+    /// Huddles whose key came from an invite and whose own wrapped copy the
+    /// server hasn't confirmed yet. `sync` retries until it has.
+    private var unsavedOwnCopies: Set<UUID> = []
 
     init(client: SupabaseClient, session: AppSession, identityStore: IdentityKeyStoring = IdentityKeychain()) {
         self.client = client
@@ -103,6 +110,7 @@ final class LivePhotoKeyring {
         guard !huddleIDs.isEmpty, let userID = await client.currentUserID else { return }
         await ensureIdentity(for: userID)
         guard publishedUserID == userID, let identity = localIdentity(for: userID) else { return }
+        await saveOwnCopies(userID: userID, identity: identity)
         let myPublicKey = PhotoCrypto.encode(identity.publicKey)
         var gained = false
 
@@ -139,8 +147,9 @@ final class LivePhotoKeyring {
     }
 
     /// The huddle's first key, wrapped for this user. The RPC refuses (false)
-    /// once any member holds a copy — a huddle key is shared, never replaced,
-    /// so a member who just joined simply keeps waiting for a share.
+    /// once any member holds a copy — a huddle key is shared, never replaced.
+    /// (A member who joined with an invite already has the key; one who
+    /// joined with an old code gets it from `share` on a member's device.)
     private func createFirstHuddleKey(
         _ huddleID: UUID,
         userID: UUID,
@@ -161,8 +170,9 @@ final class LivePhotoKeyring {
         return true
     }
 
-    /// Wraps the huddle key for every member the server says is waiting: no
-    /// copy yet (just joined) or only a stale one (they re-keyed).
+    /// The fallback for members without a working copy — no copy (joined with
+    /// an old code, or their own copy never reached the server) or only a
+    /// stale one (they re-keyed): wraps the huddle key for each of them.
     private func share(_ huddleKey: SymmetricKey, huddleID: UUID) async {
         guard let recipients: [KeyRecipientDTO] = try? await client.rpc(
             "huddle_key_recipients", params: ["p_huddle": huddleID.uuidString]
@@ -185,6 +195,124 @@ final class LivePhotoKeyring {
         }
     }
 
+    // MARK: - Invites
+
+    /// The huddle's invite code, for showing and sharing. When the huddle has
+    /// no new-format invite — it still runs on an old secret-less code, or
+    /// its invite went with a replaced key — this issues one, sealed with the
+    /// huddle key, which retires the old code. nil when this device can't
+    /// open the huddle's key (or the code) right now.
+    func inviteCode(for huddleID: UUID) async throws -> InviteCode? {
+        if let code = inviteCodes[huddleID] { return code }
+        guard let huddleKey = await huddleKeyForUpload(huddleID) else { return nil }
+        // Rarely more than once: another member's app may issue the invite
+        // first, or a fresh lookup may already be taken.
+        for _ in 0..<3 {
+            let rows: [HuddleInviteDTO] = try await client.rpc(
+                "huddle_invite", params: ["p_huddle": huddleID.uuidString]
+            )
+            guard let row = rows.first else { return nil }
+            if let sealedSecret = row.sealedSecret {
+                let code = try? InviteCrypto.openCode(
+                    sealedSecret: sealedSecret, lookup: row.lookup, huddleKey: huddleKey, huddleID: huddleID
+                )
+                inviteCodes[huddleID] = code
+                return code
+            }
+            let code = InviteCode.generate()
+            do {
+                let created: Bool = try await client.rpc(
+                    "create_huddle_invite", params: try inviteParams(code, huddleKey: huddleKey, huddleID: huddleID)
+                )
+                if created {
+                    inviteCodes[huddleID] = code
+                    return code
+                }
+            } catch let SupabaseClient.ClientError.http(_, message) where message.contains("invite_code_taken") {
+                continue
+            }
+        }
+        return nil
+    }
+
+    /// The keeper's reset: a new code, and the old one (with its sealed copy
+    /// of the huddle key) stops working at once.
+    func resetInviteCode(for huddleID: UUID) async throws -> InviteCode {
+        guard let huddleKey = await huddleKeyForUpload(huddleID) else { throw PhotoKeyError.huddleKeyUnavailable }
+        var attempt = 0
+        while true {
+            attempt += 1
+            let code = InviteCode.generate()
+            do {
+                try await client.rpcVoid(
+                    "reset_huddle_invite", params: try inviteParams(code, huddleKey: huddleKey, huddleID: huddleID)
+                )
+                inviteCodes[huddleID] = code
+                return code
+            } catch let SupabaseClient.ClientError.http(_, message) where message.contains("invite_code_taken") && attempt < 3 {
+                continue
+            }
+        }
+    }
+
+    private func inviteParams(_ code: InviteCode, huddleKey: SymmetricKey, huddleID: UUID) throws -> [String: String] {
+        let sealed = try InviteCrypto.seal(huddleKey, code: code, huddleID: huddleID)
+        return [
+            "p_huddle": huddleID.uuidString,
+            "p_lookup": code.lookup,
+            "p_proof": sealed.proof,
+            "p_salt": sealed.salt,
+            "p_sealed_key": sealed.sealedKey,
+            "p_sealed_secret": sealed.sealedSecret,
+        ]
+    }
+
+    /// Takes the huddle key from a redeemed invite: opened here with the
+    /// code's secret, then wrapped for this user and stored as their own copy,
+    /// so their access never depends on the invite again. No other member
+    /// needs to be online. False if the sealed copy doesn't open.
+    func acceptInvite(_ code: InviteCode, redemption: InviteRedemptionDTO) async -> Bool {
+        let huddleID = redemption.joinedHuddleId
+        guard let key = try? InviteCrypto.openHuddleKey(
+            sealedKey: redemption.inviteSealedKey, salt: redemption.inviteSalt, code: code, huddleID: huddleID
+        ) else { return false }
+        huddleKeys[huddleID] = key
+        inviteCodes[huddleID] = code
+        unsavedOwnCopies.insert(huddleID)
+        if let userID = await client.currentUserID {
+            await ensureIdentity(for: userID)
+            if publishedUserID == userID, let identity = localIdentity(for: userID) {
+                await saveOwnCopies(userID: userID, identity: identity)
+            }
+        }
+        session.photoKeysVersion += 1
+        return true
+    }
+
+    /// Stores this user's own wrapped copy of each key that came from an
+    /// invite. One that fails stays queued for the next sync.
+    private func saveOwnCopies(userID: UUID, identity: Curve25519.KeyAgreement.PrivateKey) async {
+        for huddleID in unsavedOwnCopies {
+            guard let key = huddleKeys[huddleID],
+                  let wrapped = try? PhotoCrypto.wrapHuddleKey(
+                      key, for: identity.publicKey, huddleID: huddleID, recipientID: userID
+                  )
+            else { continue }
+            do {
+                // False means a working copy was already there: done either way.
+                let _: Bool = try await client.rpc("save_own_huddle_key", params: [
+                    "p_huddle": huddleID.uuidString,
+                    "p_wrapped_key": wrapped.wrappedKey,
+                    "p_ephemeral_public_key": wrapped.ephemeralPublicKey,
+                    "p_recipient_public_key": PhotoCrypto.encode(identity.publicKey),
+                ])
+                unsavedOwnCopies.remove(huddleID)
+            } catch {
+                // Retried by the next sync.
+            }
+        }
+    }
+
     // MARK: - Reports
 
     /// The key a report discloses: this one photo's own key, when this device
@@ -202,6 +330,8 @@ final class LivePhotoKeyring {
         identity = nil
         publishedUserID = nil
         huddleKeys = [:]
+        inviteCodes = [:]
+        unsavedOwnCopies = []
     }
 
     /// Account deletion: the identity key goes too. (Its `user_keys` /

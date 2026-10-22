@@ -389,7 +389,7 @@ final class HuddleEngineTests: XCTestCase {
         )
     }
 
-    // MARK: Captions & invite codes
+    // MARK: Captions
 
     func testCaptionSanitization() {
         XCTAssertNil(HuddleEngine.sanitizedCaption(nil))
@@ -399,14 +399,6 @@ final class HuddleEngineTests: XCTestCase {
             HuddleEngine.sanitizedCaption(String(repeating: "x", count: 200))?.count,
             HuddleEngine.captionLimit
         )
-    }
-
-    func testInviteCodeShape() {
-        for _ in 0..<20 {
-            let code = HuddleEngine.generateInviteCode()
-            XCTAssertEqual(code.count, 6)
-            XCTAssertTrue(code.allSatisfy { $0.isLetter || $0.isNumber })
-        }
     }
 
     // MARK: Identity color tokens

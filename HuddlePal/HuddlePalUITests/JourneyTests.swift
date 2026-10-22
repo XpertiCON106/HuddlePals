@@ -55,8 +55,9 @@ final class JourneyTests: HuddleUITestCase {
         name.tap()
         name.typeText("QA Huddle")
         waitFor(app.buttons["Create huddle"]).tap()
-        let code = waitFor(app.staticTexts.matching(NSPredicate(format: "label MATCHES '^[A-Z0-9]{6}$'")).firstMatch, timeout: 15)
+        let code = waitFor(app.staticTexts["inviteCode"], timeout: 15)
         let inviteCode = code.label
+        XCTAssertNotNil(inviteCode.range(of: "^([A-Z0-9]{4}-){7}[A-Z0-9]{4}$", options: .regularExpression), "a new-format code: \(inviteCode)")
         snapshot("05 huddle created")
         waitFor(app.buttons["Back to my huddles"]).tap()
 
@@ -70,7 +71,7 @@ final class JourneyTests: HuddleUITestCase {
         snapshot("07 new user empty shelf")
 
         waitFor(app.buttons["Join with a code"]).tap()
-        let field = waitFor(app.textFields["ABC123"])
+        let field = waitFor(app.textFields["Invite code"])
         field.tap()
         field.typeText(inviteCode)
         waitFor(app.buttons["Join huddle"]).tap()

@@ -142,7 +142,7 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         try audit("create huddle")
         app.navigationBars.buttons.firstMatch.tap()
         openAddMenu("Join with a code")
-        waitFor(app.textFields["ABC123"])
+        waitFor(app.textFields["Invite code"])
         try audit("join huddle")
         app.navigationBars.buttons.firstMatch.tap()
         openHuddle("The Crew")

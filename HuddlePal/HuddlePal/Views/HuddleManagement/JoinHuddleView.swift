@@ -64,27 +64,40 @@ private struct JoinHuddleContent: View {
                 .font(Theme.displayFont(24))
                 .foregroundStyle(Theme.textPrimary)
 
-            Text("Ask the huddle's keeper for the 6-character code.")
+            Text("Paste the code someone in the huddle sent you.")
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
-            TextField("ABC123", text: $viewModel.code)
-                .font(.system(size: 28, weight: .bold, design: .monospaced))
+            // 18 pt keeps the field itself a big enough tap target (padding
+            // doesn't count); compressed so a whole 39-character code fits.
+            TextField("Invite code", text: $viewModel.code)
+                .font(.system(size: 18, weight: .semibold).width(.compressed))
                 .multilineTextAlignment(.center)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .focused($codeFocused)
                 .padding(.vertical, 14)
+                .padding(.horizontal, 8)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(Theme.hairline, lineWidth: 1)
                 )
                 .onChange(of: viewModel.code) { _, newValue in
-                    if newValue.count > 6 {
-                        viewModel.code = String(newValue.prefix(6))
+                    // A code with dashes is 39 characters; room for stray spaces.
+                    if newValue.count > 64 {
+                        viewModel.code = String(newValue.prefix(64))
                     }
                 }
+
+            PasteButton(payloadType: String.self) { strings in
+                guard let pasted = strings.first else { return }
+                Task { @MainActor in viewModel.code = pasted }
+            }
+            .labelStyle(.titleAndIcon)
+            .buttonBorderShape(.capsule)
 
             if let error = viewModel.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")

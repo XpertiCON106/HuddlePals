@@ -3,18 +3,32 @@ import SwiftData
 
 enum HuddleServiceError: LocalizedError {
     case inviteCodeNotFound
+    /// A 6-character code from before invites carried a secret.
+    case inviteCodeOutdated
+    /// The server took the code, but its sealed key didn't open.
+    case inviteUnusable
+    /// The huddle's invite code can't be shown on this device right now.
+    case inviteUnavailable
     case alreadyMember
     case notAMember
+    case notKeeper
     case huddleFull
+    /// Someone in the huddle has blocked the person joining.
+    case cannotJoin
     /// Too many wrong invite codes recently (the server allows 10 an hour).
     case tooManyAttempts
 
     var errorDescription: String? {
         switch self {
         case .inviteCodeNotFound: "No huddle found for that code. Double-check it and try again."
+        case .inviteCodeOutdated: "That's an older invite code. Ask someone in the huddle to send you the current one — it's under Invite code in the huddle's settings."
+        case .inviteUnusable: "This invite code isn't working. Ask someone in the huddle for a new one."
+        case .inviteUnavailable: "The invite code can't be shown right now. Check your connection and try again."
         case .alreadyMember: "You're already a member of this huddle."
         case .notAMember: "You're not a member of this huddle."
+        case .notKeeper: "Only the huddle's keeper can do that."
         case .huddleFull: "This huddle already has 8 members — that's the limit."
+        case .cannotJoin: "You can't join this huddle."
         case .tooManyAttempts: "Too many codes that didn't match. Wait an hour, then try again."
         }
     }
@@ -24,7 +38,17 @@ enum HuddleServiceError: LocalizedError {
 protocol HuddleServiceProtocol: AnyObject {
     func huddles(for user: User) async throws -> [Huddle]
     func createHuddle(name: String, emoji: String, keeper: User) async throws -> Huddle
+    /// Joins with an invite code (`InviteCode`; spaces, dashes and case
+    /// don't matter). Live, the code also carries the huddle key, so every
+    /// photo opens at once. An old 6-character code throws
+    /// `.inviteCodeOutdated`.
     func joinHuddle(inviteCode: String, user: User) async throws -> Huddle
+    /// The huddle's code, to show and share. A huddle still on an old
+    /// secret-less code gets a new-format one, which retires the old. nil
+    /// when it can't be shown on this device right now.
+    func inviteCode(for huddle: Huddle) async throws -> InviteCode?
+    /// Keeper only: a new code; the old one stops working at once.
+    func resetInviteCode(for huddle: Huddle, by user: User) async throws -> InviteCode
     func leaveHuddle(_ huddle: Huddle, user: User) async throws
     /// Skip-token usage per dayKey, consumed by streak math.
     func skipRecords(for huddle: Huddle) async throws -> [String: Set<UUID>]
@@ -94,7 +118,7 @@ final class MockHuddleService: HuddleServiceProtocol {
         let huddle = Huddle(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             emoji: emoji,
-            inviteCode: try uniqueInviteCode()
+            inviteCode: try uniqueInviteCode().compact
         )
         context.insert(huddle)
         let membership = Membership(user: keeper, huddle: huddle, role: .keeper, joinedDayKey: todayKey)
@@ -104,20 +128,45 @@ final class MockHuddleService: HuddleServiceProtocol {
     }
 
     func joinHuddle(inviteCode: String, user: User) async throws -> Huddle {
-        // TODO: BACKEND — call a join RPC that validates the code and
-        // enforces the 8-member cap atomically.
-        let code = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        // The mock stores the whole code; it has no server to hide the
+        // secret from. Same rules as redeem_huddle_invite otherwise.
+        guard let code = InviteCode(inviteCode) else {
+            throw InviteCode.isLegacy(inviteCode) ? HuddleServiceError.inviteCodeOutdated : .inviteCodeNotFound
+        }
         let huddles = try context.fetch(FetchDescriptor<Huddle>())
-        guard let huddle = huddles.first(where: { $0.inviteCode.uppercased() == code }) else {
+        guard let huddle = huddles.first(where: { InviteCode($0.inviteCode) == code }) else {
             throw HuddleServiceError.inviteCodeNotFound
         }
         guard !huddle.memberships.contains(where: { $0.user?.id == user.id }) else {
             throw HuddleServiceError.alreadyMember
         }
+        let blockers = huddle.memberships.compactMap { $0.user?.id }
+        guard !blockers.contains(where: { MockModerationService.blockedIDs(by: $0).contains(user.id) }) else {
+            throw HuddleServiceError.cannotJoin
+        }
         let membership = Membership(user: user, huddle: huddle, joinedDayKey: todayKey)
         context.insert(membership)
         try context.save()
         return huddle
+    }
+
+    func inviteCode(for huddle: Huddle) async throws -> InviteCode? {
+        if let code = InviteCode(huddle.inviteCode) { return code }
+        // A store from before invites carried a secret: upgrade, as live does.
+        let code = try uniqueInviteCode()
+        huddle.inviteCode = code.compact
+        try context.save()
+        return code
+    }
+
+    func resetInviteCode(for huddle: Huddle, by user: User) async throws -> InviteCode {
+        guard huddle.memberships.contains(where: { $0.user?.id == user.id && $0.role == .keeper }) else {
+            throw HuddleServiceError.notKeeper
+        }
+        let code = try uniqueInviteCode()
+        huddle.inviteCode = code.compact
+        try context.save()
+        return code
     }
 
     func leaveHuddle(_ huddle: Huddle, user: User) async throws {
@@ -171,12 +220,11 @@ final class MockHuddleService: HuddleServiceProtocol {
         try context.save()
     }
 
-    private func uniqueInviteCode() throws -> String {
-        let existing = Set(try context.fetch(FetchDescriptor<Huddle>()).map(\.inviteCode))
-        for _ in 0..<50 {
-            let code = HuddleEngine.generateInviteCode()
-            if !existing.contains(code) { return code }
-        }
-        return HuddleEngine.generateInviteCode(length: 8)
+    /// Unique by lookup part, like `huddles.invite_code`.
+    private func uniqueInviteCode() throws -> InviteCode {
+        let taken = Set(try context.fetch(FetchDescriptor<Huddle>()).map { String($0.inviteCode.prefix(InviteCode.lookupLength)) })
+        var code = InviteCode.generate()
+        while taken.contains(code.lookup) { code = InviteCode.generate() }
+        return code
     }
 }

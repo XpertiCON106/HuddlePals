@@ -15,8 +15,13 @@ final class LiveDepositService: DepositServiceProtocol {
 
     func deposits(in huddle: Huddle) async throws -> [Deposit] {
         // Opening a huddle: get its key if this device lacks it, and share it
-        // with any member still waiting — before the photos render.
+        // with any member who has no working copy — before the photos render.
         await keyring.sync(huddleIDs: [huddle.id])
+        // A huddle still on an old secret-less code quietly gets a new-format
+        // invite, retiring the old code. Off the photos' critical path.
+        let keyring = keyring
+        let huddleID = huddle.id
+        Task { _ = try? await keyring.inviteCode(for: huddleID) }
         // Complete sets, paged and chunked: applyDeposits prunes whatever is
         // missing, so a truncated read would delete real history locally.
         let depositDTOs: [DepositDTO] = try await client.selectAll("deposits", query: [

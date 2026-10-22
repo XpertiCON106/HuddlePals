@@ -5,12 +5,24 @@ final class UnhappyPathTests: HuddleUITestCase {
     func testAWrongInviteCodeSaysSo() {
         launchToShelf()
         openAddMenu("Join with a code")
-        let field = waitFor(app.textFields["ABC123"])
+        let field = waitFor(app.textFields["Invite code"])
         field.tap()
-        field.typeText("ZZZZZZ")
+        field.typeText("ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ")
         waitFor(app.buttons["Join huddle"]).tap()
         waitFor(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'No huddle found'")).firstMatch, timeout: 10)
         snapshot("20 wrong invite code")
+    }
+
+    /// A 6-character code from before invites carried the huddle key.
+    func testAnOldInviteCodeExplainsWhatToAskFor() {
+        launchToShelf()
+        openAddMenu("Join with a code")
+        let field = waitFor(app.textFields["Invite code"])
+        field.tap()
+        field.typeText("CREW42")
+        waitFor(app.buttons["Join huddle"]).tap()
+        waitFor(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'older invite code'")).firstMatch, timeout: 10)
+        snapshot("23 old invite code")
     }
 
     /// QA-16: an invite link tapped while signed out opens Join, filled in,
@@ -23,7 +35,7 @@ final class UnhappyPathTests: HuddleUITestCase {
         app.open(URL(string: "huddlepal://join/crew42")!)
         signInWithMockApple()
         completeProfile(name: "Bea")
-        let field = waitFor(app.textFields["ABC123"], timeout: 20, "Join opens by itself")
+        let field = waitFor(app.textFields["Invite code"], timeout: 20, "Join opens by itself")
         XCTAssertEqual(field.value as? String, "CREW42")
         snapshot("21 invite link after sign-in")
     }

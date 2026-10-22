@@ -84,14 +84,38 @@ final class LiveHuddleService: HuddleServiceProtocol {
         return huddle
     }
 
+    /// Instant join: the server checks the code's proof (never its secret)
+    /// and returns the huddle key sealed for the code; the keyring opens it
+    /// and stores this user's own copy. No other member has to be online, and
+    /// every photo opens straight away.
     func joinHuddle(inviteCode: String, user: User) async throws -> Huddle {
+        guard let code = InviteCode(inviteCode) else {
+            throw InviteCode.isLegacy(inviteCode) ? HuddleServiceError.inviteCodeOutdated : .inviteCodeNotFound
+        }
         do {
-            let rows: [HuddleDTO] = try await client.rpc("join_huddle", params: [
-                "p_code": inviteCode,
+            let rows: [InviteRedemptionDTO] = try await client.rpc("redeem_huddle_invite", params: [
+                "p_lookup": code.lookup,
+                "p_proof": InviteCrypto.proof(for: code),
                 "p_day_key": todayKey,
             ])
-            guard let dto = rows.first else {
+            guard let redemption = rows.first else {
                 throw HuddleServiceError.inviteCodeNotFound
+            }
+            let huddleID = redemption.joinedHuddleId
+            guard await keyring.acceptInvite(code, redemption: redemption) else {
+                // The server took the proof but its sealed key doesn't open
+                // (a damaged invite): don't stay where no photo would open.
+                try? await client.delete("memberships", query: [
+                    URLQueryItem(name: "huddle_id", value: "eq.\(huddleID.uuidString)"),
+                    URLQueryItem(name: "user_id", value: "eq.\(user.id.uuidString)"),
+                ])
+                throw HuddleServiceError.inviteUnusable
+            }
+            let huddles: [HuddleDTO] = try await client.select("huddles", query: [
+                URLQueryItem(name: "id", value: "eq.\(huddleID.uuidString)"),
+            ])
+            guard let dto = huddles.first else {
+                throw SupabaseClient.ClientError.http(status: 500, message: "joined huddle not readable")
             }
             return try await syncSingleHuddle(dto)
         } catch let SupabaseClient.ClientError.http(_, message) {
@@ -99,8 +123,23 @@ final class LiveHuddleService: HuddleServiceProtocol {
             if message.contains("invite_code_not_found") { throw HuddleServiceError.inviteCodeNotFound }
             if message.contains("already_member") { throw HuddleServiceError.alreadyMember }
             if message.contains("huddle_full") { throw HuddleServiceError.huddleFull }
+            if message.contains("blocked") { throw HuddleServiceError.cannotJoin }
             if message.contains("too_many_attempts") { throw HuddleServiceError.tooManyAttempts }
             throw SupabaseClient.ClientError.http(status: 0, message: message)
+        }
+    }
+
+    func inviteCode(for huddle: Huddle) async throws -> InviteCode? {
+        try await keyring.inviteCode(for: huddle.id)
+    }
+
+    func resetInviteCode(for huddle: Huddle, by user: User) async throws -> InviteCode {
+        do {
+            return try await keyring.resetInviteCode(for: huddle.id)
+        } catch let SupabaseClient.ClientError.http(_, message) where message.contains("not_keeper") {
+            throw HuddleServiceError.notKeeper
+        } catch PhotoKeyError.huddleKeyUnavailable {
+            throw HuddleServiceError.inviteUnavailable
         }
     }
 

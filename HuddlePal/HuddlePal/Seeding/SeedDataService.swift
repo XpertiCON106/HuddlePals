@@ -8,6 +8,9 @@ import SwiftData
 @MainActor
 final class SeedDataService {
     static let currentUserName = "You"
+    /// The seeded huddles' invite codes (lookup part first, as live stores it).
+    static let crewInviteCode = "CREW427KQ9MWXH4TBR2VNC8JPZ3DFYGS"
+    static let dinnersInviteCode = "PASTA7M4QX8RZ2VKHT7WNB3CJP9DGFYS"
     private static let seededKey = "huddlepal.mock.didSeed.v2"
 
     private let context: ModelContext
@@ -120,7 +123,7 @@ final class SeedDataService {
         var imageSeed = 0
 
         // ── Huddle 1: The Crew (all four, 30 days, textured history) ──
-        let crew = Huddle(name: "The Crew", emoji: "🏔", inviteCode: "CREW42")
+        let crew = Huddle(name: "The Crew", emoji: "🏔", inviteCode: Self.crewInviteCode)
         context.insert(crew)
         for (index, user) in allUsers.enumerated() {
             context.insert(Membership(
@@ -162,7 +165,7 @@ final class SeedDataService {
         }
 
         // ── Huddle 2: Sunday Dinners (You + Maya — multi-huddle demo) ──
-        let dinners = Huddle(name: "Sunday Dinners", emoji: "🍝", inviteCode: "PASTA7")
+        let dinners = Huddle(name: "Sunday Dinners", emoji: "🍝", inviteCode: Self.dinnersInviteCode)
         context.insert(dinners)
         context.insert(Membership(user: you, huddle: dinners, role: .keeper, joinedAt: now.addingTimeInterval(-10 * 86_400)))
         context.insert(Membership(user: maya, huddle: dinners, joinedAt: now.addingTimeInterval(-10 * 86_400 + 300)))
@@ -246,7 +249,9 @@ final class SeedDataService {
     private func reseedSkipLedger() throws {
         let huddles = try context.fetch(FetchDescriptor<Huddle>())
         let users = try context.fetch(FetchDescriptor<User>())
-        guard let crew = huddles.first(where: { $0.inviteCode == "CREW42" }) else { return }
+        // By name too: the keeper may have made the crew a new code.
+        guard let crew = huddles.first(where: { $0.inviteCode == Self.crewInviteCode })
+                ?? huddles.first(where: { $0.name == "The Crew" }) else { return }
         let todayKey = engine.todayKey(now: dateProvider.now)
         for (offset, name) in SeedPlan.skippedDays {
             // The seeded skip days drift as real days pass; anchoring to the

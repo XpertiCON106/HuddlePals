@@ -93,10 +93,12 @@ enum LiveStub {
     }
 
     /// A client holding a fresh session for `userID`, signed in through a
-    /// stubbed email-code verify. Clears any Keychain session first.
+    /// stubbed email-code verify. Clears any Keychain session first. Give two
+    /// clients different `accessToken`s to tell their requests apart.
     static func signedInClient(
         userID: UUID = UUID(),
         expiresIn: Int = 3600,
+        accessToken: String = "access",
         onSessionEnded: @escaping @Sendable () -> Void = {}
     ) async throws -> SupabaseClient {
         KeychainStore.delete(key: sessionKey)
@@ -105,7 +107,7 @@ enum LiveStub {
         )
         StubURLProtocol.respond { _ in
             Reply(body: json([
-                "access_token": "access", "refresh_token": "refresh", "expires_in": expiresIn,
+                "access_token": accessToken, "refresh_token": "refresh", "expires_in": expiresIn,
                 "user": ["id": userID.uuidString],
             ]))
         }

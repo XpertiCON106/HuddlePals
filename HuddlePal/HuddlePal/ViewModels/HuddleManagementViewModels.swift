@@ -11,6 +11,9 @@ final class CreateHuddleViewModel {
     var name = ""
     var emoji = "🏔"
     private(set) var createdHuddle: Huddle?
+    /// The new huddle's invite; nil only if it couldn't be issued yet (the
+    /// huddle's settings retry).
+    private(set) var inviteCode: InviteCode?
     private(set) var isCreating = false
     private(set) var errorMessage: String?
 
@@ -21,11 +24,15 @@ final class CreateHuddleViewModel {
         return (1...TextLimit.huddleName).contains(trimmed.serverLength) && !isCreating
     }
 
-    /// Stub deep link shared via the share sheet.
-    /// TODO: BACKEND — replace with a universal link that routes through
-    /// the join RPC.
+    /// Shared via the share sheet: the link plus the code itself, for
+    /// pasting where custom-scheme links don't open.
+    /// TODO: BACKEND — a universal link would open in any app.
     var shareURL: URL? {
-        createdHuddle.flatMap { URL(string: "huddlepal://join/\($0.inviteCode)") }
+        inviteCode.map(InviteLink.url(for:))
+    }
+
+    var shareMessage: String {
+        InviteShare.message(huddleName: createdHuddle?.name ?? "", code: inviteCode)
     }
 
     init(deps: AppDependencies) {
@@ -38,11 +45,21 @@ final class CreateHuddleViewModel {
         defer { isCreating = false }
         do {
             let huddle = try await deps.huddleService.createHuddle(name: name, emoji: emoji, keeper: user)
+            inviteCode = try? await deps.huddleService.inviteCode(for: huddle)
             createdHuddle = huddle
             Haptics.success()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+/// The words that go with a shared invite.
+enum InviteShare {
+    static func message(huddleName: String, code: InviteCode?) -> String {
+        var text = "Join our huddle \"\(huddleName)\" on HuddlePals."
+        if let code { text += " Invite code: \(code.displayed)" }
+        return text
     }
 }
 
@@ -58,8 +75,9 @@ final class JoinHuddleViewModel {
     private(set) var isJoining = false
     private(set) var errorMessage: String?
 
+    /// A whole code, or an old 6-character one (which `join` explains).
     var canJoin: Bool {
-        code.trimmingCharacters(in: .whitespacesAndNewlines).count == 6 && !isJoining
+        (InviteCode(code) != nil || InviteCode.isLegacy(code)) && !isJoining
     }
 
     init(deps: AppDependencies) {
@@ -102,10 +120,50 @@ final class HuddleSettingsViewModel {
 
     private(set) var didLeave = false
     private(set) var errorMessage: String?
+    private(set) var inviteCode: InviteCode?
+    private(set) var isLoadingInvite = false
+    private(set) var isResettingInvite = false
+    /// Why the invite isn't shown, or why a reset failed.
+    private(set) var inviteMessage: String?
 
     init(deps: AppDependencies, huddle: Huddle) {
         self.deps = deps
         self.huddle = huddle
+    }
+
+    var inviteShareURL: URL? {
+        inviteCode.map(InviteLink.url(for:))
+    }
+
+    var inviteShareMessage: String {
+        InviteShare.message(huddleName: huddle.name, code: inviteCode)
+    }
+
+    /// Loads the code to show; a huddle still on an old code gets a new one.
+    func loadInvite() async {
+        guard inviteCode == nil, !isLoadingInvite else { return }
+        isLoadingInvite = true
+        defer { isLoadingInvite = false }
+        do {
+            inviteCode = try await deps.huddleService.inviteCode(for: huddle)
+            inviteMessage = inviteCode == nil ? HuddleServiceError.inviteUnavailable.errorDescription : nil
+        } catch {
+            inviteMessage = HuddleServiceError.inviteUnavailable.errorDescription
+        }
+    }
+
+    /// Keeper only: replaces the code; the old one stops working.
+    func resetInvite() async {
+        guard isKeeper, let user = deps.session.currentUser, !isResettingInvite else { return }
+        isResettingInvite = true
+        defer { isResettingInvite = false }
+        do {
+            inviteCode = try await deps.huddleService.resetInviteCode(for: huddle, by: user)
+            inviteMessage = nil
+            Haptics.success()
+        } catch {
+            inviteMessage = error.localizedDescription
+        }
     }
 
     var memberships: [Membership] { huddle.sortedMemberships }
