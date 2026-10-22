@@ -127,7 +127,7 @@ final class TermsAgreementTests: XCTestCase {
 
     func testBundledTermsHaveEverySectionAndNoPlaceholders() throws {
         let terms = try XCTUnwrap(TermsOfService.current, "Legal/TermsOfService.md must be in the app bundle")
-        XCTAssertEqual(terms.blocks.filter { $0.kind == .heading }.count, 15)
+        XCTAssertEqual(terms.blocks.filter { $0.kind == .heading }.count, 17)
         let text = terms.blocks.map { String($0.text.characters) }.joined(separator: "\n")
         XCTAssertFalse(text.contains("["), "unfilled placeholder")
         XCTAssertFalse(text.contains("Drafting Notes"))

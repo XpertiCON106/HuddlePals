@@ -84,7 +84,7 @@ private struct TermsStep: View {
             VStack(spacing: 8) {
                 Group {
                     if viewModel.hasReachedEndOfTerms {
-                        Text("By tapping Agree, you accept these Terms, including binding individual arbitration and a class action waiver (Section 12).")
+                        Text("By tapping Agree, you accept these Terms, including binding individual arbitration and a class action waiver (Section 13).")
                     } else {
                         Label("Scroll to the end of the Terms to enable Agree.", systemImage: "arrow.down")
                     }
