@@ -127,6 +127,14 @@ struct InviteRedemptionDTO: Codable {
     let inviteSealedKey: String
 }
 
+/// `device_tokens`: one device registered for push notifications.
+struct DeviceTokenDTO: Codable {
+    let userId: UUID
+    let token: String
+    /// "sandbox" or "production" (`PushEnvironment`).
+    let environment: String
+}
+
 struct BlockDTO: Codable {
     let id: UUID
     let blockerId: UUID

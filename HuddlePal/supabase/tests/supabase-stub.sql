@@ -2,8 +2,10 @@
 -- the local test database (PGlite): the extensions schema with pgcrypto, the
 -- anon / authenticated / service_role roles with Supabase's default grants,
 -- auth.users + auth.uid() (read from the request's JWT subject, the way
--- PostgREST sets it), and storage.objects + storage.foldername() so the
--- storage policies run against the same rows the Storage API would query.
+-- PostgREST sets it), storage.objects + storage.foldername() so the
+-- storage policies run against the same rows the Storage API would query,
+-- and pg_net + Vault as far as the push triggers use them (net.http_post
+-- records each request instead of sending it; Vault secrets are plain rows).
 
 create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
@@ -66,3 +68,29 @@ end $$;
 grant execute on function storage.foldername(text) to anon, authenticated, service_role;
 
 insert into storage.buckets (id, name) values ('deposits', 'deposits');
+
+-- pg_net's net.http_post, recording instead of sending.
+create schema if not exists net;
+create table net.http_requests (
+  id bigserial primary key,
+  url text,
+  body jsonb,
+  headers jsonb,
+  timeout_milliseconds integer
+);
+create function net.http_post(
+  url text,
+  body jsonb default '{}'::jsonb,
+  params jsonb default '{}'::jsonb,
+  headers jsonb default '{"Content-Type": "application/json"}'::jsonb,
+  timeout_milliseconds integer default 5000
+) returns bigint language sql as $$
+  insert into net.http_requests (url, body, headers, timeout_milliseconds)
+  values (url, body, headers, timeout_milliseconds)
+  returning id
+$$;
+
+-- Supabase Vault: secrets as plain rows behind the decrypted_secrets view.
+create schema if not exists vault;
+create table vault.secrets (name text primary key, secret text not null);
+create view vault.decrypted_secrets as select name, secret as decrypted_secret from vault.secrets;

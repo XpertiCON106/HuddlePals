@@ -143,6 +143,7 @@ describe('delete-account handler', () => {
         steps.push(`apple ${new URL(url).pathname}`)
         return apple.fetch(url, init)
       },
+      removeDeviceTokens: step('removeDeviceTokens'),
       removeAvatars: step('removeAvatars'),
       releaseStorageObjects: step('releaseStorageObjects'),
       deleteUser: step('deleteUser'),
@@ -160,10 +161,10 @@ describe('delete-account handler', () => {
 
   const allSteps = [
     'apple /auth/token', 'apple /auth/revoke',
-    'removeAvatars user-1', 'releaseStorageObjects user-1', 'deleteUser user-1',
+    'removeDeviceTokens user-1', 'removeAvatars user-1', 'releaseStorageObjects user-1', 'deleteUser user-1',
   ]
 
-  it('revokes the Apple tokens, removes avatars, releases photos, then deletes the user', async () => {
+  it('revokes the Apple tokens, forgets the devices, removes avatars, releases photos, then deletes the user', async () => {
     const { services, steps, logs } = await setUp()
     const response = await handleDeleteAccount(request(), services)
     assert.equal(response.status, 200)
@@ -222,14 +223,22 @@ describe('delete-account handler', () => {
     assert.deepEqual(steps, allSteps.slice(2))
   })
 
-  it('a failed avatar cleanup or release is logged and the deletion goes on', async () => {
+  it('a failed device, avatar or photo cleanup is logged and the deletion goes on', async () => {
     const { services, steps, logs } = await setUp({
-      fail: { removeAvatars: new Error('storage down'), releaseStorageObjects: new Error('function missing') },
+      fail: {
+        removeDeviceTokens: new Error('table missing'),
+        removeAvatars: new Error('storage down'),
+        releaseStorageObjects: new Error('function missing'),
+      },
     })
     const response = await handleDeleteAccount(request(), services)
     assert.equal(response.status, 200)
     assert.deepEqual(steps, allSteps)
-    assert.deepEqual(logs.slice(1), ['avatar_cleanup_failed Error: storage down', 'storage_release_failed Error: function missing'])
+    assert.deepEqual(logs.slice(1), [
+      'device_token_cleanup_failed Error: table missing',
+      'avatar_cleanup_failed Error: storage down',
+      'storage_release_failed Error: function missing',
+    ])
   })
 
   it('a failed deleteUser is a 500 that shows the client no internal detail', async () => {

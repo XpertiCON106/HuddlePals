@@ -1,8 +1,10 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 @main
 struct HuddlePalApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var dependencies: AppDependencies
     @State private var router = AppRouter()
@@ -20,6 +22,9 @@ struct HuddlePalApp: App {
             deps = AppDependencies.makeMock()
         }
         _dependencies = State(initialValue: deps)
+        // Before launch finishes, so a tap that launched the app is delivered.
+        UNUserNotificationCenter.current().delegate = deps.push.centerDelegate
+        AppDelegate.push = deps.push
     }
 
     var body: some Scene {
@@ -36,9 +41,20 @@ struct HuddlePalApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     // Re-evaluate reminders on foreground: an upload made on
                     // another device (or earlier today) should silence the
-                    // remaining nudges.
+                    // remaining nudges. Push picks up a permission changed
+                    // in iOS Settings.
                     if phase == .active {
-                        Task { await dependencies.reminders.refresh() }
+                        Task {
+                            await dependencies.reminders.refresh()
+                            await dependencies.push.refresh()
+                        }
+                    }
+                }
+                .onChange(of: dependencies.session.currentUser?.id) { _, userID in
+                    // Signed in (or switched account): register this device
+                    // for the account's notifications.
+                    if userID != nil {
+                        Task { await dependencies.push.refresh() }
                     }
                 }
         }

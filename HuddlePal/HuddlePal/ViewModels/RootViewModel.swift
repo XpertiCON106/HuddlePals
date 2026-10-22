@@ -32,7 +32,9 @@ final class RootViewModel {
             bootstrapError = error.localizedDescription
         }
         deps.session.isReady = true
-        // Bring the daily reminder schedule in line with launch state.
+        // Bring the daily reminder schedule in line with launch state, and
+        // register for activity notifications if they're allowed (never asks).
         await deps.reminders.refresh()
+        await deps.push.refresh()
     }
 }

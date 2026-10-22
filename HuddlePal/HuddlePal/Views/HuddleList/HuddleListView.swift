@@ -83,7 +83,16 @@ private struct HuddleListContent: View {
                 .accessibilityLabel("Create or join a huddle")
             }
         }
-        .task { await viewModel.refresh() }
+        .task {
+            await viewModel.refresh()
+            // A notification tap that launched the app.
+            await openNotifiedHuddle()
+        }
+        .onChange(of: deps.session.pendingHuddleID) { _, id in
+            if id != nil {
+                Task { await openNotifiedHuddle() }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await viewModel.refresh() }
@@ -94,6 +103,12 @@ private struct HuddleListContent: View {
         }
         .onChange(of: deps.debug.simulateNotPostedToday) {
             Task { await viewModel.refresh() }
+        }
+    }
+
+    private func openNotifiedHuddle() async {
+        if let huddle = await viewModel.takeNotifiedHuddle() {
+            router.openHuddle(huddle)
         }
     }
 

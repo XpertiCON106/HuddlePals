@@ -21,6 +21,8 @@ export interface DeleteAccountServices {
   /** The APPLE_* secrets; null when they aren't set. */
   apple: AppleConfig | null;
   fetch: typeof fetch;
+  /** Deletes the user's registered devices, so no notification reaches them. */
+  removeDeviceTokens(userId: string): Promise<void>;
   /** Deletes the user's profile photos (avatars/<user id>/...). */
   removeAvatars(userId: string): Promise<void>;
   /** Leaves the user's remaining Storage objects (deposit photos) unowned. */
@@ -56,7 +58,15 @@ export async function handleDeleteAccount(req: Request, services: DeleteAccountS
     services.log("apple_revoke_failed", e instanceof AppleError ? e.message : errorName(e));
   }
 
-  // 2. Delete the profile photos. Deposit photos stay on purpose: the
+  // 2. Forget the user's devices: no more notifications. (deleteUser's
+  //    cascade removes them too; this stops them even if it fails.)
+  try {
+    await services.removeDeviceTokens(user.id);
+  } catch (e) {
+    services.log("device_token_cleanup_failed", errorName(e));
+  }
+
+  // 3. Delete the profile photos. Deposit photos stay on purpose: the
   //    huddle's archive is permanent.
   try {
     await services.removeAvatars(user.id);
@@ -64,7 +74,7 @@ export async function handleDeleteAccount(req: Request, services: DeleteAccountS
     services.log("avatar_cleanup_failed", errorName(e));
   }
 
-  // 3. Release the deposit photos the user uploaded. Where storage.objects
+  // 4. Release the deposit photos the user uploaded. Where storage.objects
   //    .owner still references auth.users, deleteUser fails for anyone who
   //    owns an object.
   try {
@@ -73,9 +83,9 @@ export async function handleDeleteAccount(req: Request, services: DeleteAccountS
     services.log("storage_release_failed", errorName(e));
   }
 
-  // 4. Delete the auth user. FKs cascade the profile, memberships and the
-  //    user's E2EE keys; deposits and comments keep their rows with a null
-  //    author ("Former member").
+  // 5. Delete the auth user. FKs cascade the profile, memberships, device
+  //    tokens and the user's E2EE keys; deposits and comments keep their rows
+  //    with a null author ("Former member").
   try {
     await services.deleteUser(user.id);
   } catch (e) {

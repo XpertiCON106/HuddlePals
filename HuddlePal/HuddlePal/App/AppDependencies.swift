@@ -16,6 +16,9 @@ final class AppSession {
     /// Invite code arriving via a huddlepal://join/<code> link, consumed by the
     /// Join screen.
     var pendingInviteCode: String?
+    /// The huddle a tapped push notification is about, opened by the shelf
+    /// once it's loaded (`HuddleListViewModel.takeNotifiedHuddle`).
+    var pendingHuddleID: UUID?
     /// Authenticated but never finished the profile step — onboarding
     /// resumes there instead of at sign-in.
     var needsProfileSetup = false
@@ -77,8 +80,10 @@ final class AppDependencies {
     let moderationService: any ModerationServiceProtocol
     let seeder: SeedDataService
     /// Per-user daily upload reminders (local notifications, backend-agnostic).
-    /// This is the app's single notification path.
     let reminders: ReminderCoordinator
+    /// Activity notifications pushed by the server: permission, this
+    /// device's token, and opening the huddle a notification is about.
+    let push: PushCoordinator
 
     init(
         isLive: Bool = false,
@@ -96,7 +101,8 @@ final class AppDependencies {
         mediaService: any MediaServiceProtocol,
         moderationService: any ModerationServiceProtocol,
         seeder: SeedDataService,
-        reminders: ReminderCoordinator
+        reminders: ReminderCoordinator,
+        push: PushCoordinator? = nil
     ) {
         self.isLive = isLive
         self.modelContainer = modelContainer
@@ -114,6 +120,9 @@ final class AppDependencies {
         self.moderationService = moderationService
         self.seeder = seeder
         self.reminders = reminders
+        self.push = push ?? PushCoordinator(
+            registrar: SystemPushRegistrar(), tokens: MockPushTokenService(), session: session
+        )
     }
 
     /// Ends the session on this device (sign-out, account deletion, or the
@@ -123,6 +132,7 @@ final class AppDependencies {
         session.currentUser = nil
         session.needsProfileSetup = false
         session.pendingInviteCode = nil
+        session.pendingHuddleID = nil
         session.blockedUserIDs = []
         // In the same main-actor turn as clearing the session: the next
         // render swaps the main UI for onboarding, so no mounted screen
@@ -139,7 +149,11 @@ final class AppDependencies {
         config != nil && environment["XCTestConfigurationFilePath"] == nil
     }
 
-    static func makeMock(inMemory: Bool = false, terms: TermsAcceptance = TermsAcceptance()) -> AppDependencies {
+    static func makeMock(
+        inMemory: Bool = false,
+        terms: TermsAcceptance = TermsAcceptance(),
+        pushRegistrar: any PushRegistering = SystemPushRegistrar()
+    ) -> AppDependencies {
         let container = Self.makeContainer(inMemory: inMemory)
         let context = container.mainContext
         let engine = HuddleEngine()
@@ -176,7 +190,8 @@ final class AppDependencies {
                 session: session,
                 engine: engine,
                 dateProvider: dateProvider
-            )
+            ),
+            push: PushCoordinator(registrar: pushRegistrar, tokens: MockPushTokenService(), session: session)
         )
     }
 
@@ -229,6 +244,9 @@ final class AppDependencies {
                 session: session,
                 engine: engine,
                 dateProvider: dateProvider
+            ),
+            push: PushCoordinator(
+                registrar: SystemPushRegistrar(), tokens: LivePushTokenService(client: client), session: session
             )
         )
         relay.dependencies = dependencies

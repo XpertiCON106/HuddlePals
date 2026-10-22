@@ -50,7 +50,10 @@ final class CreateHuddleViewModel {
             Haptics.success()
         } catch {
             errorMessage = error.localizedDescription
+            return
         }
+        // The first huddle is when notifications start to matter.
+        await deps.push.huddleJoined()
     }
 }
 
@@ -106,7 +109,9 @@ final class JoinHuddleViewModel {
             Haptics.success()
         } catch {
             errorMessage = error.localizedDescription
+            return
         }
+        await deps.push.huddleJoined()
     }
 }
 

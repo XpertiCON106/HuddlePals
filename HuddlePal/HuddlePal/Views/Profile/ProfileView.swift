@@ -74,6 +74,7 @@ private struct ProfileContent: View {
         List {
             photosSection
             identitySection
+            notificationsSection
             reminderSection
             appearanceSection
             accountSection
@@ -310,6 +311,43 @@ private struct ProfileContent: View {
                     : "Make a profile change to enable this button."
             )
             .listRowBackground(Theme.surface)
+        }
+    }
+
+    private var notificationsSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { viewModel.pushEnabled },
+                set: { newValue in Task { await viewModel.setPushEnabled(newValue) } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Huddle activity")
+                    Text("New photos, comments and reactions on your photos, and new members.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .listRowBackground(Theme.surface)
+
+            if viewModel.pushPermissionDenied {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Notifications are turned off", systemImage: "bell.slash")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.destructive)
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                }
+                .listRowBackground(Theme.surface)
+            }
+        } header: {
+            Text("Notifications")
+        } footer: {
+            Text("For this device. Notifications name the huddle and who posted, never what a photo shows.")
         }
     }
 

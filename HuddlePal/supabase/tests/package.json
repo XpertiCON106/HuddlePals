@@ -2,7 +2,7 @@
   "name": "huddlepals-supabase-tests",
   "private": true,
   "type": "module",
-  "description": "Database, RLS, storage-policy and RPC tests for supabase/schema.sql, run against an in-process Postgres (PGlite), and the delete-account edge function's logic.",
+  "description": "Database, RLS, storage-policy and RPC tests for supabase/schema.sql, run against an in-process Postgres (PGlite), and the delete-account and send-push edge functions' logic.",
   "scripts": {
     "test": "npm run test:fresh && npm run test:migrated",
     "test:fresh": "HUDDLE_DB=fresh node --test --test-reporter=spec",

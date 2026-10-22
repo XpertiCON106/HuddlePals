@@ -189,6 +189,7 @@ final class ProfileViewModel {
     /// Loads the current OS permission state so the UI can show a denial note.
     func refreshReminderStatus() async {
         await deps.reminders.updateAuthorizationStatus()
+        await deps.push.updateAuthorizationStatus()
     }
 
     func setReminderEnabled(_ enabled: Bool) async {
@@ -201,6 +202,15 @@ final class ProfileViewModel {
             hour: components.hour ?? 19,
             minute: components.minute ?? 0
         )
+    }
+
+    // MARK: Activity notifications surface
+
+    var pushEnabled: Bool { deps.push.isOn }
+    var pushPermissionDenied: Bool { deps.push.permissionDenied }
+
+    func setPushEnabled(_ enabled: Bool) async {
+        await deps.push.setEnabled(enabled)
     }
 
     #if DEBUG
@@ -389,6 +399,9 @@ final class ProfileViewModel {
     // MARK: Account actions
 
     func signOut() async {
+        // While the session still exists: this device stops getting the
+        // account's notifications.
+        await deps.push.removeDeviceToken()
         try? await deps.auth.signOut()
         await deps.endSession()
     }

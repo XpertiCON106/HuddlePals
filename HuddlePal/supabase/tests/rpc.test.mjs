@@ -273,7 +273,7 @@ describe('keeper succession', () => {
 })
 
 describe('account deletion (what the delete-account function triggers)', () => {
-  it('removes the profile, memberships, keys, reactions; keeps photos and comments as Former member', async () => {
+  it('removes the profile, memberships, keys, devices, reactions; keeps photos and comments as Former member', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
@@ -285,10 +285,11 @@ describe('account deletion (what the delete-account function triggers)', () => {
     await q(db, B, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [B, A])
     await q(db, B, `insert into reports (reporter_id, deposit_id) values ($1, $2)`, [B, dep.id])
     await q(db, B, 'insert into user_keys (user_id, public_key) values ($1, $2)', [B, PUBLIC_KEY('B')])
+    await q(db, B, `insert into device_tokens (user_id, token, environment) values ($1, $2, 'production')`, [B, 'b'.repeat(64)])
 
     await admin(db, 'delete from auth.users where id = $1', [B]) // auth.admin.deleteUser
 
-    for (const table of ['profiles where id', 'memberships where user_id', 'reactions where user_id', 'blocks where blocker_id', 'reports where reporter_id', 'user_keys where user_id', 'huddle_keys where user_id']) {
+    for (const table of ['profiles where id', 'memberships where user_id', 'reactions where user_id', 'blocks where blocker_id', 'reports where reporter_id', 'user_keys where user_id', 'huddle_keys where user_id', 'device_tokens where user_id']) {
       assert.deepEqual(await admin(db, `select 1 from ${table} = $1`, [B]), [], table)
     }
     const [d] = await admin(db, 'select author_id from deposits where id = $1', [dep.id])

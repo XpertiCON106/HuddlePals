@@ -63,6 +63,19 @@ final class HuddleListViewModel {
         }
     }
 
+    /// The huddle a tapped notification is about (`session.pendingHuddleID`),
+    /// refreshing the shelf first if it isn't on it yet. Taken once; one that
+    /// isn't on the shelf even then (the person left it) is dropped.
+    func takeNotifiedHuddle() async -> Huddle? {
+        guard let id = deps.session.pendingHuddleID else { return nil }
+        if !rows.contains(where: { $0.huddle.id == id }) {
+            await refresh()
+        }
+        guard deps.session.pendingHuddleID == id else { return nil }
+        deps.session.pendingHuddleID = nil
+        return rows.first { $0.huddle.id == id }?.huddle
+    }
+
     /// A stored streak only goes stale when a day ends (an incomplete day
     /// breaks it) or a deposit lands — and deposits recompute on their own
     /// (`HuddleHomeViewModel.handleDepositSuccess`). So once per huddle per day

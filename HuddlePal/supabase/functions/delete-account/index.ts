@@ -7,11 +7,13 @@
 //      exchanged at Apple's /auth/token and the refresh token revoked at
 //      /auth/revoke. Best effort: if Apple refuses or can't be reached, the
 //      failure is logged and the deletion still completes.
-//   2. Deletes the user's avatar Storage objects (PII).
-//   3. Releases ownership of the deposit photos they uploaded
+//   2. Deletes the user's registered devices (device_tokens), so no push
+//      notification reaches them.
+//   3. Deletes the user's avatar Storage objects (PII).
+//   4. Releases ownership of the deposit photos they uploaded
 //      (public.release_storage_objects, migration 007), so deleteUser isn't
 //      blocked by storage.objects.owner → auth.users.
-//   4. Deletes the auth user. FKs then cascade: profile is removed, and so
+//   5. Deletes the auth user. FKs then cascade: profile is removed, and so
 //      are the user's E2EE keys (user_keys, huddle_keys); deposits/comments
 //      keep their rows with a null author ("Former member") — the huddle's
 //      archive stays permanent, and stays readable to members, who hold
@@ -45,6 +47,10 @@ Deno.serve((req) =>
     },
     apple: appleConfigFromEnv((name) => Deno.env.get(name)),
     fetch,
+    async removeDeviceTokens(userId) {
+      const { error } = await admin.from("device_tokens").delete().eq("user_id", userId);
+      if (error) throw new Error(error.message);
+    },
     async removeAvatars(userId) {
       const prefix = `avatars/${userId}`;
       const bucket = admin.storage.from("deposits");
