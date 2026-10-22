@@ -23,8 +23,8 @@
 // automatically. Apple revocation needs APPLE_TEAM_ID, APPLE_KEY_ID,
 // APPLE_CLIENT_ID (the bundle ID) and APPLE_PRIVATE_KEY (the .p8 contents);
 // without them deletion still completes and revocation is skipped.
-// DEVELOPMENT.md ("Account deletion and Apple token revocation") has the
-// key setup, the `supabase secrets set` command and the deploy command.
+// DEVELOPMENT.md ("Backend setup and deploys") has the key setup, the
+// `supabase secrets set` command and the deploy command.
 //
 // The logic lives in handler.ts and apple.ts, tested on Node by
 // supabase/tests/delete-account.test.mjs; this file only wires Supabase in.

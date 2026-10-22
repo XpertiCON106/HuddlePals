@@ -1,783 +1,425 @@
 # HuddlePals — developer reference
 
-This file gets a new contributor productive immediately. Read it fully, then
-consult [OVERVIEW.md](OVERVIEW.md) for the deep narrative (diagrams of every
-flow), [README.md](README.md) for quick start, [DEPLOYMENT.md](DEPLOYMENT.md)
-for the go-live runbook, and [supabase/schema.sql](supabase/schema.sql) for
-the entire backend. Those four docs are accurate and maintained — when you
-change behavior, update them.
+What you need to work on the app safely. [OVERVIEW.md](OVERVIEW.md) has the
+long narrative and diagrams, [README.md](README.md) the quick start,
+[DEPLOYMENT.md](DEPLOYMENT.md) the go-live runbook, and
+[supabase/schema.sql](supabase/schema.sql) the whole backend. Keep all four
+in sync when behaviour changes.
 
-## What this is
+## At a glance
 
-**HuddlePals** — a private, daily photo-sharing iOS app for groups of 2–8. One
-photo per member per day; today's photos from others stay blurred until you
-deposit your own (the "reciprocity gate"); streaks belong to the group.
-SwiftUI, iOS 17.0+, Xcode 16 project, **zero third-party dependencies**.
-Dual-backend: a seeded offline **mock** world and a **live** Supabase backend
-behind identical service protocols — the app picks at launch based on whether
-`HuddlePal/HuddlePal/Supabase.plist` exists with real values.
+- **The app**: private daily photo sharing for groups of 2–8 ("huddles").
+  One photo per member per day; others' photos stay blurred until you post
+  yours (the gate); the streak belongs to the group; photos are permanent.
+- **Build**: version 1.0, bundle id `com.huddlepals.ios`, iOS 17.0+,
+  Swift 5 language mode, SwiftUI + SwiftData, **no third-party
+  dependencies**. Built with Xcode 26.1.1.
+- **Two backends, one app**: a seeded offline **mock** world and a **live**
+  Supabase backend behind the same service protocols. The app goes live
+  when a filled-in `HuddlePal/HuddlePal/Supabase.plist` is bundled (it's
+  git-ignored; example in `supabase/Supabase.example.plist`).
+- **Careful**: the `Supabase.plist` on this machine points at
+  **production**, which holds a family's real data. Never run tests or
+  demos against it; every test build excludes it (below).
+- **Sign-in**: Apple only (`FeatureFlags.emailAndPhoneSignInEnabled` is
+  `false`; the email/phone code stays, hidden).
 
-**Project status (as of 2026-10-19):** v1.0 (build 1), bundle id
-`com.huddlepals.ios`, heading to TestFlight from the `test-flight` branch.
-Builds and passes its XCTests in Xcode 26.1.1. A real Supabase project now
-exists and is being exercised by hand; fixes from that so far include
-lowercase avatar paths, the reports select policy, and the
-`extensions.gen_random_bytes` qualifier. The live layer is still the least
-battle-tested part — see "Verified vs not" below.
+## Rules you must not break
 
-## Hard constraints — never violate
+1. **No third-party dependencies.** Apple frameworks and `URLSession` only,
+   unless the owner says otherwise.
+2. **Views never call services.** Only `@Observable @MainActor` view models
+   do. (One exception: `LocalDepositImage` loads image bytes for display.)
+3. **`HuddleEngine` stays pure**: no SwiftData, UIKit or wall clock;
+   calendar and `now` are injected, and it works on `DepositSnapshot`
+   values.
+4. **Mock and live mean the same thing.** A protocol change updates both
+   and every call site.
+5. **Observation only** (`@Observable`): no `ObservableObject`, no Combine.
+6. **A business rule lives in three places**: `HuddleEngine`,
+   `supabase/schema.sql` (the server is canonical for streaks in live
+   mode), and the tests.
+7. **Images are stored by Documents-relative path** (`Media/<storage
+   path>`); a huddle photo is `<huddle_id>/<uuid>.jpg`. In live mode huddle
+   photos are ciphertext, in Storage and in the cache; never upload one
+   through `saveImageData`, which is for profile photos only.
+8. **No API newer than iOS 17.0**, and nothing Swift 5 mode doesn't allow.
 
-1. **Zero third-party dependencies.** Apple frameworks + raw URLSession only.
-   Do not add SPM packages (not even supabase-swift) without explicit owner
-   approval.
-2. **Views never touch services.** Views render view-model state and forward
-   taps. Only `@Observable @MainActor` view models call services. (Sanctioned
-   exception: `LocalDepositImage` resolves image bytes via
-   `deps.mediaService` as a display concern.)
-3. **`HuddleEngine` stays pure.** No SwiftData, no UIKit, no `Date()`/wall
-   clock — calendar and `now` are always injected. It operates on
-   `DepositSnapshot` values, never models.
-4. **Mock and live implement the same protocols with the same semantics.**
-   Any protocol change must update both, plus call sites.
-5. **Observation framework only** (`@Observable`) — no ObservableObject, no
-   Combine.
-6. **Business-rule changes must be mirrored in three places**: `HuddleEngine`
-   (client), `supabase/schema.sql` (constraints + `recompute_streak` RPC),
-   and `HuddlePalTests`. The server is the streak source of truth in live mode.
-7. **Images are referenced by Documents-relative paths** (sandbox absolute
-   paths change between launches). Cache path = `Media/<storage path>`;
-   storage object path = `<huddle_id>/<uuid>.jpg`. In live mode a huddle
-   photo's bytes — in Storage *and* in the cache — are ciphertext (see
-   "End-to-end encrypted photos"); never upload one through the plaintext
-   `saveImageData`, which is for profile photos only.
-8. Swift 5 language mode (`SWIFT_VERSION = 5.0`), deployment target iOS 17.0.
-   Don't use APIs newer than iOS 17.0 or stdlib additions newer than Swift 5
-   mode allows.
-
-## Architecture (one minute)
+## Architecture
 
 ```
-Views (9 screens) → ViewModels (one per screen) → Service protocols → {Mock | Live}
-                          ↘ HuddleEngine (pure rules)
-Mock → SwiftData + Documents/Media          Live → Supabase + same local store as cache
+Views → ViewModels (one per screen) → service protocols → Mock | Live
+              ↘ HuddleEngine (pure rules)
+Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a cache
 ```
 
-- **Composition root**: `HuddlePal/App/AppDependencies.swift`. `makeMock()` /
-  `makeLive(config:)` are the only two wirings; built once in
-  `HuddlePalApp.init`, injected via `.environment(...)`. Holds: ModelContainer,
-  `HuddleEngine`, `AppDateProvider` (injectable clock w/ debug `dayOffset`),
-  `AppSession` (currentUser, blockedUserIDs, pendingInviteCode,
-  pendingHuddleID, needsProfileSetup, isReady), `DebugSettings`,
-  `AppearanceSettings`, the five services, the seeder, `reminders`
-  (ReminderCoordinator), `push` (PushCoordinator), and `isLive`.
-- **Services (protocol → mock / live)**: `AuthServiceProtocol`,
-  `HuddleServiceProtocol`, `DepositServiceProtocol`, `MediaServiceProtocol`,
-  `ModerationServiceProtocol` (report/block, UGC safeguards), plus
-  `PushTokenServiceProtocol` (this device's APNs token; owned by
-  `deps.push`, not passed around).
-  All `@MainActor` except Media. Live mode adds `LivePhotoKeyring` (E2EE
-  keys and invites), shared by the live services and deliberately NOT a
-  protocol: the mock has no server to hide photos from, so it has nothing to
-  mirror. Two notification paths: daily upload reminders are local and
-  backend-agnostic (`ReminderCoordinator`, `Support/DailyReminders.swift`, on
-  `deps.reminders`); activity notifications are pushed by the server through
-  APNs (`PushCoordinator`, `Support/PushNotifications.swift`, on `deps.push`;
-  see "Push notifications (APNs)"). Huddle Settings' hour picker only stores
-  the huddle's `notificationHour`, it doesn't schedule anything.
-- **Navigation (v2, multi-huddle)**: two tabs — Huddles / Profile. The Huddles
-  tab is one `NavigationStack` (`router.huddlesPath`): HuddleListView →
-  huddleHome(Huddle) → archive/detail/settings/userProfile. Home, Archive,
-  and Compose view models are huddle-scoped (huddle passed in init);
-  `AppSession.activeHuddle` no longer exists. Deep link `huddlepal://join/<code>`
-  (scheme registered via partial `Config/Info.plist` merged through
-  INFOPLIST_FILE — kept OUTSIDE the synchronized folders, otherwise the
-  build copies it as a resource too and fails with "Multiple commands
-  produce Info.plist") lands in JoinHuddle prefilled via
-  `session.pendingInviteCode`. A tapped push notification sets
-  `session.pendingHuddleID`; the shelf opens that huddle once it's loaded
-  (`HuddleListViewModel.takeNotifiedHuddle`).
-- **View pattern**: screen view holds `@State private var viewModel: VM?`,
-  creates it in `.onAppear` with `deps` from environment, inner
-  `*Content` struct takes `@Bindable var viewModel`.
-- **Live sync**: pull-based. Fetch DTOs (PostgREST) → `SupabaseStore`
-  reconciles into SwiftData (upsert by id + prune rows gone remotely) →
-  views keep rendering the same SwiftData models. Refresh on launch, tab
-  task, scenePhase→active, pull-to-refresh, and after mutations.
-  The **huddle list is deliberately light**: huddle rows + one
-  `depositorIDs(in:dayKey:)` read for all huddles, and a streak recompute
-  at most once per huddle per dayKey (`HuddleListViewModel`). Full history
-  (deposits + reactions + comments + any uncached profiles) syncs only in
-  `deposits(in:)`, i.e. when Home/Archive opens. Don't put a per-huddle
-  full sync back into the list — it runs on every foreground.
+- **Composition root**: `App/AppDependencies.swift`. `makeMock()` and
+  `makeLive(config:)` are the only wirings, built once in
+  `HuddlePalApp.init` and passed through the environment. It holds the
+  model container, engine, clock (`AppDateProvider`), `AppSession`, debug
+  and appearance settings, Terms acceptance, the services, the seeder,
+  `reminders` and `push`.
+- **`AppSession`**: `currentUser`, `blockedUserIDs`, `pendingInviteCode`
+  (from a `huddlepal://join/…` link), `pendingHuddleID` (from a tapped
+  notification), `needsProfileSetup`, `isReady`, and `photoKeysVersion`
+  (the one field a service writes: the keyring bumps it so locked photos
+  retry).
+- **Services**:
 
-## Domain rules (precise)
+  | Protocol | Mock | Live |
+  |---|---|---|
+  | `AuthServiceProtocol` | code `123456`; first launch signs in "You" | GoTrue: Apple id_token + nonce; session in the Keychain |
+  | `HuddleServiceProtocol` | SwiftData; skips in memory | `create_huddle`, `redeem_huddle_invite`, invite show/reset, skips, `recompute_streak` |
+  | `DepositServiceProtocol` | insert-only | deposits, reactions, comments; full sync when a huddle opens |
+  | `MediaServiceProtocol` | files in `Documents/Media` | Storage plus the same cache; encrypts huddle photos |
+  | `ModerationServiceProtocol` | blocks in UserDefaults | `reports`, `blocks` |
+  | `PushTokenServiceProtocol` | remembered in memory | `device_tokens` (used only inside `deps.push`) |
 
-- **dayKey** = `"yyyy-MM-dd"` in device timezone via en_US_POSIX formatter;
-  lexicographic == chronological. 23:59 belongs to its day; 00:01 re-locks.
-- **Gate**: unlocked today ⟺ deposit exists with (current user, this huddle,
-  today's dayKey). Gate applies to today only; past days always visible.
-  Debug override `DebugSettings.simulateNotPostedToday` forces it shut.
-  While locked, image bytes are deliberately never loaded.
-- **Once and permanent (v2)**: one deposit per (huddle, author, dayKey),
-  and it can NEVER be edited, replaced, or deleted. Mock + live both throw
-  `DepositError.alreadyDepositedToday` on a second attempt; the DB has no
-  update/delete policies on deposits at all. Compose has a mandatory
-  confirmation stage ("This is permanent — post it?").
-- **Camera-only capture (v3)**: the main deposit flow accepts ONLY a live
-  camera capture (`CameraPicker`, a `UIImagePickerController` bridge locked
-  to `.camera`; `NSCameraUsageDescription` in `Config/Info.plist`). No
-  library/file import in Compose. Simulator has no camera → Compose shows a
-  "no camera" state. The profile-picture upload (below) is exempt and still
-  uses `PhotosPicker`.
-- **Daily reminders (v3)**: per-user local-notification reminders, fully
-  backend-agnostic (`Support/DailyReminders.swift`: `ReminderSettings`
-  persisted in UserDefaults, `DailyReminderScheduler` over
-  `UNUserNotificationCenter`, `ReminderCoordinator` on `deps.reminders`).
-  Opt-in toggle + time picker in Profile. Strategy: rolling 7-day window of
-  dated non-repeating notifications (1 main + 2 capped follow-ups/day),
-  fully rebuilt on each `reminders.refresh()` — called on launch
-  (RootViewModel), foreground (HuddlePalApp scenePhase), after a deposit
-  (HuddleHomeViewModel), and on settings change. Suppresses today once the
-  user has uploaded in every huddle; respects denied permission.
-- **Account deletion — Model B (v4)**:
-  `AuthServiceProtocol.deleteAccount(appleAuthorizationCode:)`, after Apple
-  confirms the person (`AppleReauthenticating`). Live = the
-  `supabase/functions/delete-account` edge function (revokes the app's Apple
-  tokens, deletes avatar objects, releases the user's deposit photos,
-  `auth.admin.deleteUser`); see "Account deletion and Apple token
-  revocation" below. Deposited photos
-  are PERMANENT and stay as "Former member" — this is why `deposits.author_id`
-  / `comments.user_id` are nullable + `ON DELETE SET NULL`. Client side the
-  matching DTO fields are optional, and `SupabaseStore` keeps any row whose
-  author can't be resolved with a nil author/user (rendered "Former
-  member") — that also covers members who *left*, whose profiles RLS hides.
-  Former-member photos stay reportable (not blockable). Required by App Store
-  5.1.1(v); reconciles with the permanence promise (account deletes, content
-  stays). UI: Profile → Delete account (confirmation states the deal).
-- **End-to-end encrypted photos (v5, live only)**: the operator must not
-  be able to view deposits. `Services/Live/PhotoCrypto.swift` (CryptoKit
-  only): per-user Curve25519 identity key (private half in the Keychain,
-  `IdentityKeychain`, service `com.huddlepals.ios.identity`,
-  synchronizable + AfterFirstUnlock, one item per user; deleted only on
-  account deletion, never sign-out; public half in `user_keys`) → per-huddle
-  256-bit huddle key, stored per member in `huddle_keys` wrapped to their
-  identity key (ephemeral X25519 → HKDF-SHA256 with huddle + recipient ids →
-  AES-GCM) → per-photo key: the JPEG is AES-GCM sealed with it (the
-  `combined` box is the Storage object, uploaded as
-  `application/octet-stream`, ≤ 5 MB checked on the ciphertext) and the
-  photo key is sealed with the huddle key into
-  `deposits.wrapped_photo_key` (`enc_version` 1). `LivePhotoKeyring` holds
-  unwrapped huddle keys in memory only and `sync(huddleIDs:)` runs on huddle
-  create, huddle open (`deposits(in:)`, awaited), and every huddle-list
-  refresh (foreground; a detached Task): unwrap own copies → for a huddle
-  with no copy at all, `init_huddle_key` (refuses once any current member
-  holds one — a key is shared, never replaced) → `huddle_key_recipients` +
-  `share_huddle_key` for members with no copy or a stale one (wrapped for a
-  public key they've since replaced) — now only a fallback, since joiners
-  get the key from their invite (below). Identity: created on first sign-in
-  on a device; if the server holds a different public key (lost key, or
-  another device without iCloud Keychain), this device publishes its own
-  and members re-share. Display: `LocalDepositImage(deposit:)` →
-  `loadDepositPhoto` (cache-only huddle key, no network) → nil shows a lock
-  (normally only for the moment before a cold launch's key sync finishes),
-  retried whenever the keyring bumps `session.photoKeysVersion`. Reports
-  attach that one photo's key (`reports.photo_key`); operators decrypt with
-  `tools/decrypt_reported_photo`. Mock mode stores photos as-is
-  (`wrappedPhotoKey` nil). NOT encrypted: captions, comments, reactions,
-  profiles, avatars, huddle names, all metadata.
-- **Instant join: invites carry the huddle key (v7, live)**: an invite code
-  (`Support/InviteCode.swift`) is a 6-character lookup part plus a
-  26-character secret (≈128.8 bits), 32 characters of the unambiguous
-  alphabet, shown as `XXXX-XXXX-…` (8 groups) and shared as
-  `huddlepal://join/<32 chars>` with the code in the message. The server
-  stores only the lookup (`huddles.invite_code`). `InviteCrypto` derives two
-  things from the secret with HKDF-SHA256: the **proof** (the server keeps
-  its SHA-256 in `huddle_invite_keys.proof_hash`, to check a code without
-  being able to forge one) and, with a random 32-byte salt, the **wrapping
-  key** that AES-GCM seals the huddle key with (`sealed_key`). The secret is
-  also stored sealed with the huddle key (`sealed_secret`), so every
-  member's app can show and share the code. Joining
-  (`LiveHuddleService.joinHuddle`): `redeem_huddle_invite(lookup, proof)`
-  (10 misses/hour shared with old codes; refuses existing members, a full
-  huddle, and anyone a member has blocked) → the keyring opens the sealed
-  key with the secret → wraps it for this user's identity key and stores it
-  with `save_own_huddle_key`, retried by every sync until the server has it.
-  Nobody else needs to be online and every photo opens at once. Issuing:
-  the creator's app right after `init_huddle_key`, and any member's app
-  that opens a huddle still on an old code (`create_huddle_invite`, which
-  retires the old code via `huddles.legacy_invite = false`). Keeper: Huddle
-  Settings → **New invite code** (`reset_huddle_invite`) revokes the old code
-  and deletes its sealed copy. If a huddle ever gets a new key
-  (`init_huddle_key` when nobody left holds the old one — the only time the
-  key changes), its invite is dropped and the next member to open it issues
-  a fresh one sealed with the new key. Old 6-character codes: old app builds
-  keep joining with them (`join_huddle`) until the huddle is upgraded; this
-  build refuses them locally with `.inviteCodeOutdated`. Mock: stores the
-  whole code in `Huddle.inviteCode`, same rules otherwise.
-- **Moderation — report/block (v4, UGC req. 1.2)**: `ModerationServiceProtocol`
-  (+ Mock/Live). `reports` + `blocks` tables. Blocked ids live in
-  `session.blockedUserIDs` (loaded at sign-in/launch; mutated by block
-  actions). Filtering is PRESENTATIONAL only — HuddleHome/Archive/DepositDetail
-  hide blocked authors' deposits/comments, but the gate/streak math uses the
-  UNFILTERED set (blocking never changes membership or streaks; that's why
-  HuddleHomeViewModel keeps `todayDepositorIDs` separate). UI: "•••" menu on
-  DepositDetail (report + block) and UserProfileView (block/unblock).
-- **Image downscaling (v4)**: `Support/ImageDownscaler.swift` — deposits
-  ≤1440px, avatars ≤512px, JPEG 0.8, applied in ComposeViewModel +
-  ProfileViewModel before upload. Critical because storage is permanent and
-  only grows. Don't remove it.
-- **Confirmed profile drafts**: `ProfileViewModel` owns an immutable
-  normalized original snapshot plus a separate working draft for name, bio,
-  avatar color, and ordered profile photos. New photos are downscaled and
-  fingerprinted in memory but are not uploaded until the native **Confirm
-  Changes** alert is accepted. A failed save retains the draft (and any
-  staged upload path for retry); a successful full profile update alone
-  advances the original snapshot. Leaving the Profile tab, signing out,
-  deleting the account, or following a deep link is intercepted while dirty
-  before navigation state changes. No destination is queued: Keep Editing
-  preserves the draft, while Discard restores the saved snapshot and stays
-  on Profile; leaving afterward requires a new navigation attempt.
-- **Backend security hardening (v4, in schema.sql — must be re-run on live)**:
-  `spend_skip_token` acts on `auth.uid()` only (was an IDOR); invite codes use
-  `gen_random_bytes` (pgcrypto); a column grant + `recompute_streak` p_today
-  clamp stop streak forgery; update policies have `WITH CHECK`. App side:
-  Keychain is `…ThisDeviceOnly`; `BackendConfig` requires https;
-  `ClientError.http.errorDescription` is generic (raw `message` kept for
-  service mapping); the mock OTP `print` is `#if DEBUG`.
-- **Recovery window (v2)**: when a day ends incomplete, the streak reads 0
-  but `HuddleEngine.recovery(...)` is non-nil until brokenDayStart+48h
-  (== end of the following day). Home shows a live countdown; missing
-  members backfill the broken day to restore the streak (recompute over
-  full history does the restoration naturally). Window expiry == permanent
-  reset (backfill becomes impossible).
-- **Streak**: a day counts when every member it *waits on* deposited OR
-  spent a skip token (2 per member, `Membership.skipTokensRemaining`).
-  A day waits on current members whose join day is strictly earlier
-  (`HuddleEngine.requiredMembers`): the join day is free, so joining never
-  breaks a streak (it used to reset it to 0). A day that waits on nobody
-  never counts — a new huddle's first counting day is the day after
-  creation. Join days: `Membership.joinedDayKey` (device-local, sent as
-  `p_day_key` to `create_huddle`/`join_huddle`, stored as
-  `memberships.joined_day_key`); `Huddle.memberJoinDayKeys(using:)` feeds the
-  engine and falls back to `joinedAt` for older rows. Count
-  consecutive counting days walking back from today if today is complete,
-  else from yesterday (in-progress today never breaks a streak). First
-  incomplete *ended* day stops the walk. **Subtle verified behavior**: break
-  yesterday + complete today = streak of 1 (new chain starts immediately).
-  Recomputed when a deposit lands and once per huddle per day from the huddle
-  list; server RPC (`recompute_streak` → `huddle_day_complete`) is canonical
-  in live mode.
-- **Backfill**: a *past* dayKey can receive a deposit while `now <
-  dayStart + 48h` (practically: yesterday). Surfaced in Archive. No special
-  streak repair, but full-history recompute naturally sees backfilled days.
-- **Invite codes**: 32 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (6-char
-  lookup + 26-char secret; see "Instant join"). Captions: ≤80 chars (UI +
-  `HuddleEngine.sanitizedCaption` + DB check). Member cap: 8, enforced only
-  server-side (`redeem_huddle_invite` / `join_huddle`). Notification hour
-  default 19.
+  Live also has `LivePhotoKeyring` (identity key, huddle keys, invites),
+  shared by the live services and deliberately not a protocol: the mock has
+  nothing to hide photos from.
+- **Navigation**: two tabs, Huddles and Profile. Huddles is one
+  `NavigationStack` (`router.huddlesPath` of typed `Route`s): shelf → huddle
+  home → archive / photo / settings / member profile. Home, Archive and
+  Compose view models take their huddle in `init`.
+- **View pattern**: the screen holds `@State var viewModel: VM?`, creates it
+  in `.onAppear` with `deps`, and an inner `…Content` view takes
+  `@Bindable var viewModel`.
+- **Live sync is pull-based**: PostgREST rows → `SupabaseStore` upserts
+  them into SwiftData and prunes rows gone remotely → views render the same
+  models as in mock mode. It refreshes on launch, foreground,
+  pull-to-refresh and after changes. The shelf stays light (huddle rows,
+  one "who posted today" query, a streak recompute at most once per huddle
+  per day); full history syncs only when a huddle opens. Don't add a full
+  per-huddle sync to the shelf: it runs on every foreground.
 
-## Auth (the newest subsystem)
+## Domain rules
 
-- **Currently Apple-only.** `FeatureFlags.emailAndPhoneSignInEnabled`
-  (`HuddlePal/FeatureFlags.swift`) is `false`: the email/phone UI is hidden but
-  all its code remains; set it to `true` to restore all three methods.
-- Protocol surface: `currentState()` → `.signedOut | .needsProfile(suggestedName:) | .signedIn(User)`;
-  `requestCode(to: OTPDestination)` (email/phone); `verifyCode`;
-  `signInWithApple(idToken:nonce:suggestedName:)`; `completeProfile`;
-  `updateProfile`; `signOut`.
-- **Terms of Service gate (v6)**: the first screen anyone sees is the full
-  Terms (`Legal/TermsOfService.md`, bundled, rendered by
-  `TermsDocumentView`) with Agree / Decline. Agree stays disabled until the
-  reader scrolls to the end (an end marker measured inside the ScrollView,
-  so the text is a plain VStack, not lazy; required again each time the
-  Terms are shown). Agree records the version
-  (`TermsOfService.version`, the Terms' effective date) and a wall-clock
-  timestamp in UserDefaults (`TermsAcceptance` on `deps.terms`). Decline
-  returns to the first welcome card, and "Get started" brings the Terms back,
-  so nothing past the welcome cards opens without Agree. RootView also
-  withholds `MainTabView` from a restored session until the current version
-  is accepted. Any material edit to the Terms must bump
-  `TermsOfService.version` (a test checks it against "Last updated") so
-  everyone agrees again; host the same text at huddlepals.com/terms.
-  Profile → About → Terms of Service shows it read-only, with the agreement
-  date. Acceptance is device-local, not yet recorded on the server.
-- Onboarding is a 5-step state machine in `OnboardingViewModel`: Terms →
-  welcome cards → method (Apple button / email / phone segmented; phone
-  defaults to +1 — `AuthValidation.normalizedPhone` / `formattedPhoneInput`,
-  "+…" for other countries) → verification code (`CodeEntryField`: hidden
-  TextField + `length` boxes from `AuthServiceProtocol.codeLength(for:)` —
-  live reads `EMAIL_OTP_LENGTH` / `SMS_OTP_LENGTH` from `Supabase.plist`,
-  default 6, and they must match the Supabase project; `.oneTimeCode`
-  autofill, auto-submit on 6th digit, resend w/ 60s cooldown) → profile
-  (name + avatar ink). `AppSession.needsProfileSetup` resumes interrupted
-  sign-ups at the profile step (both backends).
-- **Live**: GoTrue REST — `POST /auth/v1/otp` (create_user: true),
-  `POST /auth/v1/verify` (type "email"/"sms"), Apple via
-  `POST /auth/v1/token?grant_type=id_token` with raw nonce (SHA-256 of it
-  went into the `ASAuthorizationAppleIDRequest`; see
-  `Support/AppleSignInNonce.swift`). Sessions in **Keychain**
-  (`KeychainStore`), auto-refresh ~60s before expiry; failed refresh ⇒
-  signed out. Apple shares full name only on FIRST authorization →
-  prefilled into profile step.
-- **Mock**: code is always `123456` (shown in UI in mock mode); identities
-  map to local users via UserDefaults keys `huddlepal.mock.identity.*`;
-  explicit sign-out sets `huddlepal.mock.signedOutExplicitly` so auto-sign-in
-  doesn't undo it; first launch auto-signs-in seeded "You";
-  `MockAuthService.resetForReseed()` is called by the seeder's regenerate.
-- No identity linking yet (email X + phone Y = two accounts). Apple
-  entitlement in `HuddlePal/HuddlePal.entitlements`, wired via
-  `CODE_SIGN_ENTITLEMENTS` (requires paid Apple program to sign).
+- **Day key**: `yyyy-MM-dd` in the device's time zone (Gregorian,
+  `en_US_POSIX`), so string order is date order. 23:59 belongs to its day.
+- **Gate**: today is unlocked once you've posted in that huddle today. Only
+  today is gated. Locked photos are never even loaded.
+- **Once and permanent**: one photo per member per huddle per day, never
+  edited or deleted (`DepositError.alreadyDepositedToday`; the database has
+  no update or delete policy on deposits). Compose asks "This is permanent —
+  post it?".
+- **Camera only** for daily photos (`CameraPicker`); profile photos use
+  `PhotosPicker`. The Simulator has no camera, so Compose says so.
+- **Streak**: a day counts when every member it waits on posted or spent a
+  skip token (2 each). A day waits only on members who joined before it, so
+  joining never breaks a streak, and a new huddle's first countable day is
+  the next one. Counting walks back from today (if complete) or yesterday;
+  the first incomplete finished day stops it. Breaking yesterday and
+  completing today gives 1.
+- **Backfill and recovery**: yesterday can still take a photo (until 48 h
+  after its start). A broken streak shows a countdown until then; if the
+  missing members backfill in time, the recompute restores it.
+- **Limits**: captions ≤ 80, comments ≤ 500, names ≤ 40 (huddles 60), bios
+  ≤ 160, 3 profile photos, 8 members (enforced by the server). Lengths
+  count code points, as Postgres does (`TextLimits.swift`).
+- **Downscaling** before upload: photos ≤ 1440 px, avatars ≤ 512 px, JPEG
+  0.8. Storage only grows, so keep it.
+- **Former member**: deleting an account keeps its photos and comments
+  (null author, shown as "Former member"), and members who left look the
+  same. Those DTO fields must stay optional.
+- **Moderation**: report a photo, comment or profile, and block a member.
+  Blocking only hides content for the blocker; the gate and streak use the
+  unfiltered data. Someone a member has blocked can't join their huddle.
+- **Profile edits** stay a draft until **Save Changes** is confirmed;
+  leaving with unsaved changes asks first, and nothing is queued.
 
-## Live backend facts
+## Encryption and invites (live)
 
-- `SupabaseClient` (`Services/Live/`): zero-dep URLSession client for
-  GoTrue + PostgREST + Storage. JSON via convertFrom/ToSnakeCase — DTO
-  property names must be snake-case-safe (`huddleId` not `huddleID`). Custom
-  ISO-8601 date decoding (with/without fractional seconds). Errors surface
-  as `ClientError.http(status:message:)`; PostgREST/GoTrue messages parsed
-  from `message`/`msg`/`error_description`.
-- PostgREST idioms used: `?col=eq.X`, `?id=in.(a,b,c)`
-  (`Array<UUID>.postgrestInList`), `Prefer: return=representation`,
-  upsert = POST + `on_conflict=` + `resolution=merge-duplicates`,
-  PATCH for updates, RPC = POST `/rest/v1/rpc/<fn>`.
-- Storage: private bucket `deposits` (5 MB; MIME types `image/jpeg` for
-  avatars + `application/octet-stream` for encrypted huddle photos); upload is a plain insert POST —
-  **never send `x-upsert`**: every path is a fresh UUID, an upsert needs an
-  UPDATE policy that huddle paths don't (and mustn't) have, and overwriting
-  a photo would break permanence. Download via `/object/authenticated/...`.
-  RLS gates by first path folder (huddle UUID, or `avatars/<user_id>`).
-- Schema: 14 tables (profiles, huddles, memberships, deposits, reactions,
-  comments, skips, reports, blocks, user_keys, huddle_keys,
-  huddle_invite_keys, device_tokens, join_attempts), SECURITY DEFINER
-  helpers (`is_huddle_member` etc. — the standard fix for RLS recursion),
-  client RPCs `create_huddle`, `join_huddle` (old codes), `spend_skip_token`,
-  `recompute_streak`, `init_huddle_key`, `huddle_key_recipients`,
-  `share_huddle_key`, `redeem_huddle_invite`, `huddle_invite`,
-  `create_huddle_invite`, `reset_huddle_invite`, `save_own_huddle_key`, and
-  service-role-only `release_storage_objects` and `push_targets`.
-  `huddle_keys` has a select-own policy only; its writers are the key RPCs
-  (an upsert of a row you can't SELECT fails under RLS).
-  `huddle_invite_keys` has no policies and no table privileges at all.
-  `schema.sql` builds a fresh database; `supabase/migrations/` (001–009, see
-  its README) upgrades the one already deployed, and
-  `supabase/scripts/reset_database.sql` wipes an older database so
-  `schema.sql` can run fresh. Deposits insert policy clamps dayKey to a
-  UTC-anchored ~48h window.
-- Config: `BackendConfig.load()` reads bundled `Supabase.plist`
-  (SUPABASE_URL / SUPABASE_ANON_KEY); placeholders ⇒ nil ⇒ mock mode. The
-  plist is gitignored; example at `supabase/Supabase.example.plist`. Anon
-  key is publishable; RLS is the security boundary.
+The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
+`InviteCrypto.swift`, `LivePhotoKeyring.swift`; CryptoKit only).
 
-## Account deletion and Apple token revocation
+- **Identity key**: each user's Curve25519 key. The private half lives in
+  the iCloud Keychain (`com.huddlepals.ios.identity`, synchronizable;
+  deleted only with the account, never on sign-out); the public half is in
+  `user_keys`.
+- **Huddle key**: one random 256-bit key per huddle, stored per member in
+  `huddle_keys`, wrapped to that member's identity key (ephemeral X25519 →
+  HKDF-SHA256 → AES-GCM). A huddle key is shared, never replaced.
+- **Photo key**: one per photo. The JPEG is AES-GCM sealed with it (that box
+  is the Storage object, `application/octet-stream`); the photo key, sealed
+  with the huddle key, is `deposits.wrapped_photo_key`. A report discloses
+  only that photo's key (`tools/decrypt_reported_photo`).
+- **Invite codes** (`Support/InviteCode.swift`): 32 characters of
+  `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, shown as eight groups of four. The
+  first 6 are a lookup, the only part the server stores
+  (`huddles.invite_code`); the other 26 are a secret (≈129 bits). From the
+  secret, HKDF-SHA256 gives a **proof** (the server keeps its SHA-256) and,
+  with a random salt, a **wrapping key** that seals the huddle key into
+  `huddle_invite_keys`. The secret itself is kept sealed with the huddle
+  key, so members' apps can show the code.
+- **Joining**: `redeem_huddle_invite(lookup, proof)` checks the code (10
+  misses an hour), membership, the cap and blocks, and returns the sealed
+  key. The app opens it, then stores its own wrapped copy
+  (`save_own_huddle_key`, retried by every sync). Nobody else needs to be
+  online.
+- **Issuing**: the creator's app right after creating the key, and any
+  member's app that opens a huddle still on an old 6-character code (which
+  retires it). The keeper's **New invite code** revokes the old one. If a
+  huddle ever gets a new key (only when nobody left holds the old one), its
+  invite is dropped and the next member to open it issues a new one.
+- **Fallback**: on foreground and huddle open, members' apps still share the
+  key with anyone without a working copy (`huddle_key_recipients` →
+  `share_huddle_key`): people who joined with an old code, or who lost
+  their identity key.
+- **Not encrypted**: captions, comments, reactions, huddle names, profiles,
+  avatars and all metadata. Mock mode stores photos as they are.
 
-App Review guideline 5.1.1(v): deleting an account that signed in with
-Apple must revoke the app's Apple tokens. How it runs (QA-20):
+## Auth
 
-1. Profile → **Delete account** → confirm. The app then shows Apple's own
-   sheet (`SystemAppleReauthenticator`, Face ID or passcode) for a fresh
-   authorization code. Closing the sheet deletes nothing. If Apple can't
-   confirm (no Apple Account on the device, Apple unreachable), the app
-   offers **Delete account anyway** without a code, because deletion must
-   stay possible (Apple TN3194), and says where to remove HuddlePals from
-   Sign in with Apple by hand. Mock mode uses `MockAppleReauthenticator`.
-2. `LiveAuthService.deleteAccount(appleAuthorizationCode:)` POSTs
-   `{"authorization_code": "…"}` to `functions/v1/delete-account`.
-3. The edge function (`supabase/functions/delete-account/`: `index.ts`
-   wires Supabase in, `handler.ts` runs the steps, `apple.ts` talks to
-   Apple):
-   - signs a client secret (ES256 JWT, 5 minutes) with the Sign in with
-     Apple key;
-   - exchanges the code at `https://appleid.apple.com/auth/token`;
-   - checks the ID token's `sub` is this user's Apple ID;
-   - revokes the refresh token at `https://appleid.apple.com/auth/revoke`;
-   - deletes the user's `device_tokens` (no more notifications);
-   - deletes `avatars/<user id>/…`;
-   - calls `release_storage_objects` (migration 007), so the user's deposit
-     photos stop pointing at them and can't block the deletion;
-   - calls `auth.admin.deleteUser`.
+- **Terms first**: the full Terms (`Legal/TermsOfService.md`) with Agree,
+  enabled only after scrolling to the end. Acceptance is device-local
+  (`TermsAcceptance`). A material change to the Terms must bump
+  `TermsOfService.version` (a test compares it with "Last updated"), and
+  the same text belongs at huddlepals.com/terms.
+- **Onboarding**: Terms → welcome cards → Sign in with Apple → profile
+  (name + colour). `needsProfileSetup` resumes an unfinished sign-up.
+- **Live**: Apple's id_token goes to `/auth/v1/token?grant_type=id_token`
+  with the raw nonce (`Support/AppleSignInNonce.swift`). The session lives
+  in the Keychain (`…ThisDeviceOnly`) and refreshes about 60 s before
+  expiry; a refused refresh signs out, but being offline doesn't. Apple
+  sends the name only on the first authorization.
 
-   An Apple failure is logged (`apple_revoke_failed …`) and the deletion
-   still completes. Codes, tokens and the key are never logged, and the
-   app never sees Supabase's error detail.
+## Notifications
 
-### One-time setup: the Sign in with Apple key
+- **Daily reminders** are local (`Support/DailyReminders.swift`,
+  `deps.reminders`): opt-in in Profile, a rolling 7-day window (one main
+  nudge plus up to two follow-ups a day), rebuilt on launch, foreground,
+  after posting and on settings change, and silent today once you've posted
+  everywhere.
+- **Activity pushes** come from the server (`Support/PushNotifications.swift`,
+  `deps.push`): a new photo (every other member), a comment or reaction on
+  your photo (you), someone joining (the members already there). Never the
+  actor, never across a block, never captions or comment text.
+  - The app asks for permission after the first create or join, never at
+    launch; when allowed, it registers on launch, foreground and sign-in,
+    and upserts the token with its `sandbox` or `production` environment
+    (read from the provisioning profile) into `device_tokens`.
+  - Profile → Notifications → **Huddle activity** turns it off for the
+    device. Sign-out removes the device's token first; account deletion
+    removes all of the user's tokens. A tap opens the huddle (`huddle_id`).
+  - Server side: AFTER INSERT triggers on deposits, comments, reactions and
+    memberships (`notify_push`) send `{kind, id}` through `pg_net` to the
+    `send-push` function, with a shared secret from Vault; they do nothing
+    without the Vault secrets and never block an insert.
+    `push_targets(kind, id)` picks recipients. `send-push` signs an ES256
+    provider token (reused 50 minutes), sends one alert per device to the
+    token's APNs host, and deletes tokens APNs calls invalid.
+- The hour in Huddle Settings is only the huddle's stored preference; it
+  schedules nothing.
 
-1. [developer.apple.com](https://developer.apple.com/account) →
-   Certificates, Identifiers & Profiles → **Keys** → **+**.
-2. Give it a name (e.g. "HuddlePals token revocation"), tick **Sign in with
-   Apple**, click **Configure**, pick the primary App ID
-   `com.huddlepals.ios`, then **Save** → **Continue** → **Register**.
-3. **Download** `AuthKey_<KEY_ID>.p8`. Apple offers the download once, so
-   keep it in a password manager. It never goes in the repo. The
-   10-character **Key ID** is shown on the key's page.
-4. The 10-character **Team ID** is under Account → **Membership details**.
+## Account deletion
 
-### Set the secrets
+Profile → **Delete account** → confirm → Apple's sheet gives a fresh
+authorization code (`SystemAppleReauthenticator`). Closing the sheet
+deletes nothing; if Apple can't confirm, the app offers **Delete account
+anyway**. The `delete-account` function then revokes the app's Apple tokens
+(App Review 5.1.1(v)), deletes device tokens and avatars, releases the
+user's photos (`release_storage_objects`), and calls
+`auth.admin.deleteUser`. An Apple failure is logged and deletion goes on;
+codes, tokens and keys are never logged.
 
-They live only in Supabase's edge function secrets. `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY` are injected automatically. With the Supabase
-CLI logged in (`supabase login`), set the four Apple secrets:
+## Backend
+
+- **`SupabaseClient`** (`Services/Live/`) is a small URLSession client for
+  GoTrue, PostgREST and Storage. JSON uses snake_case conversion, so DTO
+  names use `Id`, never `ID`. Raw server messages stay inside
+  `ClientError.http` for services to map; users see generic text.
+- **Storage**: one private bucket, `deposits` (5 MB; `image/jpeg` and
+  `application/octet-stream`). `<huddle_id>/…` is for members only;
+  `avatars/<user_id>/…` is readable by the owner and their co-members,
+  writable by the owner. Uploads are plain inserts: **never send
+  `x-upsert`** (permanence, and huddle paths have no update policy).
+- **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
+  (001–009, idempotent, run in order) upgrades the deployed one;
+  `supabase/scripts/reset_database.sql` wipes an old database for a fresh
+  start. Writes that need rules RLS can't express go through SECURITY
+  DEFINER functions (key sharing, invites, joins, skips, streaks).
+  `huddle_invite_keys` and `join_attempts` have no policies at all, so only
+  those functions touch them.
+- **Edge functions**: `delete-account` and `send-push`. Each splits into
+  `index.ts` (wiring), `handler.ts` (logic) and a client file (`apple.ts`,
+  `apns.ts`), so Node can test the logic.
+
+## Backend setup and deploys
+
+Secrets (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected
+automatically):
+
+| Secret | Where | For |
+|---|---|---|
+| `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID` (= `com.huddlepals.ios`), `APPLE_PRIVATE_KEY` | function secrets | `delete-account` (without them, deletion works but skips revocation) |
+| `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` (= `com.huddlepals.ios`), `APNS_PRIVATE_KEY` | function secrets | `send-push` |
+| `PUSH_WEBHOOK_SECRET` (e.g. `openssl rand -hex 32`) | function secrets | `send-push` checks the triggers' `x-push-secret` |
+| `push_function_url`, `push_webhook_secret` (same value) | Vault | the push triggers |
+
+**Apple keys** ([developer.apple.com](https://developer.apple.com/account) →
+Certificates, Identifiers & Profiles):
+
+1. Identifiers → `com.huddlepals.ios` → turn on **Push Notifications**.
+2. Keys → **+** → **Sign in with Apple** → Configure → App ID
+   `com.huddlepals.ios` → Register; download the `.p8` and note the Key ID.
+3. Keys → **+** → **Apple Push Notifications service (APNs)**, Sandbox &
+   Production → Register; download the `.p8` and note the Key ID.
+4. The Team ID is under Account → Membership details. Each `.p8` downloads
+   only once: keep it in a password manager, never in the repo.
+5. In Xcode, Signing & Capabilities should list Sign in with Apple and Push
+   Notifications with no profile errors; both entitlements are already in
+   `HuddlePal/HuddlePal.entitlements`.
+
+**Set the secrets** (Supabase CLI logged in; the `.p8` may keep real
+newlines or use `\n`):
 
 ```bash
-supabase secrets set --project-ref <project-ref> APPLE_TEAM_ID=<TEAM_ID> APPLE_KEY_ID=<KEY_ID> APPLE_CLIENT_ID=com.huddlepals.ios
+supabase secrets set --project-ref <project-ref> APPLE_TEAM_ID=<TEAM_ID> APPLE_KEY_ID=<SIWA_KEY_ID> APPLE_CLIENT_ID=com.huddlepals.ios APNS_TEAM_ID=<TEAM_ID> APNS_KEY_ID=<APNS_KEY_ID> APNS_BUNDLE_ID=com.huddlepals.ios PUSH_WEBHOOK_SECRET=<webhook-secret>
 ```
 
 ```bash
-supabase secrets set --project-ref <project-ref> APPLE_PRIVATE_KEY="$(cat /path/to/AuthKey_<KEY_ID>.p8)"
+supabase secrets set --project-ref <project-ref> APPLE_PRIVATE_KEY="$(cat /path/to/AuthKey_<SIWA_KEY_ID>.p8)" APNS_PRIVATE_KEY="$(cat /path/to/AuthKey_<APNS_KEY_ID>.p8)"
 ```
 
-```bash
-supabase secrets list --project-ref <project-ref>
-```
-
-- `APPLE_CLIENT_ID` is the **bundle ID**: the codes come from the native
-  app, so Apple issued them to it. A Services ID is only for web sign-in.
-- The key may keep its real newlines or use `\n` escapes; both work.
-- Dashboard alternative: Edge Functions → **Secrets**.
-- Without these secrets, deletion still works but logs
-  `apple_revoke_skipped: APPLE_* secrets not set`.
-
-### Deploy
-
-1. **Database first.** On the existing project, run
-   `supabase/migrations/007_qa20_release_storage_objects.sql` in the SQL
-   editor. A fresh project gets it from `schema.sql`. Without it, the
-   release step logs `storage_release_failed`. Then, on Storage versions
-   that still have `objects_owner_fkey`, `deleteUser` fails for anyone who
-   ever posted.
-2. **Then the function.** From `HuddlePal/`:
-
-   ```bash
-   supabase functions deploy delete-account --project-ref <project-ref>
-   ```
-
-   This uploads `index.ts` together with `handler.ts` and `apple.ts`. Leave
-   JWT verification on (the default), since the function acts only for the
-   caller's own access token.
-
-### Check it once on a device (TestFlight)
-
-1. Sign in with Apple using a test Apple Account, then deposit a photo in a
-   huddle shared with a second account.
-2. Profile → Delete account → confirm → Face ID.
-3. Supabase → Edge Functions → `delete-account` → Logs should show
-   `apple_revoked` and no `…_failed` lines.
-4. On the phone, HuddlePals should be gone from Settings › your name ›
-   Sign-In & Security › Sign in with Apple.
-5. The user should be gone from Authentication → Users, and the second
-   account still sees the photo as "Former member".
-
-### Tests
-
-`cd supabase/tests && npm test` runs these checks (Node 22.18+ runs the
-function's TypeScript directly; nothing reaches Apple or Supabase):
-
-- `delete-account.test.mjs`:
-  - the client secret, with its signature verified against the key's
-    public half;
-  - the exact `/auth/token` and `/auth/revoke` requests;
-  - deletion going ahead when Apple refuses or can't be reached;
-  - nothing secret in the logs;
-  - a failed `deleteUser` returning a 500 with no detail.
-- `rpc.test.mjs`: `release_storage_objects` can only be run by the service
-  role, it unblocks `deleteUser` under `objects_owner_fkey`, and the
-  photos stay.
-
-On the app side:
-
-- `ProfileConfirmationTests`: the Apple step, cancelling it, and the
-  fallback.
-- `LiveServiceTests`: the request body.
-- `UnhappyPathTests.testDeletingWhenAppleCantConfirmStillWorks`: the
-  fallback dialog.
-
-Apple's real servers and sheet are not covered; do the device check above.
-
-## Push notifications (APNs)
-
-The server tells members about activity in their huddles: a new photo
-(every other member), a comment or a reaction on your photo (you), and
-someone joining (everyone already there). Never the person who did it,
-never across a block (either direction), and only current members. Daily
-upload reminders stay local (`ReminderCoordinator`).
-
-How it runs:
-
-1. **App** (`Support/PushNotifications.swift`, `deps.push`). The app asks
-   for notification permission once the person has created or joined a
-   huddle (`CreateHuddleViewModel` / `JoinHuddleViewModel` →
-   `PushCoordinator.huddleJoined`), never at launch. When allowed and
-   signed in, it registers with APNs on launch, foreground and sign-in;
-   `AppDelegate` hands the token to `PushCoordinator.didRegister`, which
-   upserts `device_tokens (user_id, token, environment)` through
-   `LivePushTokenService`. The environment is `sandbox` for builds signed
-   for development (Xcode, the Simulator) and `production` for TestFlight
-   and the App Store (read from the embedded provisioning profile).
-   Profile → Notifications → **Huddle activity** turns it off for this
-   device (deletes the row). Sign-out deletes this device's row before the
-   session ends; account deletion deletes all of the user's rows (and the
-   FK cascades). A tap opens the huddle named in the payload's `huddle_id`.
-2. **Database** (migration 009 / `schema.sql`). AFTER INSERT triggers on
-   `deposits`, `comments`, `reactions` and `memberships` call
-   `notify_push`, which queues a `pg_net` POST of `{"kind", "id"}` to the
-   `send-push` function with a shared secret, read from Vault. It does
-   nothing until both Vault secrets exist, and a failure never blocks the
-   insert. `push_targets(kind, id)` (service role only) decides who is told
-   what; a token registered by two accounts counts only for the newer.
-3. **`send-push` edge function** (`supabase/functions/send-push/`:
-   `index.ts` wires Supabase in, `handler.ts` checks the secret and sends,
-   `apns.ts` signs the ES256 provider token and talks to APNs over HTTP/2).
-   One alert per device to `api.push.apple.com` or
-   `api.sandbox.push.apple.com` by the token's environment; tokens APNs
-   reports as invalid (410 Unregistered, 400 BadDeviceToken) are deleted.
-   The provider token is reused for 50 minutes per warm instance.
-
-What a notification says: the huddle's emoji and name as the title, and
-"Maya posted a photo." / "Maya commented on your photo." / "Maya reacted 🔥
-to your photo." / "Sam joined the huddle." Huddle names, display names and
-reaction emoji aren't end-to-end encrypted (see "End-to-end encrypted
-photos"), so showing them leaks nothing new; captions and comment text are
-never sent, and photos are only ever ciphertext on the server. No
-Notification Service Extension is needed.
-
-### One-time setup: Apple
-
-1. [developer.apple.com](https://developer.apple.com/account) →
-   Certificates, Identifiers & Profiles → **Identifiers** →
-   `com.huddlepals.ios` → tick **Push Notifications** → **Save**. (No
-   certificates: token-based auth uses a key.)
-2. **Keys** → **+** → name it (e.g. "HuddlePals APNs"), tick **Apple Push
-   Notifications service (APNs)**, choose **Sandbox & Production**, then
-   **Continue** → **Register**. Download `AuthKey_<KEY_ID>.p8` (offered
-   once; keep it in a password manager, never in the repo) and note the
-   10-character **Key ID**. The **Team ID** is under Account → Membership
-   details (the same one as the Sign in with Apple key).
-3. Xcode: the app's entitlements already carry `aps-environment`
-   (`HuddlePal/HuddlePal.entitlements`), which is the Push Notifications
-   capability. With automatic signing, select the HuddlePal target →
-   Signing & Capabilities and check **Push Notifications** is listed and
-   the profile has no errors; Xcode regenerates the profile once the App ID
-   has the capability. Archives for TestFlight switch the entitlement to
-   production on their own.
-
-### Set the secrets
-
-Function secrets (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are
-injected automatically). Make up a long random webhook secret first, for
-example with `openssl rand -hex 32`:
-
-```bash
-supabase secrets set --project-ref <project-ref> APNS_KEY_ID=<KEY_ID> APNS_TEAM_ID=<TEAM_ID> APNS_BUNDLE_ID=com.huddlepals.ios PUSH_WEBHOOK_SECRET=<webhook-secret>
-```
-
-```bash
-supabase secrets set --project-ref <project-ref> APNS_PRIVATE_KEY="$(cat /path/to/AuthKey_<KEY_ID>.p8)"
-```
-
-Vault secrets the triggers read (SQL editor; the same webhook secret):
+In the SQL editor (change one later with `vault.update_secret`):
 
 ```sql
 select vault.create_secret('https://<project-ref>.supabase.co/functions/v1/send-push', 'push_function_url');
 select vault.create_secret('<webhook-secret>', 'push_webhook_secret');
 ```
 
-- The key may keep its real newlines or use `\n` escapes; both work.
-- To change a Vault secret later: `select vault.update_secret(id, '<new value>')`
-  with the id from `select id, name from vault.secrets`.
-- Without the APNS_* secrets the function logs `push_skipped` and sends
-  nothing; without the Vault secrets the triggers send nothing at all.
+**Deploy**, database first:
 
-### Deploy
+1. Run the migrations not yet applied, in order, in the SQL editor (a fresh
+   project runs `schema.sql` instead). 009 enables `pg_net`; if the project
+   refuses, enable it under Database → Extensions and run 009 again.
+2. From `HuddlePal/`:
 
-1. **Database.** Run `supabase/migrations/008_invite_keys.sql`, then
-   `009_push_notifications.sql`, in the SQL editor (009 enables `pg_net`;
-   if your project refuses, enable it under Database → Extensions and run
-   009 again). A fresh project gets both from `schema.sql`.
-2. **The function**, from `HuddlePal/`, with JWT verification off (the
-   database sends no user token; the shared secret is the check):
+   ```bash
+   supabase functions deploy delete-account --project-ref <project-ref>
+   ```
 
    ```bash
    supabase functions deploy send-push --no-verify-jwt --project-ref <project-ref>
    ```
 
-### Check it on a device
+   `send-push` runs without JWT verification because the database sends no
+   user token; the shared secret is the check.
 
-The Simulator registers with APNs too (sandbox), but a real device is the
-proper check.
+## Building and testing (this machine)
 
-1. Install a development build on device A and B (two accounts) or a
-   TestFlight build. Create a huddle on A: allow notifications when asked.
-2. Join on B with the invite code: A gets "… joined the huddle".
-3. Post on B: A gets "… posted a photo." Tap it: the huddle opens.
-4. Supabase → Edge Functions → `send-push` → Logs shows
-   `push_sent deposit sent=1 …`; `select * from net._http_response order by
-   created desc limit 5` shows the triggers' calls.
-5. Profile → Notifications off on A: post on B again, and A gets nothing.
+Commands run from the repo root.
 
-### Tests
+- `xcode-select` points at the Command Line Tools, so prefix Xcode commands
+  with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
+- Always build tests with `EXCLUDED_SOURCE_FILE_NAMES=Supabase.plist` so
+  nothing bundles the production config. `scripts/test-all.sh` does.
+- UI tests wipe the app's data on their simulator, so use the QA ones
+  (`QA-17Pro`, `QA-17ProMax`, `QA-SE3`, `QA-iPadPro13`, `QA-iPadMini`). The
+  script's default simulator, "HuddlePals Tests", doesn't exist here.
+- Everything (credentials-ignored check, database suite in both modes, unit
+  and UI tests):
 
-- `supabase/tests/push.test.mjs`: device-token RLS, who gets notified for
-  each kind (never the actor, never across a block, only members, the
-  newest owner of a shared token), and the triggers (one request per event,
-  nothing without Vault secrets, an insert never blocked).
-- `supabase/tests/send-push.test.mjs`: the provider token (signature
-  verified with the key's public half, 50-minute reuse), the exact APNs
-  request per environment, invalid-token handling, the secret check, and
-  nothing secret in the logs.
-- `PushNotificationTests`: permission only after a huddle, registration and
-  upload, the toggle, sign-out removing the token first, a tap opening the
-  right huddle, and the `device_tokens` requests.
+  ```bash
+  SIMULATOR=QA-17Pro HuddlePal/scripts/test-all.sh
+  ```
 
-APNs itself and a real device are not covered; do the device check above.
+- Database and edge-function tests only (Node 22.18+; Postgres runs in
+  process via PGlite, once on `schema.sql` and once on the deployed schema
+  plus the migrations, which must end up identical):
 
-## Mock world & debug
+  ```bash
+  cd HuddlePal/supabase/tests && npm ci && npm test
+  ```
 
-Seed (first launch, mock only; `Seeding/SeedDataService.swift`): huddle
-"The Crew" 🏔, code `CREW-427K-Q9MW-…` (`SeedDataService.crewInviteCode`);
-users You (keeper) / Maya / Sam / Riley with
-ink-ramp avatar hexes; 30 days history — misses at offsets −24 (Riley) and
-−7 (Maya), skip-token day −14 (Sam, so he has 1 token left) recorded in the
-in-memory `SkipLedger` (re-seeded each launch, drifts with real days —
-known mock quirk); today seeded so others posted and You didn't ⇒ app opens
-LOCKED with streak 6. ~100 placeholder JPEGs generated on-device
-(`PlaceholderImageGenerator`, gradient + SF Symbol).
-Profile → DEBUG (mock only): gate toggle, advance mock day
-(`AppDateProvider.dayOffset`, persisted), regenerate seed (runs behind the
-splash via `session.isReady = false` — keep that; it prevents onboarding
-flash and views rendering mid-deletion).
+- Unit tests only (parallel clones sometimes fail to launch here, so run
+  them serially):
 
-## Design system
+  ```bash
+  cd HuddlePal && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project HuddlePal.xcodeproj -scheme HuddlePal -destination "platform=iOS Simulator,name=QA-17Pro" -only-testing:HuddlePalTests -parallel-testing-enabled NO EXCLUDED_SOURCE_FILE_NAMES=Supabase.plist
+  ```
 
-Adaptive "gallery print" (all in `Support/Theme.swift`): every Theme
-constant is a dynamic UIColor — light = warm paper + ink actions; dark =
-deep charcoal (never flat black) + paper-white actions. Labels on accent
-fills use `Theme.onAccent`. Cards via `.cardSurface()` (hairline + soft
-shadow) work in both modes. Appearance: follows the system by default,
-with a System/Light/Dark picker in Profile (`AppearanceSettings`,
-persisted, applied via `.preferredColorScheme` in HuddlePalApp — no forced
-scheme anymore). Identity colors: a curated `AvatarPalette` (6 solids + 2
-"hex-hex" gradient tokens, v3 reduced from the larger v2 set), rendered by
-`AvatarStyle.fill/base`; chrome stays neutral — members and photos carry
-the color. `AvatarView` shows a user's `profilePhotoPaths.first` as the
-profile picture when present (v3), else colored initials. Names/avatars are
-tappable everywhere via `UserLink` → member profile (photo pager, bio,
-shared huddles). Launch: `LaunchRevealView` hug-mark animation in
-RootView (reduce-motion aware, waits for bootstrap + min dwell).
-Signature interaction: lock→unlock spring reveal + `Haptics.unlock()`.
-App icon generated by `tools/generate_icon.swift` (must stay 1024×1024
-**opaque** — App Store rejects alpha; no SF Symbols in icons per license).
+- **Covered**: engine rules, mock flows, store reconciliation, live
+  services over stubbed HTTP (`StubURLProtocol`), encryption and invite
+  joins against an in-process fake server, push coordination, accessibility
+  audits; schema, RLS, functions and triggers in PGlite; edge-function
+  logic on Node.
+- **Not covered**: a real Supabase project's responses, Apple's servers and
+  sheets, APNs delivery, real `pg_net`/Vault (stubbed), and key sharing
+  between two real devices. Check those on devices: delete a test account
+  (logs show `apple_revoked`; the app leaves Settings › Sign in with Apple;
+  its photos show "Former member"), join with an invite while nobody else
+  is online, and see each push arrive, open its huddle, and stop when
+  turned off.
+- **Project file**: Xcode 16 synchronized folders, so new files in
+  `HuddlePal/`, `HuddlePalTests/` or `HuddlePalUITests/` join the build by
+  themselves; never hand-edit file lists. `Config/Info.plist` (URL scheme,
+  camera text) stays outside those folders, or the build copies it twice.
+  Build-setting edits go in both Debug and Release.
+- Debug builds without `Supabase.plist` run the mock; Release builds refuse
+  to build without one.
 
-## Dev environment on THIS machine (important)
+## Mock world and debug
 
-- **Xcode 26.1.1** is installed at `/Applications/Xcode.app`, but
-  `xcode-select` still points at the Command Line Tools, so a bare
-  `xcodebuild` fails. Prefix commands with
-  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (or switch it
-  once yourself with `sudo xcode-select -s /Applications/Xcode.app`).
-  Full test run (database suite + unit + UI tests): `scripts/test-all.sh`.
-  It passes `EXCLUDED_SOURCE_FILE_NAMES=Supabase.plist` so no test build
-  bundles the live config; do the same for any hand-run `xcodebuild`.
-- Debug builds without `Supabase.plist` run the mock world; Release builds
-  refuse to build without a real one (build-phase guard in the pbxproj).
-- The pbxproj uses **Xcode 16 synchronized folders** (objectVersion 70):
-  files dropped into `HuddlePal/` / `HuddlePalTests/` join the build automatically —
-  never hand-edit file lists into the pbxproj. Build-setting edits are done
-  by string replacement (both Debug and Release blocks!).
-- Git: repo root is `~/Desktop/dev/HuddlePals`; the Xcode project lives in its
-  `HuddlePal/` subfolder, so app sources are `HuddlePal/HuddlePal/…`.
+The first mock launch seeds "The Crew" 🏔 (code
+`SeedDataService.crewInviteCode`) with You (keeper), Maya, Sam and Riley,
+plus "Sunday Dinners" 🍝; 30 days of history, a couple of misses and a
+skip, and a today where everyone but You has posted, so the app opens
+locked. Profile → DEBUG (mock only): force the gate shut, advance the mock
+day, regenerate the seed (behind the splash, `session.isReady = false`;
+keep that).
 
-## Gotchas learned the hard way
+## Design
 
-- `.kerning()` is a `Text`-only modifier — not TextField/View.
-- `RoundedRectangle().fill(x).strokeBorder(y)` chaining requires the iOS 17
-  ShapeView API — fine at our floor, don't lower the target.
-- Avoid `count(where:)` (Swift 6 stdlib back-deploy ambiguity in 5 mode) —
-  use `filter{}.count`.
-- The app module is `HuddlePal` and the SwiftData model is `Huddle`.
-  `@testable import HuddlePal` loads the module; `Huddle.memberJoinDayKeys`
-  is the model.
-- Memberwise-init defaults: optional `var` stored properties get nil
-  defaults (SE-0242) — `PrimaryButton(title:action:)` relies on it.
-- JSONEncoder snake_case strategy mangles `ID` suffixes → DTOs use `Id`.
-  Anything that round-trips (encoded *and* decoded by us) is the dangerous
-  case: `SupabaseClient.Session.userID` encoded as "user_id", never decoded
-  back, and silently signed everyone out on every relaunch. It's `userId`
-  now, with a round-trip test in `AuthInputTests`.
-- A DTO field for a column the DB can null (`deposits.author_id`,
-  `comments.user_id`) must be optional: one null in a non-optional field
-  fails decoding of the *whole* response, not just that row.
-- Seeded streak math: today-incomplete is normal state after seeding; if the
-  app is relaunched days later, the missed-gap behavior is realistic (streak
-  resets) — not a bug.
-- `LocalDepositImage` must reload when the path changes (remote sync can
-  re-path a row). Don't "optimize" back to `guard image == nil`. For huddle
-  photos (`init(deposit:)`) a failed load is NOT final: the task id
-  includes `session.photoKeysVersion`, so a locked photo retries when a key
-  arrives. `photoKeysVersion` is the one `AppSession` field a service
-  (`LivePhotoKeyring`) writes.
-- E2EE wire formats are pinned by DB check constraints: public keys are
-  44-char base64 (32 raw bytes), wrapped keys 80-char base64 (60-byte
-  AES-GCM combined box). Invites: proof and salt 44-char base64 (32
-  bytes), `sealed_key` 80 chars, `sealed_secret` 72 chars (12 + 26 + 16
-  bytes); the server stores `sha256(proof)` as 64 hex chars. HKDF info uses
-  lowercased UUIDs (Postgres prints them lowercase, Swift uppercase).
-- User model carries `bio: String?` + `profilePhotoPaths: [String]` (≤3,
-  "Media/avatars/<user_id>/…"); profiles table mirrors with `bio` +
-  `photo_paths jsonb`. Storage bucket "deposits" has TWO path namespaces:
-  "<huddle_uuid>/…" (membership-gated) and "avatars/<user_id>/…" (read: any
-  signed-in user; write: owner only) — policies guard the uuid cast with
-  `try_uuid()`.
-- Mermaid renders on GitHub; OVERVIEW.md depends on it.
+All in `Support/Theme.swift`: dynamic colours for light ("gallery print":
+warm paper, ink actions) and dark (charcoal, never pure black), with
+`Theme.onAccent` for labels on accent fills and `.cardSurface()` for cards.
+Appearance follows the system unless set in Profile. Identity colours come
+from `AvatarPalette` (6 solids, 2 gradients); chrome stays neutral. Names
+and avatars open the member's profile (`UserLink`). The app icon
+(`tools/generate_icon.swift`) must stay a 1024 px opaque PNG with no SF
+Symbols.
+
+## Gotchas
+
+- `.kerning()` works only on `Text`.
+- Avoid `count(where:)` in Swift 5 mode; use `filter{}.count`.
+- The module is `HuddlePal` and the model is `Huddle`; don't confuse them
+  in tests.
+- Snake-case encoding turns `userID` into `user_id`, which decodes back
+  only to `userId`. That once signed everyone out on every launch. Use `Id`.
+- A DTO field for a nullable column must be optional, or one null fails the
+  whole response.
+- `LocalDepositImage` must reload when its path changes, and for huddle
+  photos its task id includes `photoKeysVersion` so a locked photo retries.
+  Don't "optimise" either away.
+- Wire formats are pinned by check constraints: public keys and invite
+  proofs/salts are 44-character base64, wrapped and sealed keys 80,
+  sealed secrets 72. HKDF info uses lowercase UUIDs (Postgres prints them
+  lowercase; Swift doesn't).
+- A SwiftUI `TextField`'s tap target is its text height; padding doesn't
+  count, so keep the font at least 18 pt where the audit checks it.
+- OVERVIEW.md uses Mermaid, which GitHub renders.
 
 ## Open issues
 
-Known and not yet fixed (from the October QA sweep; the rest of its 38
-findings are fixed, and their commits say how):
-
-- **QA-21: no Dynamic Type** (medium, accessibility). About 130 places set
-  fixed point sizes (`.font(.system(size:))`), so text ignores the
-  person's text-size setting. It needs a design pass (a type scale built on
-  text styles), not one-off fixes. Until then `AccessibilityAuditTests`
-  accepts Dynamic Type issues (`knownOpen`); take `.dynamicType` out of that
-  list when this is done.
-- **QA-19: a screen can hold a huddle that sync just removed** (low,
-  stability). Routes carry SwiftData models (`Route.huddleHome(Huddle)` and
-  friends), and `SupabaseStore` prunes rows that vanished remotely, e.g.
-  after leaving the huddle on another device. Never reproduced: reads after
-  the delete return cached values. The fix is ID-based routes that look the
-  model up when the screen renders, and pop if it's gone.
-
-## Verified vs not
-
-Verified: the app builds in Xcode 26.1.1 and the full XCTest suite passes
-on the iPhone 17 Pro simulator (engine rules, critical mock flows,
-`SupabaseStore` reconciliation incl. Former member, profile editor,
-E2EE crypto + identity Keychain, invite joins against an in-process fake
-server, push coordination); the invite and push SQL runs in the PGlite
-suite (fresh schema and deployed schema + migrations); icon
-is 1024 opaque RGB.
-**Not verified by tests**: anything over HTTP. The live layer is being
-exercised by hand against the real project, but these still deserve a
-deliberate pass: OTP `/verify` response shape, Apple id_token grant, the
-`delete-account` edge function end-to-end, a Former-member photo after
-deleting a test account, posting a photo (insert-only uploads), the
-huddle list's `select=huddle_id,author_id` read, and the join-day streak
-SQL (never executed against Postgres — no local database here). Likewise
-the end-to-end encryption SQL in `schema.sql` and
-`supabase/scripts/reset_database.sql` have not been run against Postgres
-here; the CryptoKit layer is unit-tested
-(`PhotoEncryptionTests`), the key sharing between two real accounts is
-not. Push notifications have not reached APNs or a device yet, and
-`pg_net` / Vault are stubbed in the test database: do the device check in
-"Push notifications (APNs)". Apple sign-in needs the paid
-account + provider config; SMS needs Twilio. DEPLOYMENT.md's last section
-tracks this.
+- **QA-21: no Dynamic Type** (medium). About 130 fixed font sizes ignore
+  the person's text-size setting; it needs a type scale built on text
+  styles. `AccessibilityAuditTests` accepts Dynamic Type issues until then
+  (`knownOpen`); remove `.dynamicType` from that list when it's done.
+- **QA-19: a screen can hold a huddle that sync just removed** (low). Routes
+  carry SwiftData models and the store prunes rows gone remotely (say,
+  after leaving on another device). Never reproduced. The fix is ID-based
+  routes that look the model up and pop if it's gone.
+- **Terms screen contrast**: `AccessibilityAuditTests.testOnboardingScreens`
+  fails on the all-caps arbitration paragraph of the Terms. Every other UI
+  test passes.
 
 ## Conventions
 
-- Comments explain constraints/whys, not whats; `// TODO: BACKEND — <what>`
-  marks every server-integration point (grep for it).
-- Errors: services throw typed `LocalizedError` enums (`AuthError`,
-  `HuddleServiceError`); view models catch and expose `errorMessage: String?`.
-- Keep README/OVERVIEW/DEPLOYMENT in sync with behavior changes; they are
-  part of the deliverable, not an afterthought.
+- Comments explain why, not what. `// TODO: BACKEND — …` marks the
+  remaining server-integration notes.
+- Services throw typed `LocalizedError`s (`AuthError`,
+  `HuddleServiceError`, …); view models show `errorMessage`.
+- Commits: author XpertiCON106, plain messages with no co-author lines.

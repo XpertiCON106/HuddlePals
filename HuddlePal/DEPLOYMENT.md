@@ -60,7 +60,7 @@ seeded **mock** world. No code changes to switch.
    auth, crypto invite codes, streak-tamper protection), join-day streaks,
    encrypted photos and instant join are baked in. Push notifications need
    the APNs key, secrets and `send-push` function from DEVELOPMENT.md
-   ("Push notifications (APNs)").
+   ("Backend setup and deploys").
    The file only builds a fresh database. If the project already ran an
    older copy, start over: run `supabase/scripts/reset_database.sql`
    (destructive — it drops every app table, function, and storage policy,
@@ -74,8 +74,8 @@ seeded **mock** world. No code changes to switch.
    user's encryption keys cascade away with the account). Set the four
    Apple secrets so revocation works: `APPLE_TEAM_ID`, `APPLE_KEY_ID`,
    `APPLE_CLIENT_ID=com.huddlepals.ios` and `APPLE_PRIVATE_KEY` (the `.p8`
-   contents). [DEVELOPMENT.md](DEVELOPMENT.md) → "Account deletion and
-   Apple token revocation" has the key setup and the exact commands.
+   contents). [DEVELOPMENT.md](DEVELOPMENT.md) → "Backend setup and
+   deploys" has the key setup and the exact commands.
 6. **Settings → API**: copy the **Project URL** and the **anon public key**.
 7. **Set up report monitoring**: the `reports` table fills when users flag
    content — watch it (a saved dashboard query, or a Database Webhook to

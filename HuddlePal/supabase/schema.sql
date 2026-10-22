@@ -5,8 +5,8 @@
 -- Storage → create PRIVATE bucket named "deposits" (5 MB limit; allowed MIME
 -- types image/jpeg for avatars + application/octet-stream for the
 -- end-to-end encrypted huddle photos). Push notifications also need the
--- send-push edge function and two Vault secrets (DEVELOPMENT.md, "Push
--- notifications (APNs)"); this file enables pg_net for them.
+-- send-push edge function and two Vault secrets (DEVELOPMENT.md, "Backend
+-- setup and deploys"); this file enables pg_net for them.
 
 -- pgcrypto provides gen_random_bytes() for crypto-strength invite codes.
 create extension if not exists pgcrypto;
@@ -871,8 +871,8 @@ end $$;
 -- (through pg_net) to notify the right people: every other member for a new
 -- photo or a new member, the photo's owner for a comment or a reaction. Never
 -- the person who did it, and never across a block. The triggers read two
--- Vault secrets and do nothing until both exist (DEVELOPMENT.md, "Push
--- notifications"): push_function_url and push_webhook_secret.
+-- Vault secrets and do nothing until both exist (DEVELOPMENT.md, "Backend
+-- setup and deploys"): push_function_url and push_webhook_secret.
 
 -- pg_net sends the triggers' requests after the transaction commits. Guarded
 -- so databases without it (the local test database) still load.

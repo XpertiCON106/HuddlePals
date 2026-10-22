@@ -6,7 +6,7 @@
 -- across a block. Safe to re-run.
 --
 -- The triggers read two Vault secrets and do nothing until both exist
--- (DEVELOPMENT.md, "Push notifications"):
+-- (DEVELOPMENT.md, "Backend setup and deploys"):
 --   push_function_url    https://<project-ref>.supabase.co/functions/v1/send-push
 --   push_webhook_secret  the same value as the function's PUSH_WEBHOOK_SECRET
 

@@ -17,8 +17,8 @@
 // automatically. Set PUSH_WEBHOOK_SECRET (the same value as the Vault secret
 // push_webhook_secret), and APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY (the
 // .p8 contents) and APNS_BUNDLE_ID (com.huddlepals.ios). Without the APNS_*
-// secrets nothing is sent. DEVELOPMENT.md ("Push notifications") has the key
-// setup and every command.
+// secrets nothing is sent. DEVELOPMENT.md ("Backend setup and deploys") has
+// the key setup and every command.
 //
 // The logic lives in handler.ts and apns.ts, tested on Node by
 // supabase/tests/send-push.test.mjs; this file only wires Supabase in.
