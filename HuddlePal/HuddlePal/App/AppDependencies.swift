@@ -69,6 +69,9 @@ final class AppDependencies {
     /// Agreement to the Terms of Service — required before anything past
     /// the welcome cards (RootView, OnboardingViewModel).
     let terms: TermsAcceptance
+    /// Records that agreement on the server for the signed-in account. Live
+    /// only: the offline world has nobody to prove it to.
+    let termsRecorder: TermsRecorder?
 
     let auth: any AuthServiceProtocol
     /// Apple's confirmation sheet, shown before account deletion for the
@@ -94,6 +97,7 @@ final class AppDependencies {
         debug: DebugSettings,
         appearance: AppearanceSettings = AppearanceSettings(),
         terms: TermsAcceptance = TermsAcceptance(),
+        termsRecords: (any TermsRecordServiceProtocol)? = nil,
         auth: any AuthServiceProtocol,
         appleReauth: any AppleReauthenticating,
         huddleService: any HuddleServiceProtocol,
@@ -112,6 +116,7 @@ final class AppDependencies {
         self.debug = debug
         self.appearance = appearance
         self.terms = terms
+        self.termsRecorder = termsRecords.map { TermsRecorder(terms: terms, service: $0, session: session) }
         self.auth = auth
         self.appleReauth = appleReauth
         self.huddleService = huddleService
@@ -221,6 +226,7 @@ final class AppDependencies {
             dateProvider: dateProvider,
             session: session,
             debug: DebugSettings(),
+            termsRecords: LiveTermsRecordService(client: client),
             auth: LiveAuthService(client: client, store: store, keyring: keyring, media: media, config: config),
             appleReauth: SystemAppleReauthenticator(),
             huddleService: LiveHuddleService(

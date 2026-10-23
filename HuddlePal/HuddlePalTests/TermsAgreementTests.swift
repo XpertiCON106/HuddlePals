@@ -123,6 +123,94 @@ final class TermsAgreementTests: XCTestCase {
         XCTAssertEqual(OnboardingViewModel(deps: makeDeps()).step, .terms)
     }
 
+    // MARK: Server record
+
+    private func makeRecorder() -> (TermsAcceptance, MockTermsRecordService, AppSession, TermsRecorder) {
+        let terms = TermsAcceptance(defaults: defaults)
+        let service = MockTermsRecordService()
+        let session = AppSession()
+        return (terms, service, session, TermsRecorder(terms: terms, service: service, session: session, appVersion: "1.0 (10)"))
+    }
+
+    func testTheAgreementIsRecordedOnceForTheAccountThatSignsIn() async {
+        let (terms, service, session, recorder) = makeRecorder()
+        let tapped = Date(timeIntervalSince1970: 1_792_700_000)
+        terms.accept(at: tapped)
+        await recorder.refresh()
+        XCTAssertEqual(service.records, [], "nobody is signed in yet")
+
+        let ada = User(displayName: "Ada", avatarColorHex: "E5484D")
+        session.currentUser = ada
+        await recorder.refresh()
+        await recorder.refresh()
+
+        XCTAssertEqual(service.records, [.init(version: TermsOfService.version, acceptedAt: tapped, appVersion: "1.0 (10)")])
+        XCTAssertEqual(terms.claimedBy, ada.id)
+        XCTAssertTrue(TermsAcceptance(defaults: defaults).isRecorded, "remembered across launches")
+    }
+
+    func testARecordThatDidntReachTheServerIsRetried() async {
+        let (terms, service, session, recorder) = makeRecorder()
+        terms.accept(at: .now)
+        session.currentUser = User(displayName: "Ada", avatarColorHex: "E5484D")
+        service.failNext = true
+        await recorder.refresh()
+        XCTAssertFalse(terms.isRecorded)
+        await recorder.refresh()
+        XCTAssertEqual(service.records.count, 1)
+        XCTAssertTrue(terms.isRecorded)
+    }
+
+    func testAnotherAccountOnTheSameDeviceMustAgreeForItself() async {
+        let (terms, service, session, recorder) = makeRecorder()
+        terms.accept(at: .now)
+        session.currentUser = User(displayName: "Ada", avatarColorHex: "E5484D")
+        await recorder.refresh()
+
+        let ben = User(displayName: "Ben", avatarColorHex: "0091FF")
+        session.currentUser = ben
+        await recorder.refresh()
+        XCTAssertFalse(terms.hasAcceptedCurrentVersion, "the Terms come back for Ben")
+        XCTAssertEqual(service.records.count, 1, "Ada's agreement isn't recorded as Ben's")
+
+        terms.accept(at: .now)
+        await recorder.refresh()
+        XCTAssertEqual(service.records.count, 2)
+        XCTAssertEqual(terms.claimedBy, ben.id)
+    }
+
+    func testSigningBackInWithTheSameAccountDoesntAskAgain() async {
+        let (terms, service, session, recorder) = makeRecorder()
+        terms.accept(at: .now)
+        let ada = User(displayName: "Ada", avatarColorHex: "E5484D")
+        session.currentUser = ada
+        await recorder.refresh()
+        session.currentUser = nil
+        session.currentUser = ada
+        await recorder.refresh()
+        XCTAssertTrue(terms.hasAcceptedCurrentVersion)
+        XCTAssertEqual(service.records.count, 1)
+    }
+
+    func testANewVersionIsRecordedAgain() async {
+        // Agreed to and recorded an older version.
+        defaults.set("2000-01-01", forKey: "huddlepal.terms.acceptedVersion")
+        defaults.set(Date(), forKey: "huddlepal.terms.acceptedAt")
+        defaults.set(true, forKey: "huddlepal.terms.recorded")
+        let (terms, service, session, recorder) = makeRecorder()
+        XCTAssertTrue(terms.isRecorded)
+        session.currentUser = User(displayName: "Ada", avatarColorHex: "E5484D")
+        await recorder.refresh()
+        XCTAssertEqual(service.records, [], "an old agreement records nothing")
+        terms.accept(at: .now)
+        await recorder.refresh()
+        XCTAssertEqual(service.records.map(\.version), [TermsOfService.version])
+    }
+
+    func testOfflineModeKeepsNoRecorder() {
+        XCTAssertNil(makeDeps().termsRecorder)
+    }
+
     // MARK: Bundled text
 
     func testBundledTermsHaveEverySectionAndNoPlaceholders() throws {

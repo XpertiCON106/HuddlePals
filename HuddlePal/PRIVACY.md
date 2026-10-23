@@ -23,6 +23,7 @@ within the limits described under "How your data is stored and protected."
 | **Encryption public key** | Lets your huddle's members share the huddle's photo key with your device. Your private key stays on your devices (iCloud Keychain) | Yes |
 | **Reactions and comments** | The core function | Yes |
 | **Push notification token** (only if you allow notifications) | To notify your device about activity in your huddles: new photos, comments and reactions on your photos, and new members | Yes |
+| **Terms agreement record**: which version of the Terms of Service you agreed to, when, and the app version | To show that you agreed to the Terms | Yes |
 
 We do **not** use third-party advertising or tracking, we do **not** sell your
 data, and we do **not** collect location, contacts, or device-tracking
@@ -45,18 +46,21 @@ file. We don't hold your photo keys, and HuddlePals is designed so that we
 so we can review it. That key opens only the reported photo, never the rest
 of the huddle.
 
-There is one limit you should know about. Our servers keep track of who
-belongs to each huddle and pass members' public keys between devices, and
-members' apps automatically share the huddle key with the devices our
-servers list for that huddle's members. End-to-end encryption therefore
-depends on the integrity of those systems, as Section 3.3 of our
+Our servers keep track of who belongs to each huddle and pass members'
+public keys between devices. So that no one who controls those servers,
+including us, can slip in a key of their own, a member's app shares a
+huddle's key with someone who didn't join through an invite, or whose key
+has changed, only after a member checks that person's **key code**. The
+code is in Profile, and the two of them compare it in person or on a call.
+End-to-end encryption therefore depends on members checking key codes with
+the right person, as Section 3.3 of our
 [Terms of Service](https://huddlepals.com/terms) explains. A huddle's invite
 code carries what a new member needs to decrypt its photos, without our
 servers ever seeing it, so share the code only with people you'd invite; the
 huddle's keeper can replace it at any time. Your encryption key is kept in
-your iCloud Keychain; if you lose it, another member of each huddle restores
-your access automatically, and if no one can, those photos cannot be
-recovered — not even by us.
+your iCloud Keychain; if you lose it, another member of each huddle can
+restore your access after checking your new key code, and if no one can,
+those photos cannot be recovered — not even by us.
 
 **Notifications** are delivered through Apple's push notification service.
 They name the huddle and the member who posted, commented, reacted or
@@ -82,8 +86,8 @@ You can **delete your account at any time** from **Profile → Delete account**.
 When you do:
 
 - Your account, login, display name, bio, profile photos, push notification
-  tokens, and encryption keys are **permanently removed**, and you are
-  signed out.
+  tokens, encryption keys, and Terms agreement records are **permanently
+  removed**, and you are signed out.
 - We ask Apple to revoke the app's access to your Apple Account.
 - **Photos you already deposited remain in your shared huddles**, shown as
   "Former member" rather than under your name. This is required to keep the
@@ -101,7 +105,10 @@ You can **report** a photo and **block** another member from within the app
 person's photos and comments from you. We review reports and act on
 objectionable content. Because photos are end-to-end encrypted, reporting a
 photo shares that photo's decryption key with us so we can see it; we use it
-only to review the report.
+only to review the report and to meet our legal obligations, such as
+reporting child sexual abuse material to NCMEC. Reports stay on file even if
+the person who filed one, or the person reported, deletes their account,
+because the law can require us to keep reported material.
 
 ## Children
 

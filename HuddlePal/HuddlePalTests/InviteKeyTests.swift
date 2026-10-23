@@ -431,6 +431,9 @@ final class FakeHuddleServer: @unchecked Sendable {
     func setLegacy() { lock.withLock { activeInvite = nil; legacy = true; lookup = "CREW42" } }
     func putObject(_ data: Data, at path: String) { lock.withLock { objects[path] = data } }
     func failNextSaveOwnCopy() { lock.withLock { failSaveOwnCopy = true } }
+    /// Joined with an old code (or the server says so): no copy of the key.
+    func addMember(_ id: UUID) { lock.withLock { if !members.contains(id) { members.append(id) } } }
+    func removeKeyCopy(for id: UUID) { lock.withLock { keyCopies[id] = nil } }
     func keyCopy(for id: UUID) -> KeyCopy? { lock.withLock { keyCopies[id] } }
     func object(at path: String) -> Data? { lock.withLock { objects[path] } }
     func isMember(_ id: UUID) -> Bool { lock.withLock { members.contains(id) } }
@@ -505,7 +508,26 @@ final class FakeHuddleServer: @unchecked Sendable {
             legacy = false
             return .init(body: Data("null".utf8))
         case ("POST", "/rest/v1/rpc/huddle_key_recipients"):
-            return json([])
+            // Fellow members with a published key and no working copy.
+            guard members.contains(caller) else { return json([]) }
+            return json(members.compactMap { member -> [String: String]? in
+                guard member != caller, let key = userKeys[member],
+                      keyCopies[member]?.recipientPublicKey != key else { return nil }
+                return ["user_id": member.uuidString, "public_key": key]
+            })
+        case ("POST", "/rest/v1/rpc/share_huddle_key"):
+            guard members.contains(caller) else { return LiveStub.postgrestError("not_a_member") }
+            guard let recipient = UUID(uuidString: string("p_user")), members.contains(recipient) else {
+                return LiveStub.postgrestError("recipient_not_member")
+            }
+            guard userKeys[recipient] == string("p_recipient_public_key") else {
+                return LiveStub.postgrestError("stale_public_key")
+            }
+            keyCopies[recipient] = KeyCopy(
+                wrappedKey: string("p_wrapped_key"), ephemeralPublicKey: string("p_ephemeral_public_key"),
+                recipientPublicKey: string("p_recipient_public_key")
+            )
+            return .init(status: 204, body: Data())
         case ("POST", "/rest/v1/rpc/init_huddle_key"):
             return .init(body: Data("false".utf8))
         case ("GET", "/rest/v1/user_keys"):

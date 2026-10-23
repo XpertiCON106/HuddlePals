@@ -83,7 +83,9 @@ seeded **mock** world. No code changes to switch.
    end-to-end encrypted, so the dashboard can't show them: a report carries
    that one photo's key (`reports.photo_key`), and
    [`tools/decrypt_reported_photo`](tools/decrypt_reported_photo/README.md)
-   turns the downloaded Storage object back into a JPEG.
+   turns the downloaded Storage object back into a JPEG. A report stays when
+   its reporter (or the reported person) deletes their account, so what you
+   report to NCMEC stays reviewable for the year the law requires.
 
 ## Phase 2 — Point the app at it (~5 minutes)
 
@@ -238,8 +240,8 @@ seeded **mock** world. No code changes to switch.
   in their iCloud Keychain. New members get the huddle key from their
   invite code, so they see every photo at once. A member who loses their
   identity key (new phone with iCloud Keychain off, or a reinstall without
-  it) gets a new one and sees locked photos until another member's app
-  re-shares each huddle key.
+  it) gets a new one and sees locked photos until another member checks
+  their new key code and shares each huddle key.
   If *nobody* left in a huddle still holds its key, its photos are
   unrecoverable — by design, no one else can open them. Using one account
   on two devices needs iCloud Keychain on; without it, the device that

@@ -381,3 +381,47 @@ describe('skips, reports, blocks', () => {
     assert.equal(await affected(db, B, 'delete from blocks'), 0)
   })
 })
+
+describe('terms acceptances', () => {
+  const record = `insert into terms_acceptances (user_id, version, accepted_at, app_version)
+                  values ($1, $2, $3, '1.0 (10)') on conflict (user_id, version) do nothing`
+
+  it('you record your own, the server stamps when, and nobody else reads it', async () => {
+    const { db, A, B } = await world()
+    await q(db, A, record, [A, '2026-10-25', '2026-10-23T10:00:00Z'])
+    const [row] = await q(db, A, 'select * from terms_acceptances')
+    assert.equal(row.version, '2026-10-25')
+    assert.equal(row.accepted_at.toISOString(), '2026-10-23T10:00:00.000Z')
+    assert.ok(Math.abs(row.recorded_at - Date.now()) < 60_000, 'recorded_at is the server clock')
+    assert.deepEqual(await q(db, B, 'select * from terms_acceptances'), [])
+    assert.deepEqual(await q(db, null, 'select * from terms_acceptances'), [])
+  })
+
+  it('nobody records for someone else, backdates the server stamp, or changes a record', async () => {
+    const { db, A, B } = await world()
+    await assert.rejects(q(db, B, record, [A, '2026-10-25', '2026-10-23T10:00:00Z']), RLS_DENIED)
+    await assert.rejects(q(db, null, record, [A, '2026-10-25', '2026-10-23T10:00:00Z']), RLS_DENIED)
+    await assert.rejects(
+      q(db, A, `insert into terms_acceptances (user_id, version, accepted_at, recorded_at)
+                values ($1, '2026-10-25', now(), '2020-01-01')`, [A]),
+      RLS_DENIED,
+    )
+    await q(db, A, record, [A, '2026-10-25', '2026-10-23T10:00:00Z'])
+    assert.equal(await affected(db, A, `update terms_acceptances set accepted_at = '2020-01-01'`), 0)
+    assert.equal(await affected(db, A, 'delete from terms_acceptances'), 0)
+    assert.equal((await admin(db, 'select 1 from terms_acceptances')).length, 1)
+  })
+
+  it('recording the same version again changes nothing', async () => {
+    const { db, A } = await world()
+    await q(db, A, record, [A, '2026-10-25', '2026-10-23T10:00:00Z'])
+    await q(db, A, record, [A, '2026-10-25', '2026-10-24T10:00:00Z'])
+    const rows = await q(db, A, 'select accepted_at from terms_acceptances')
+    assert.deepEqual(rows.map((r) => r.accepted_at.toISOString()), ['2026-10-23T10:00:00.000Z'])
+  })
+
+  it('accepts only a date-shaped version', async () => {
+    const { db, A } = await world()
+    await assert.rejects(q(db, A, record, [A, 'latest', '2026-10-23T10:00:00Z']), /check constraint/)
+  })
+})

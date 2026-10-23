@@ -147,3 +147,18 @@ final class InMemoryIdentityStore: IdentityKeyStoring {
 
     func delete(for userID: UUID) { keys[userID] = nil }
 }
+
+/// Key-code checks in memory, for the same reason.
+final class InMemoryVerifiedKeys: VerifiedKeyStoring {
+    private var keys: [UUID: [UUID: Set<String>]] = [:]
+
+    func contains(_ publicKey: String, member: UUID, owner: UUID) -> Bool {
+        keys[owner]?[member]?.contains(publicKey) == true
+    }
+
+    func add(_ publicKey: String, member: UUID, owner: UUID) {
+        keys[owner, default: [:]][member, default: []].insert(publicKey)
+    }
+
+    func removeAll(owner: UUID) { keys[owner] = nil }
+}

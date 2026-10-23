@@ -47,15 +47,24 @@ struct HuddlePalApp: App {
                         Task {
                             await dependencies.reminders.refresh()
                             await dependencies.push.refresh()
+                            await dependencies.termsRecorder?.refresh()
                         }
                     }
                 }
                 .onChange(of: dependencies.session.currentUser?.id) { _, userID in
                     // Signed in (or switched account): register this device
-                    // for the account's notifications.
+                    // for the account's notifications, and record (or ask
+                    // for) its agreement to the Terms.
                     if userID != nil {
-                        Task { await dependencies.push.refresh() }
+                        Task {
+                            await dependencies.push.refresh()
+                            await dependencies.termsRecorder?.refresh()
+                        }
                     }
+                }
+                .onChange(of: dependencies.terms.acceptedAt) {
+                    // Agree tapped while signed in (a new version of the Terms).
+                    Task { await dependencies.termsRecorder?.refresh() }
                 }
         }
     }

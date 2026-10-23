@@ -273,7 +273,7 @@ describe('keeper succession', () => {
 })
 
 describe('account deletion (what the delete-account function triggers)', () => {
-  it('removes the profile, memberships, keys, devices, reactions; keeps photos and comments as Former member', async () => {
+  it('removes the profile, memberships, keys, devices, reactions, Terms records; keeps photos, comments and reports', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
@@ -283,15 +283,22 @@ describe('account deletion (what the delete-account function triggers)', () => {
     await q(db, B, `insert into comments (deposit_id, user_id, body) values ($1, $2, 'mine')`, [dep.id, B])
     await q(db, B, `insert into reactions (deposit_id, user_id, emoji) values ($1, $2, '🔥')`, [dep.id, B])
     await q(db, B, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [B, A])
-    await q(db, B, `insert into reports (reporter_id, deposit_id) values ($1, $2)`, [B, dep.id])
+    const photoKey = PUBLIC_KEY('K')
+    await q(db, B, `insert into reports (reporter_id, deposit_id, photo_key) values ($1, $2, $3)`, [B, dep.id, photoKey])
     await q(db, B, 'insert into user_keys (user_id, public_key) values ($1, $2)', [B, PUBLIC_KEY('B')])
     await q(db, B, `insert into device_tokens (user_id, token, environment) values ($1, $2, 'production')`, [B, 'b'.repeat(64)])
+    await q(db, B, `insert into terms_acceptances (user_id, version, accepted_at) values ($1, '2026-10-25', now())`, [B])
 
     await admin(db, 'delete from auth.users where id = $1', [B]) // auth.admin.deleteUser
 
-    for (const table of ['profiles where id', 'memberships where user_id', 'reactions where user_id', 'blocks where blocker_id', 'reports where reporter_id', 'user_keys where user_id', 'huddle_keys where user_id', 'device_tokens where user_id']) {
+    for (const table of ['profiles where id', 'memberships where user_id', 'reactions where user_id', 'blocks where blocker_id', 'reports where reporter_id', 'user_keys where user_id', 'huddle_keys where user_id', 'device_tokens where user_id', 'terms_acceptances where user_id']) {
       assert.deepEqual(await admin(db, `select 1 from ${table} = $1`, [B]), [], table)
     }
+    // The report stays, with the photo and its key: only the reporter is gone.
+    assert.deepEqual(
+      await admin(db, 'select reporter_id, deposit_id, photo_key from reports'),
+      [{ reporter_id: null, deposit_id: dep.id, photo_key: photoKey }],
+    )
     const [d] = await admin(db, 'select author_id from deposits where id = $1', [dep.id])
     assert.equal(d.author_id, null)
     const [c] = await admin(db, 'select user_id, body from comments where deposit_id = $1', [dep.id])
@@ -299,6 +306,24 @@ describe('account deletion (what the delete-account function triggers)', () => {
     // The remaining member still sees the photo and comment.
     assert.equal((await q(db, A, 'select * from deposits')).length, 1)
     assert.equal((await q(db, A, 'select * from comments')).length, 1)
+  })
+
+  it('a report survives the reported person deleting their account too', async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const h = await createHuddle(db, A)
+    await joinHuddle(db, B, h.invite_code)
+    const dep = await deposit(db, B, h.id, await serverToday(db))
+    await q(db, A, `insert into reports (reporter_id, deposit_id, reported_user_id) values ($1, $2, $3)`, [A, dep.id, B])
+
+    await admin(db, 'delete from auth.users where id = $1', [B])
+
+    assert.deepEqual(
+      await admin(db, 'select reporter_id, deposit_id, reported_user_id from reports'),
+      [{ reporter_id: A, deposit_id: dep.id, reported_user_id: null }],
+      'the photo itself stays too, so the report still points at it',
+    )
   })
 
   it('a keeper deleting their account hands the huddle to the next member', async () => {

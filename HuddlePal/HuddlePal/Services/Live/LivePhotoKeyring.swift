@@ -4,13 +4,17 @@ import Foundation
 enum PhotoKeyError: LocalizedError {
     case huddleKeyUnavailable
     case photoTooLarge
+    /// Their key changed again while the code was being checked.
+    case keyChanged
 
     var errorDescription: String? {
         switch self {
         case .huddleKeyUnavailable:
-            "This huddle's key isn't on this device yet, so its photos can't be posted or opened here. Try again in a moment."
+            "This huddle's key isn't on this device yet, so its photos can't be posted or opened here. Try again in a moment. If it keeps happening, ask someone in the huddle to check your key code (it's in Profile)."
         case .photoTooLarge:
             "That photo is too large to upload."
+        case .keyChanged:
+            "Their key just changed, so that code is out of date. Open the huddle again to check the new one."
         }
     }
 }
@@ -19,14 +23,15 @@ enum PhotoKeyError: LocalizedError {
 /// `InviteCrypto`): this device's identity key, the huddle keys it has
 /// unwrapped and the invite codes it has opened — in memory only, never
 /// UserDefaults or SwiftData — plus issuing and redeeming invites, and
-/// sharing huddle keys with members who joined before invites carried them.
-/// Every network step is best effort: the next foreground or huddle open
-/// retries it.
+/// sharing huddle keys with members who joined without one, once someone has
+/// checked their key code (`KeyCode`). Every network step is best effort: the
+/// next foreground or huddle open retries it.
 @MainActor
 final class LivePhotoKeyring {
     private let client: SupabaseClient
     private let session: AppSession
     private let identityStore: IdentityKeyStoring
+    private let verifiedKeys: VerifiedKeyStoring
 
     private var identity: (userID: UUID, key: Curve25519.KeyAgreement.PrivateKey)?
     /// The user whose public key the server is known to hold, this launch.
@@ -37,11 +42,20 @@ final class LivePhotoKeyring {
     /// Huddles whose key came from an invite and whose own wrapped copy the
     /// server hasn't confirmed yet. `sync` retries until it has.
     private var unsavedOwnCopies: Set<UUID> = []
+    /// Per huddle: members waiting for its key whose key nobody has checked,
+    /// as of the last share pass.
+    private var pendingChecks: [UUID: [KeyCheck]] = [:]
 
-    init(client: SupabaseClient, session: AppSession, identityStore: IdentityKeyStoring = IdentityKeychain()) {
+    init(
+        client: SupabaseClient,
+        session: AppSession,
+        identityStore: IdentityKeyStoring = IdentityKeychain(),
+        verifiedKeys: VerifiedKeyStoring = VerifiedKeychain()
+    ) {
         self.client = client
         self.session = session
         self.identityStore = identityStore
+        self.verifiedKeys = verifiedKeys
     }
 
     // MARK: - Identity
@@ -60,7 +74,8 @@ final class LivePhotoKeyring {
                 // lost its key, or another device without iCloud Keychain
                 // published its own). This device can only open copies
                 // wrapped for its own key, so publish it: copies wrapped for
-                // the old one go stale, and members' apps re-share.
+                // the old one go stale, and members' apps re-share once
+                // someone checks this key's code.
                 let _: [UserKeyDTO] = try await client.upsert(
                     "user_keys",
                     values: UserKeyDTO(userId: userID, publicKey: mine),
@@ -139,7 +154,7 @@ final class LivePhotoKeyring {
 
         for huddleID in huddleIDs {
             if let key = huddleKeys[huddleID] {
-                await share(key, huddleID: huddleID)
+                await share(key, huddleID: huddleID, userID: userID)
             }
         }
         // Lets photos that showed the locked placeholder try again.
@@ -149,7 +164,8 @@ final class LivePhotoKeyring {
     /// The huddle's first key, wrapped for this user. The RPC refuses (false)
     /// once any member holds a copy — a huddle key is shared, never replaced.
     /// (A member who joined with an invite already has the key; one who
-    /// joined with an old code gets it from `share` on a member's device.)
+    /// joined with an old code gets it from `share` on a member's device,
+    /// once someone checks their key code.)
     private func createFirstHuddleKey(
         _ huddleID: UUID,
         userID: UUID,
@@ -172,27 +188,80 @@ final class LivePhotoKeyring {
 
     /// The fallback for members without a working copy — no copy (joined with
     /// an old code, or their own copy never reached the server) or only a
-    /// stale one (they re-keyed): wraps the huddle key for each of them.
-    private func share(_ huddleKey: SymmetricKey, huddleID: UUID) async {
+    /// stale one (they re-keyed). Who they are and which public key is theirs
+    /// both come from the server, which mustn't be able to slip in a key of
+    /// its own and be handed the huddle key. So the key goes automatically
+    /// only to a public key this account has confirmed by key code; anyone
+    /// else waits in `keyChecks` until a member checks them.
+    private func share(_ huddleKey: SymmetricKey, huddleID: UUID, userID: UUID) async {
         guard let recipients: [KeyRecipientDTO] = try? await client.rpc(
             "huddle_key_recipients", params: ["p_huddle": huddleID.uuidString]
         ) else { return }
+        var waiting: [KeyCheck] = []
         for recipient in recipients {
-            guard let publicKey = try? PhotoCrypto.publicKey(from: recipient.publicKey),
-                  let wrapped = try? PhotoCrypto.wrapHuddleKey(
-                      huddleKey, for: publicKey, huddleID: huddleID, recipientID: recipient.userId
-                  )
-            else { continue }
-            // One at a time: a refused share (say they re-keyed a moment
-            // ago) mustn't hold up the other members.
-            try? await client.rpcVoid("share_huddle_key", params: [
-                "p_huddle": huddleID.uuidString,
-                "p_user": recipient.userId.uuidString,
-                "p_wrapped_key": wrapped.wrappedKey,
-                "p_ephemeral_public_key": wrapped.ephemeralPublicKey,
-                "p_recipient_public_key": recipient.publicKey,
-            ])
+            guard let publicKey = try? PhotoCrypto.publicKey(from: recipient.publicKey) else { continue }
+            if verifiedKeys.contains(recipient.publicKey, member: recipient.userId, owner: userID) {
+                // One at a time: a refused share (say they re-keyed a moment
+                // ago) mustn't hold up the other members.
+                try? await send(huddleKey, to: recipient.userId, publicKey: publicKey, huddleID: huddleID)
+            } else {
+                waiting.append(KeyCheck(
+                    userID: recipient.userId,
+                    publicKey: recipient.publicKey,
+                    code: KeyCode.code(for: publicKey, userID: recipient.userId)
+                ))
+            }
         }
+        pendingChecks[huddleID] = waiting
+    }
+
+    private func send(
+        _ huddleKey: SymmetricKey,
+        to member: UUID,
+        publicKey: Curve25519.KeyAgreement.PublicKey,
+        huddleID: UUID
+    ) async throws {
+        let wrapped = try PhotoCrypto.wrapHuddleKey(huddleKey, for: publicKey, huddleID: huddleID, recipientID: member)
+        try await client.rpcVoid("share_huddle_key", params: [
+            "p_huddle": huddleID.uuidString,
+            "p_user": member.uuidString,
+            "p_wrapped_key": wrapped.wrappedKey,
+            "p_ephemeral_public_key": wrapped.ephemeralPublicKey,
+            "p_recipient_public_key": PhotoCrypto.encode(publicKey),
+        ])
+    }
+
+    // MARK: - Key codes
+
+    /// Members of the huddle waiting on a key code check, from the last pass.
+    func keyChecks(for huddleID: UUID) -> [KeyCheck] {
+        pendingChecks[huddleID] ?? []
+    }
+
+    /// Someone in the huddle compared codes with the member and they match:
+    /// trust that key from now on, and share the huddle key with it now.
+    func confirmKeyCheck(_ check: KeyCheck, huddleID: UUID) async throws {
+        guard let userID = await client.currentUserID else { throw SupabaseClient.ClientError.notAuthenticated }
+        guard let huddleKey = huddleKeys[huddleID] else { throw PhotoKeyError.huddleKeyUnavailable }
+        let publicKey = try PhotoCrypto.publicKey(from: check.publicKey)
+        // The code on screen is the one computed from this key; never trust
+        // a check whose code says otherwise.
+        guard KeyCode.code(for: publicKey, userID: check.userID) == check.code else { throw PhotoKeyError.keyChanged }
+        verifiedKeys.add(check.publicKey, member: check.userID, owner: userID)
+        do {
+            try await send(huddleKey, to: check.userID, publicKey: publicKey, huddleID: huddleID)
+        } catch let SupabaseClient.ClientError.http(_, message) where message.contains("stale_public_key") {
+            throw PhotoKeyError.keyChanged
+        }
+        pendingChecks[huddleID]?.removeAll { $0.userID == check.userID }
+    }
+
+    /// This account's own code, for others to check (Profile shows it). It
+    /// matches theirs only while the server holds this device's public key,
+    /// which every sync makes sure of.
+    func ownKeyCode() async -> String? {
+        guard let userID = await client.currentUserID, let identity = localIdentity(for: userID) else { return nil }
+        return KeyCode.code(for: identity.publicKey, userID: userID)
     }
 
     // MARK: - Invites
@@ -332,12 +401,14 @@ final class LivePhotoKeyring {
         huddleKeys = [:]
         inviteCodes = [:]
         unsavedOwnCopies = []
+        pendingChecks = [:]
     }
 
-    /// Account deletion: the identity key goes too. (Its `user_keys` /
-    /// `huddle_keys` rows cascade with the auth user.)
+    /// Account deletion: the identity key goes too, and the keys it checked.
+    /// (Its `user_keys` / `huddle_keys` rows cascade with the auth user.)
     func forgetIdentity(for userID: UUID) {
         identityStore.delete(for: userID)
+        verifiedKeys.removeAll(owner: userID)
         reset()
     }
 }

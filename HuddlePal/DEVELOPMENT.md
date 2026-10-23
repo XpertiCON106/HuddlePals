@@ -74,6 +74,7 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   | `MediaServiceProtocol` | files in `Documents/Media` | Storage plus the same cache; encrypts huddle photos |
   | `ModerationServiceProtocol` | blocks in UserDefaults | `reports`, `blocks` |
   | `PushTokenServiceProtocol` | remembered in memory | `device_tokens` (used only inside `deps.push`) |
+  | `TermsRecordServiceProtocol` | not used (no recorder) | `terms_acceptances` (used only inside `deps.termsRecorder`) |
 
   Live also has `LivePhotoKeyring` (identity key, huddle keys, invites),
   shared by the live services and deliberately not a protocol: the mock has
@@ -162,18 +163,30 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
   retires it). The keeper's **New invite code** revokes the old one. If a
   huddle ever gets a new key (only when nobody left holds the old one), its
   invite is dropped and the next member to open it issues a new one.
-- **Fallback**: on foreground and huddle open, members' apps still share the
-  key with anyone without a working copy (`huddle_key_recipients` →
-  `share_huddle_key`): people who joined with an old code, or who lost
-  their identity key.
+- **Fallback, after a key-code check**: on foreground and huddle open,
+  members' apps find anyone without a working copy (`huddle_key_recipients`):
+  people who joined with an old code, or who lost their identity key. The
+  server names them and their public key, so the app shares the huddle key
+  (`share_huddle_key`) only with a key some member has checked by comparing
+  key codes (`KeyCode`, 30 digits from the account and its public key; each
+  user's own is in Profile). Anyone else shows under **Waiting for the huddle
+  key** in the huddle's settings, with a banner on its home screen, until a
+  member checks them. Checked keys live in the Keychain (`VerifiedKeychain`,
+  synced like the identity key), so a re-share to the same key needs no new
+  check; a changed key does. This is what stops the server, or anyone with
+  its database, from slipping in a key of its own.
 - **Not encrypted**: captions, comments, reactions, huddle names, profiles,
   avatars and all metadata. Mock mode stores photos as they are.
 
 ## Auth
 
 - **Terms first**: the full Terms (`Legal/TermsOfService.md`) with Agree,
-  enabled only after scrolling to the end. Acceptance is device-local
-  (`TermsAcceptance`). A material change to the Terms must bump
+  enabled only after scrolling to the end. The gate is device-local
+  (`TermsAcceptance`); once someone is signed in, `TermsRecorder` records
+  the agreement in `terms_acceptances` (account, version, when Agree was
+  tapped, app build; the server stamps `recorded_at`). The first account
+  signed in after Agree claims it; another account on the same device sees
+  the Terms again. Live only. A material change to the Terms must bump
   `TermsOfService.version` (a test compares it with "Last updated"), and
   the same text belongs at huddlepals.com/terms.
 - **Onboarding**: Terms → welcome cards → Sign in with Apple → profile
@@ -235,7 +248,7 @@ codes, tokens and keys are never logged.
   writable by the owner. Uploads are plain inserts: **never send
   `x-upsert`** (permanence, and huddle paths have no update policy).
 - **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
-  (001–009, idempotent, run in order) upgrades the deployed one;
+  (001–011, idempotent, run in order) upgrades the deployed one;
   `supabase/scripts/reset_database.sql` wipes an old database for a fresh
   start. Writes that need rules RLS can't express go through SECURITY
   DEFINER functions (key sharing, invites, joins, skips, streaks).

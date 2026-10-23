@@ -59,6 +59,12 @@ private struct HomeContent: View {
                     }
                 }
 
+                if let summary = viewModel.keyCheckSummary {
+                    KeyCheckBanner(message: summary) {
+                        router.huddlesPath.append(.huddleSettings(viewModel.huddle))
+                    }
+                }
+
                 if !viewModel.hasLoaded {
                     if viewModel.loadError == nil {
                         ProgressView()
@@ -355,5 +361,37 @@ private struct UnlockRevealOverlay: View {
                 onFinished()
             }
         }
+    }
+}
+
+/// Someone in the huddle is waiting for its key until a member checks their
+/// key code. Opens the huddle's settings, where the check is.
+private struct KeyCheckBanner: View {
+    let message: String
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 10) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .accessibilityHidden(true)
+                Text(message)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.textPrimary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Check")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(minHeight: 44)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .cardSurface()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the huddle's settings to check their key code.")
     }
 }

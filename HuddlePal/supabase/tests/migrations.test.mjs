@@ -91,6 +91,24 @@ describe('migrations', () => {
     assert.equal((await q(db, A, 'select * from huddle_keys')).length, 1, 'current members keep theirs')
   })
 
+  it('reports filed before the fix survive their reporter deleting the account', async () => {
+    const { PGlite } = await import('@electric-sql/pglite')
+    const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto')
+    const { STUB_SQL, DEPLOYED_SQL, signUp, createHuddle, joinHuddle, deposit, serverToday, q } = await import('./harness.mjs')
+    const db = new PGlite({ extensions: { pgcrypto } })
+    await db.exec(STUB_SQL)
+    await db.exec(DEPLOYED_SQL)
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const h = await createHuddle(db, A)
+    await joinHuddle(db, B, h.invite_code)
+    const dep = await deposit(db, A, h.id, await serverToday(db))
+    await q(db, B, 'insert into reports (reporter_id, deposit_id) values ($1, $2)', [B, dep.id])
+    for (const { sql } of migrations()) await db.exec(sql)
+    await admin(db, 'delete from auth.users where id = $1', [B])
+    assert.deepEqual(await admin(db, 'select reporter_id, deposit_id from reports'), [{ reporter_id: null, deposit_id: dep.id }])
+  })
+
   it('every migration can be applied twice', async () => {
     const db = await freshDatabase({ mode: 'migrated' })
     for (const { name, sql } of migrations()) {

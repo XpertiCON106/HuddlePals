@@ -492,7 +492,10 @@ grant execute on function public.release_storage_objects(uuid) to service_role;
 
 create table public.reports (
   id uuid primary key default gen_random_uuid(),
-  reporter_id uuid not null references public.profiles (id) on delete cascade,
+  -- SET NULL, not CASCADE: a report outlives its reporter's account. What
+  -- the operator reports to NCMEC must be kept for a year (18 U.S.C.
+  -- 2258A(h)), and photo_key is the only way to open the photo again.
+  reporter_id uuid references public.profiles (id) on delete set null,
   deposit_id uuid references public.deposits (id) on delete set null,
   reported_user_id uuid references public.profiles (id) on delete set null,
   reason text check (reason is null or char_length(reason) <= 300),
@@ -529,6 +532,37 @@ create policy blocks_insert on public.blocks for insert
 create policy blocks_delete on public.blocks for delete
   using (blocker_id = auth.uid());
 
+-- ==================================================== terms of service
+-- Which version of the Terms each account agreed to, and when: the record
+-- the app writes once someone who tapped Agree is signed in (TermsRecorder).
+-- One row per account and version. The app never changes or removes one; it
+-- goes with the account.
+
+create table public.terms_acceptances (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  -- TermsOfService.version: the Terms' "Last updated" date.
+  version text not null check (version ~ '^\d{4}-\d{2}-\d{2}$'),
+  -- When Agree was tapped, by the device's clock.
+  accepted_at timestamptz not null,
+  -- When the server stored the record, by its own clock.
+  recorded_at timestamptz not null default now(),
+  -- The app's version and build, e.g. "1.0 (10)".
+  app_version text check (app_version is null or char_length(app_version) <= 40),
+  primary key (user_id, version)
+);
+
+alter table public.terms_acceptances enable row level security;
+
+-- Record your own and read them back; no updates, no deletes.
+create policy terms_acceptances_select_own on public.terms_acceptances for select
+  using (user_id = auth.uid());
+create policy terms_acceptances_insert_own on public.terms_acceptances for insert
+  with check (user_id = auth.uid());
+
+-- recorded_at is the server's clock, never the app's.
+revoke insert on public.terms_acceptances from anon, authenticated;
+grant insert (user_id, version, accepted_at, app_version) on public.terms_acceptances to authenticated;
+
 -- ============================================ end-to-end encrypted photos
 -- The operator (anyone with dashboard / service-role access) must not be able
 -- to view deposited photos, so Storage holds only ciphertext and every key is
@@ -545,7 +579,9 @@ create policy blocks_delete on public.blocks for delete
 -- then wraps for itself. Members who joined before that (or replaced their
 -- identity key) are still served by an existing member's app wrapping it for
 -- them (huddle_key_recipients → share_huddle_key) on foreground / huddle
--- open. Writes go through SECURITY DEFINER RPCs because the rules ("only for
+-- open, but only for a public key some member has checked by comparing key
+-- codes in the app (KeyCode): this table hands out public keys, so without
+-- that check whoever controls it could slip in its own. Writes go through SECURITY DEFINER RPCs because the rules ("only for
 -- a fellow member's CURRENT key", "never overwrite someone else's working
 -- copy") can't be expressed as plain RLS when nobody may SELECT another
 -- member's row.
@@ -628,7 +664,9 @@ end $$;
 
 -- Fellow members still waiting for the huddle key: they published a public
 -- key but hold no copy, or only a stale one. Reveals nothing secret — just
--- who needs a share — and only to members of that huddle.
+-- who needs a share — and only to members of that huddle. The app shares
+-- only with keys its user has checked by key code, so a row here alone
+-- gets nobody the key.
 create or replace function public.huddle_key_recipients(p_huddle uuid)
 returns table (user_id uuid, public_key text)
 language sql stable security definer set search_path = public as $$

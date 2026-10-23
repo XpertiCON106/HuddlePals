@@ -135,6 +135,15 @@ struct DeviceTokenDTO: Codable {
     let environment: String
 }
 
+/// `terms_acceptances`: one account's agreement to one version of the Terms.
+/// `recorded_at` is the server's to set, so it isn't here.
+struct TermsAcceptanceDTO: Codable {
+    let userId: UUID
+    let version: String
+    let acceptedAt: Date
+    let appVersion: String?
+}
+
 struct BlockDTO: Codable {
     let id: UUID
     let blockerId: UUID

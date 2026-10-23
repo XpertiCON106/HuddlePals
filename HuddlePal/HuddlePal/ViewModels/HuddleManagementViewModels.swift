@@ -130,10 +130,41 @@ final class HuddleSettingsViewModel {
     private(set) var isResettingInvite = false
     /// Why the invite isn't shown, or why a reset failed.
     private(set) var inviteMessage: String?
+    /// Members waiting for the huddle's key until someone checks their code.
+    private(set) var keyChecks: [KeyCheck] = []
+    private(set) var isConfirmingKeyCheck = false
+    /// Why sharing the key after a check failed.
+    private(set) var keyCheckMessage: String?
 
     init(deps: AppDependencies, huddle: Huddle) {
         self.deps = deps
         self.huddle = huddle
+    }
+
+    func loadKeyChecks() async {
+        keyChecks = await deps.huddleService.keyChecks(for: huddle)
+    }
+
+    /// The name to ask for: whoever the huddle lists under that account.
+    func name(for check: KeyCheck) -> String {
+        huddle.members.first { $0.id == check.userID }?.displayName ?? "A new member"
+    }
+
+    /// Codes matched: the key goes to them. False if it didn't.
+    func confirm(_ check: KeyCheck) async -> Bool {
+        guard !isConfirmingKeyCheck else { return false }
+        isConfirmingKeyCheck = true
+        defer { isConfirmingKeyCheck = false }
+        do {
+            try await deps.huddleService.confirmKeyCheck(check, in: huddle)
+            keyChecks.removeAll { $0.userID == check.userID }
+            keyCheckMessage = nil
+            Haptics.success()
+            return true
+        } catch {
+            keyCheckMessage = error.localizedDescription
+            return false
+        }
     }
 
     var inviteShareURL: URL? {

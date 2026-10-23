@@ -162,6 +162,14 @@ final class ProfileViewModel {
     /// When this device agreed to the current Terms of Service.
     var termsAcceptedAt: Date? { deps.terms.acceptedAt }
 
+    /// What this person reads out when someone in a huddle checks their key
+    /// before sharing the huddle's key with this phone. nil in mock mode.
+    private(set) var keyCode: String?
+
+    func loadKeyCode() async {
+        keyCode = await deps.huddleService.ownKeyCode()
+    }
+
     var bioRemaining: Int { AuthValidation.bioLimit - bio.serverLength }
     var canAddPhotos: Bool {
         draftPhotos.count < AuthValidation.maxProfilePhotos && !isWorking

@@ -34,6 +34,18 @@ enum HuddleServiceError: LocalizedError {
     }
 }
 
+/// Someone waiting for a huddle's key whose key code nobody on this device
+/// has confirmed yet: they joined with an old code, or their key changed.
+/// `code` is computed here from the public key the server lists for them.
+struct KeyCheck: Identifiable, Hashable {
+    let userID: UUID
+    /// Base64, as `user_keys` holds it.
+    let publicKey: String
+    let code: String
+
+    var id: String { "\(userID.uuidString):\(publicKey)" }
+}
+
 @MainActor
 protocol HuddleServiceProtocol: AnyObject {
     func huddles(for user: User) async throws -> [Huddle]
@@ -57,6 +69,15 @@ protocol HuddleServiceProtocol: AnyObject {
     /// Recomputes and persists the group streak. Called on launch and after
     /// every deposit.
     func recomputeStreak(for huddle: Huddle, now: Date) async throws
+    /// Members waiting for this huddle's key until someone checks their key
+    /// code, as of the last time the huddle was opened. None in mock mode,
+    /// which has no keys.
+    func keyChecks(for huddle: Huddle) async -> [KeyCheck]
+    /// The member's own phone shows the same code: share the huddle key with
+    /// them, and trust that key from now on.
+    func confirmKeyCheck(_ check: KeyCheck, in huddle: Huddle) async throws
+    /// This account's key code, for members checking it. nil in mock mode.
+    func ownKeyCode() async -> String?
 }
 
 // MARK: - Skip ledger
@@ -219,6 +240,11 @@ final class MockHuddleService: HuddleServiceProtocol {
         huddle.lastStreakDate = result.lastCompleteDayKey.flatMap { engine.date(fromDayKey: $0) }
         try context.save()
     }
+
+    // The offline world has no keys to share or check.
+    func keyChecks(for huddle: Huddle) async -> [KeyCheck] { [] }
+    func confirmKeyCheck(_ check: KeyCheck, in huddle: Huddle) async throws {}
+    func ownKeyCode() async -> String? { nil }
 
     /// Unique by lookup part, like `huddles.invite_code`.
     private func uniqueInviteCode() throws -> InviteCode {

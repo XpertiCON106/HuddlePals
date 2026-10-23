@@ -203,6 +203,20 @@ final class LiveHuddleService: HuddleServiceProtocol {
         try store.save()
     }
 
+    /// What the keyring found on its last pass over the huddle (every open
+    /// of it syncs its keys): no request of its own.
+    func keyChecks(for huddle: Huddle) async -> [KeyCheck] {
+        keyring.keyChecks(for: huddle.id)
+    }
+
+    func confirmKeyCheck(_ check: KeyCheck, in huddle: Huddle) async throws {
+        try await keyring.confirmKeyCheck(check, huddleID: huddle.id)
+    }
+
+    func ownKeyCode() async -> String? {
+        await keyring.ownKeyCode()
+    }
+
     private func syncSingleHuddle(_ dto: HuddleDTO) async throws -> Huddle {
         let huddle = try store.apply(dto)
         let memberships: [MembershipDTO] = try await client.select("memberships", query: [

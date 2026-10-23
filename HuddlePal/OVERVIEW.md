@@ -170,7 +170,7 @@ The decision happens once, at launch, in `HuddlePalApp.init`: if a `HuddlePal/Hu
 
 ## 6. Data model
 
-Six SwiftData `@Model` classes ([Models/SchemaModels.swift](HuddlePal/Models/SchemaModels.swift)), mirrored by Postgres tables in [schema.sql](supabase/schema.sql). The server also has `skips`, `reports`, `blocks`, the encryption keys (`user_keys`, `huddle_keys`, `huddle_invite_keys`), and `device_tokens`, which have no local model:
+Six SwiftData `@Model` classes ([Models/SchemaModels.swift](HuddlePal/Models/SchemaModels.swift)), mirrored by Postgres tables in [schema.sql](supabase/schema.sql). The server also has `skips`, `reports`, `blocks`, the encryption keys (`user_keys`, `huddle_keys`, `huddle_invite_keys`), `device_tokens` and `terms_acceptances`, which have no local model:
 
 ```mermaid
 erDiagram
@@ -308,7 +308,7 @@ Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤8 people
 
 Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sql](supabase/schema.sql)) run once in the Supabase SQL editor. Three pillars:
 
-**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `join_attempts`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
+**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `join_attempts`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
 
 **Row Level Security** — privacy *is* the product, so the database enforces it even against a malicious client (the anon key ships in the binary by design; RLS is the boundary):
 
@@ -324,6 +324,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | huddle_keys | only your own wrapped copies | via `init_huddle_key` / `save_own_huddle_key` / `share_huddle_key` only |
 | huddle_invite_keys | nobody (no policies, no privileges) | via the invite RPCs only |
 | device_tokens | your own | your own |
+| terms_acceptances | your own | insert your own (the server stamps `recorded_at`); no updates or deletes |
 | storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
 
 Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, `can_see_deposit`) are `SECURITY DEFINER` — the standard way to avoid the memberships-policy-reads-memberships RLS recursion trap.
@@ -341,7 +342,7 @@ Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, 
 | `spend_skip_token(huddle, user, day)` | Decrements tokens and records the skip atomically |
 | `recompute_streak(huddle, today)` | Walks full deposit+skip history day by day (`huddle_day_complete`) — mirrors `HuddleEngine` exactly; the server's answer is canonical so every phone agrees |
 | `init_huddle_key(huddle, wrapped key…)` | Stores a huddle's *first* key, wrapped for the caller; refuses once any member holds a copy (a key is shared, never replaced) |
-| `huddle_key_recipients(huddle)` | Members without a working copy (joined with an old code, or replaced their identity key): the fallback |
+| `huddle_key_recipients(huddle)` | Members without a working copy (joined with an old code, or replaced their identity key): the fallback, shared with only after a key-code check |
 | `share_huddle_key(huddle, user, wrapped key…)` | A member stores a copy for a fellow member's current public key; never overwrites someone else's working copy |
 
 The join RPCs take the caller's local today (`day_key`) and store it as the membership's `joined_day_key`. The server trusts it within ±1 day of its own date (`client_day_key`), the same window `recompute_streak` allows. If it's missing or out of range, the server's date is used instead.
@@ -370,7 +371,7 @@ sequenceDiagram
     B->>DB: save_own_huddle_key(copy wrapped for B's identity key)
 ```
 
-From then on B's access is its own `huddle_keys` copy, as for every member. Members' apps still wrap the key for anyone without a working copy ([`share_huddle_key`](supabase/schema.sql), on foreground and huddle open) — people who joined with an old 6-character code, and a user who loses their identity key (for example a new phone with iCloud Keychain off), whose old copies go stale until that pass re-shares them. Captions, comments, reactions, huddle names, profiles, and avatars are *not* encrypted.
+From then on B's access is its own `huddle_keys` copy, as for every member. Members' apps still wrap the key for anyone without a working copy ([`share_huddle_key`](supabase/schema.sql), on foreground and huddle open) — people who joined with an old 6-character code, and a user who loses their identity key (for example a new phone with iCloud Keychain off) — but only once a member has checked that person's key code ([`KeyCode`](HuddlePal/Services/Live/KeyVerification.swift)): the server lists who needs a copy and their public key, so an unchecked key could be one the server slipped in. Captions, comments, reactions, huddle names, profiles, and avatars are *not* encrypted.
 
 The Swift side talks to all of this through [`SupabaseClient`](HuddlePal/Services/Live/SupabaseClient.swift) — a ~400-line, zero-dependency `URLSession` client for exactly the GoTrue/PostgREST/Storage surface HuddlePals needs, with snake_case Codable mapping and ISO-8601 date handling.
 

@@ -115,6 +115,26 @@ final class LiveServiceTests: XCTestCase {
 
     // MARK: Account deletion (QA-20)
 
+    func testTheTermsRecordLeavesAnExistingRowAndTheServerClockAlone() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        StubURLProtocol.respond { _ in .init(body: LiveStub.json([])) }
+        let tapped = Date(timeIntervalSince1970: 1_792_700_000)
+
+        try await LiveTermsRecordService(client: client).record(version: "2026-10-25", acceptedAt: tapped, appVersion: "1.0 (10)")
+
+        let request = try XCTUnwrap(StubURLProtocol.requests.last)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.path, "/rest/v1/terms_acceptances")
+        XCTAssertEqual(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "user_id,version")
+        XCTAssertTrue(request.value(forHTTPHeaderField: "Prefer")?.contains("resolution=ignore-duplicates") == true)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])
+        XCTAssertEqual(body["user_id"] as? String, me.id.uuidString)
+        XCTAssertEqual(body["version"] as? String, "2026-10-25")
+        XCTAssertEqual(body["app_version"] as? String, "1.0 (10)")
+        XCTAssertEqual(body["accepted_at"] as? String, ISO8601DateFormatter().string(from: tapped))
+        XCTAssertNil(body["recorded_at"], "the server's clock, not the app's")
+    }
+
     func testDeletingTheAccountSendsApplesCodeToTheServer() async throws {
         let client = try await LiveStub.signedInClient(userID: me.id)
         StubURLProtocol.respond { _ in .init(body: Data(#"{"ok":true}"#.utf8)) }

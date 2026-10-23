@@ -36,5 +36,6 @@ final class RootViewModel {
         // register for activity notifications if they're allowed (never asks).
         await deps.reminders.refresh()
         await deps.push.refresh()
+        await deps.termsRecorder?.refresh()
     }
 }

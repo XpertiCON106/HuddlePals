@@ -77,6 +77,9 @@ private struct ProfileContent: View {
             notificationsSection
             reminderSection
             appearanceSection
+            if let code = viewModel.keyCode {
+                keyCodeSection(code)
+            }
             accountSection
             #if DEBUG
             // Compile-time gated on top of the runtime backend check: the
@@ -102,6 +105,7 @@ private struct ProfileContent: View {
         .task {
             await viewModel.loadInitialState()
             await viewModel.refreshReminderStatus()
+            await viewModel.loadKeyCode()
         }
         .alert(
             "Confirm Changes",
@@ -413,6 +417,24 @@ private struct ProfileContent: View {
             Text("Appearance")
         } footer: {
             Text("System follows your device's light/dark setting.")
+        }
+    }
+
+    private func keyCodeSection(_ code: String) -> some View {
+        Section {
+            Text(KeyCode.twoLines(code))
+                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .textSelection(.enabled)
+                .accessibilityLabel("Key code \(code)")
+                .accessibilityIdentifier("keyCode")
+                .listRowBackground(Theme.surface)
+        } header: {
+            Text("Key code")
+        } footer: {
+            Text("If someone in a huddle asks for your key code, read this to them in person or on a call. It lets them check it's really you before they share the huddle's key with this phone.")
         }
     }
 

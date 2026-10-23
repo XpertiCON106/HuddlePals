@@ -15,8 +15,8 @@ protocol IdentityKeyStoring {
 /// The identity key in the Keychain, one item per account. Unlike the
 /// session (`KeychainStore`, ThisDeviceOnly) it is synchronizable: iCloud
 /// Keychain carries it to the user's other devices and it survives a
-/// reinstall — losing it means waiting for a huddle member to re-share every
-/// huddle key. Only account deletion removes it, never sign-out.
+/// reinstall — losing it means waiting for a huddle member to check the new
+/// key's code and re-share every huddle key. Only account deletion removes it, never sign-out.
 struct IdentityKeychain: IdentityKeyStoring {
     private static let service = "com.huddlepals.ios.identity"
 

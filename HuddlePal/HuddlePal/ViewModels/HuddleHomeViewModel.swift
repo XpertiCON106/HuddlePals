@@ -23,6 +23,17 @@ final class HuddleHomeViewModel {
     /// The last refresh failed (offline, server error). The screen keeps
     /// its last state and says so.
     private(set) var loadError: String?
+    /// Members waiting for the huddle's key until someone checks their key
+    /// code (in the huddle's settings).
+    private(set) var keyChecks: [KeyCheck] = []
+
+    /// "Ben is waiting…" / "2 members are waiting…"
+    var keyCheckSummary: String? {
+        guard let first = keyChecks.first else { return nil }
+        if keyChecks.count > 1 { return "\(keyChecks.count) members are waiting for this huddle's key." }
+        let name = members.first { $0.id == first.userID }?.displayName ?? "A new member"
+        return "\(name) is waiting for this huddle's key."
+    }
 
     var showCompose = false
 
@@ -93,6 +104,8 @@ final class HuddleHomeViewModel {
                 skips: skips,
                 now: deps.dateProvider.now
             )
+            // Found by the key sync that loading the deposits just ran.
+            keyChecks = await deps.huddleService.keyChecks(for: huddle)
             hasLoaded = true
             loadError = nil
         } catch {
