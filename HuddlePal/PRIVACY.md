@@ -51,11 +51,12 @@ members' apps automatically share the huddle key with the devices our
 servers list for that huddle's members. End-to-end encryption therefore
 depends on the integrity of those systems, as Section 3.3 of our
 [Terms of Service](https://huddlepals.com/terms) explains. A huddle's invite
-code carries what a new member needs to decrypt its photos, without our servers ever seeing it, so share the code
-only with people you'd invite; the huddle's keeper can replace it at any
-time. Your encryption key is kept in your iCloud Keychain; if you lose it,
-another member of each huddle restores your access automatically, and if no
-one can, those photos cannot be recovered — not even by us.
+code carries what a new member needs to decrypt its photos, without our
+servers ever seeing it, so share the code only with people you'd invite; the
+huddle's keeper can replace it at any time. Your encryption key is kept in
+your iCloud Keychain; if you lose it, another member of each huddle restores
+your access automatically, and if no one can, those photos cannot be
+recovered — not even by us.
 
 **Notifications** are delivered through Apple's push notification service.
 They name the huddle and the member who posted, commented, reacted or
