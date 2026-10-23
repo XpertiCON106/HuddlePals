@@ -1,6 +1,6 @@
 # HuddlePals — Privacy Policy
 
-_Last updated: 2026-10-22_
+_Last updated: 2026-10-23_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
@@ -9,14 +9,14 @@ _Last updated: 2026-10-22_
 
 HuddlePals is a private, invite-only photo-sharing app for small groups. Each
 member deposits one photo per day into a shared "huddle." Photos are
-end-to-end encrypted and can be viewed only by the members of that huddle.
+end-to-end encrypted so that only the members of that huddle can view them,
+within the limits described under "How your data is stored and protected."
 
 ## What we collect
 
 | Data | Why | Linked to you |
 |---|---|---|
-| **Email address or phone number** | To sign you in (one-time verification codes) and identify your account | Yes |
-| **Apple account identifier** (if you use Sign in with Apple) | To sign you in | Yes |
+| **Apple account identifier**, and any email address Apple shares at sign-in (it may be a private relay address) | To sign you in with Sign in with Apple, the only way to sign in. If Apple shares your name, we use it only to pre-fill your display name, which you can change | Yes |
 | **Display name** | Shown to other members of your huddles | Yes |
 | **Profile photos** (up to 3) and **bio** | Shown on your profile to people you share a huddle with | Yes |
 | **Deposited photos and captions** | The core function — shared with your huddle's members. Photos are end-to-end encrypted; captions are not | Yes |
@@ -37,13 +37,21 @@ network traffic uses HTTPS. Sign-in tokens are stored in the iOS Keychain on
 your device.
 
 **Deposited photos are end-to-end encrypted.** Each photo is encrypted on
-your device before upload, and only the devices of that huddle's members hold
-the keys to decrypt it. Supabase stores only the encrypted file, and **we
-(the operator) cannot view your photos** — with one exception: when someone
+your device before upload, and the keys that decrypt a huddle's photos are
+held on its members' devices, not by us. Supabase stores only the encrypted
+file. We don't hold your photo keys, and HuddlePals is designed so that we
+(the operator) can't view your photos, with one exception: when someone
 **reports** a photo, their device sends that one photo's key with the report
 so we can review it. That key opens only the reported photo, never the rest
-of the huddle. A huddle's invite code carries what a new member needs to
-decrypt its photos, without our servers ever seeing it, so share the code
+of the huddle.
+
+There is one limit you should know about. Our servers keep track of who
+belongs to each huddle and pass members' public keys between devices, and
+members' apps automatically share the huddle key with the devices our
+servers list for that huddle's members. End-to-end encryption therefore
+depends on the integrity of those systems, as Section 3.3 of our
+[Terms of Service](https://huddlepals.com/terms) explains. A huddle's invite
+code carries what a new member needs to decrypt its photos, without our servers ever seeing it, so share the code
 only with people you'd invite; the huddle's keeper can replace it at any
 time. Your encryption key is kept in your iCloud Keychain; if you lose it,
 another member of each huddle restores your access automatically, and if no
@@ -75,7 +83,7 @@ When you do:
 - Your account, login, display name, bio, profile photos, push notification
   tokens, and encryption keys are **permanently removed**, and you are
   signed out.
-- If you used Sign in with Apple, we revoke your Apple sign-in token.
+- We ask Apple to revoke the app's access to your Apple Account.
 - **Photos you already deposited remain in your shared huddles**, shown as
   "Former member" rather than under your name. This is required to keep the
   group's shared archive intact for the other members — consistent with the
