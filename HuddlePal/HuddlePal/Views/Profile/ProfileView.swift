@@ -25,11 +25,12 @@ struct ProfileView: View {
         .background(Theme.background)
         .navigationTitle("Profile")
         .toolbarBackground(Theme.background, for: .navigationBar)
+        // The guard stays while this tab exists, including while another tab
+        // is showing: the router consults it only when leaving Profile, and
+        // removing it on disappear let a tab switch that the tab bar had
+        // already started slip past it. Sign-out resets the router.
         .onAppear {
             installNavigationGuard()
-        }
-        .onDisappear {
-            router.removeProfileNavigationGuard(id: navigationGuardID)
         }
     }
 
@@ -64,6 +65,7 @@ struct ProfileView: View {
 }
 
 private struct ProfileContent: View {
+    @Environment(AppRouter.self) private var router
     @Bindable var viewModel: ProfileViewModel
     let onCompleteExit: (ProfileViewModel.ExitAction) -> Void
 
@@ -120,19 +122,31 @@ private struct ProfileContent: View {
         } message: {
             Text("Are you sure you want to save these changes to your profile?")
         }
-        .confirmationDialog(
+        .alert(
             "Unsaved Changes",
-            isPresented: $viewModel.isUnsavedChangesWarningPresented,
-            titleVisibility: .visible
+            isPresented: $viewModel.isUnsavedChangesWarningPresented
         ) {
+            if viewModel.canSaveFromWarning {
+                Button("Save Changes") {
+                    Task {
+                        if await viewModel.saveFromWarning() {
+                            router.resumeBlockedNavigation()
+                        } else {
+                            router.cancelBlockedNavigation()
+                        }
+                    }
+                }
+            }
             Button("Discard Changes", role: .destructive) {
                 viewModel.discardChanges()
+                router.resumeBlockedNavigation()
             }
             Button("Keep Editing", role: .cancel) {
                 viewModel.keepEditing()
+                router.cancelBlockedNavigation()
             }
         } message: {
-            Text("You have changes that haven’t been saved. What would you like to do?")
+            Text("Save or discard your profile changes before you leave.")
         }
         .confirmationDialog(
             "Sign out?",

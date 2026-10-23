@@ -290,15 +290,78 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertTrue(router.huddlesPath.isEmpty, "the destination was never rendered")
         XCTAssertEqual(guardChecks, 1)
 
-        // Resolving the warning cannot replay anything because the router did
-        // not retain the destination.
+        // Resolving the warning goes on to the tab, never the deep link's
+        // route: only the tab was kept.
         allowNavigation = true
         XCTAssertEqual(router.selectedTab, .profile)
+        router.resumeBlockedNavigation()
+        XCTAssertEqual(router.selectedTab, .huddles)
         XCTAssertTrue(router.huddlesPath.isEmpty)
 
         XCTAssertTrue(router.navigateToHuddles(route: .joinHuddle))
-        XCTAssertEqual(router.selectedTab, .huddles)
         XCTAssertEqual(router.huddlesPath, [.joinHuddle])
+    }
+
+    private func dirtyProfileRouter() -> AppRouter {
+        let router = AppRouter()
+        XCTAssertTrue(router.selectTab(.profile))
+        router.installProfileNavigationGuard(id: UUID()) { [weak viewModel] in
+            viewModel?.requestNavigation() ?? true
+        }
+        viewModel.bio = "Dirty"
+        XCTAssertFalse(router.selectTab(.huddles))
+        XCTAssertTrue(viewModel.isUnsavedChangesWarningPresented)
+        return router
+    }
+
+    func testDiscardGoesOnToTheTabThatWasTapped() {
+        let router = dirtyProfileRouter()
+        viewModel.discardChanges()
+        router.resumeBlockedNavigation()
+        XCTAssertEqual(router.selectedTab, .huddles)
+        XCTAssertEqual(viewModel.bio, "Original bio")
+    }
+
+    func testSaveFromTheWarningSavesTheDraftThenGoesOn() async {
+        let router = dirtyProfileRouter()
+        XCTAssertTrue(viewModel.canSaveFromWarning)
+        let saved = await viewModel.saveFromWarning()
+        XCTAssertTrue(saved)
+        XCTAssertEqual(auth.updateCalls, 1)
+        XCTAssertEqual(auth.lastBio, "Dirty")
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+        XCTAssertFalse(viewModel.isUnsavedChangesWarningPresented)
+        router.resumeBlockedNavigation()
+        XCTAssertEqual(router.selectedTab, .huddles)
+    }
+
+    func testAFailedSaveFromTheWarningStaysOnProfile() async {
+        let router = dirtyProfileRouter()
+        auth.failNextUpdate = true
+        let saved = await viewModel.saveFromWarning()
+        XCTAssertFalse(saved)
+        XCTAssertTrue(viewModel.hasUnsavedChanges)
+        XCTAssertNotNil(viewModel.statusMessage)
+        router.cancelBlockedNavigation()
+        router.resumeBlockedNavigation()
+        XCTAssertEqual(router.selectedTab, .profile)
+    }
+
+    func testKeepEditingForgetsTheAttempt() {
+        let router = dirtyProfileRouter()
+        viewModel.keepEditing()
+        router.cancelBlockedNavigation()
+        viewModel.discardChanges()
+        router.resumeBlockedNavigation()
+        XCTAssertEqual(router.selectedTab, .profile, "nothing left to go on to")
+    }
+
+    func testANameThatCantBeSavedOffersOnlyDiscard() async {
+        viewModel.displayName = "   "
+        XCTAssertFalse(viewModel.canSaveFromWarning)
+        let saved = await viewModel.saveFromWarning()
+        XCTAssertFalse(saved)
+        XCTAssertEqual(auth.updateCalls, 0)
     }
 
     func testRepeatedNavigationAttemptsCannotStackOrBypassWarning() {

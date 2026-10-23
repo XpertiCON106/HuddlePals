@@ -14,6 +14,10 @@ struct HuddleListView: View {
                 Color.clear
             }
         }
+        // Full screen whatever the content: while only the spinner shows, the
+        // scroll view would otherwise shrink to its width and leave the
+        // background a strip down the middle.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
         .onAppear {
             if viewModel == nil { viewModel = HuddleListViewModel(deps: deps) }
@@ -57,6 +61,7 @@ private struct HuddleListContent: View {
             .padding(.horizontal, Theme.screenPadding)
             .padding(.top, 8)
             .padding(.bottom, 36)
+            .frame(maxWidth: .infinity)
             .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewModel.rows.map(\.id))
         }
         .refreshable { await viewModel.refresh() }

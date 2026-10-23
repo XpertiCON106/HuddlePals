@@ -72,6 +72,8 @@ final class ArchiveViewModel {
             }
             hasLoaded = true
             loadError = nil
+        } catch where error.isCancellation {
+            // Left the screen mid-load: nothing went wrong.
         } catch {
             // Pull-based refresh: keep the last-known archive on a transient
             // failure rather than collapsing to the misleading empty state.

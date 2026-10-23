@@ -404,6 +404,20 @@ final class ProfileViewModel {
         isUnsavedChangesWarningPresented = false
     }
 
+    /// The warning offers Save only for a draft that can be saved (a name,
+    /// a bio within its limit).
+    var canSaveFromWarning: Bool { isDraftValid && !isWorking }
+
+    /// Save Changes in the unsaved-changes warning: choosing it is the
+    /// confirmation, so the draft is saved as it stands. True once saved;
+    /// on failure the draft stays dirty and the status says why.
+    func saveFromWarning() async -> Bool {
+        isUnsavedChangesWarningPresented = false
+        guard canSaveFromWarning else { return false }
+        confirmedDraft = makeConfirmedDraft()
+        return await confirmAndSave() == .succeeded
+    }
+
     // MARK: Account actions
 
     func signOut() async {

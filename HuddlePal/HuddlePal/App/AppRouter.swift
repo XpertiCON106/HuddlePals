@@ -45,19 +45,16 @@ final class AppRouter {
     /// The mounted profile editor installs a synchronous guard. It returns
     /// before any router state is mutated, so a dirty editor can present its
     /// warning without the requested destination ever becoming active.
-    /// Neither a destination nor a navigation closure is retained.
     @ObservationIgnored private var profileNavigationGuardID: UUID?
     @ObservationIgnored private var profileNavigationGuard: (() -> Bool)?
+    /// The tab a blocked attempt was headed for. Saving or discarding the
+    /// profile goes on there (`resumeBlockedNavigation`); Keep Editing drops
+    /// it. Only the tab: a blocked deep link's route isn't replayed.
+    @ObservationIgnored private(set) var blockedTab: AppTab?
 
     func installProfileNavigationGuard(id: UUID, handler: @escaping () -> Bool) {
         profileNavigationGuardID = id
         profileNavigationGuard = handler
-    }
-
-    func removeProfileNavigationGuard(id: UUID) {
-        guard profileNavigationGuardID == id else { return }
-        profileNavigationGuardID = nil
-        profileNavigationGuard = nil
     }
 
     /// Returns false without changing selection or path when the mounted
@@ -68,6 +65,20 @@ final class AppRouter {
         guard canNavigateAwayFromProfile(to: destination) else { return false }
         selectedTab = destination
         return true
+    }
+
+    /// The profile was saved or its changes discarded: go where the blocked
+    /// attempt was going. The guard runs again, so a still-dirty editor
+    /// (a save that failed) keeps the person on Profile.
+    func resumeBlockedNavigation() {
+        guard let destination = blockedTab else { return }
+        blockedTab = nil
+        selectTab(destination)
+    }
+
+    /// Keep Editing: stay on Profile and forget the attempt.
+    func cancelBlockedNavigation() {
+        blockedTab = nil
     }
 
     /// Atomically guards both the tab change and the destination route. This
@@ -101,13 +112,16 @@ final class AppRouter {
 
     private func canNavigateAwayFromProfile(to destination: AppTab) -> Bool {
         guard selectedTab == .profile, destination != .profile else { return true }
-        return profileNavigationGuard?() ?? true
+        let allowed = profileNavigationGuard?() ?? true
+        blockedTab = allowed ? nil : destination
+        return allowed
     }
 
     func resetAll() {
         huddlesPath.removeAll()
         profileNavigationGuardID = nil
         profileNavigationGuard = nil
+        blockedTab = nil
         selectedTab = .huddles
     }
 }

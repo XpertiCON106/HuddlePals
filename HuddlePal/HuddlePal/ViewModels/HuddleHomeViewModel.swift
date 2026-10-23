@@ -108,6 +108,8 @@ final class HuddleHomeViewModel {
             keyChecks = await deps.huddleService.keyChecks(for: huddle)
             hasLoaded = true
             loadError = nil
+        } catch where error.isCancellation {
+            // Left the screen mid-load: nothing went wrong.
         } catch {
             // Pull-based refresh: keep last state on transient failure, and
             // say it's stale rather than pass it off as current.

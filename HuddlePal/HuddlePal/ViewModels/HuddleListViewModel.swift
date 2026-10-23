@@ -58,6 +58,8 @@ final class HuddleListViewModel {
                 )
             }
             errorMessage = nil
+        } catch where error.isCancellation {
+            // Left the tab mid-load: the next appear refreshes again.
         } catch {
             errorMessage = error.localizedDescription
         }

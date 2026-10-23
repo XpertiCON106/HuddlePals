@@ -17,7 +17,16 @@ final class CreateHuddleViewModel {
     private(set) var isCreating = false
     private(set) var errorMessage: String?
 
-    static let emojiChoices = ["🏔", "🌊", "🌻", "🔥", "🐾", "🌙", "🍞", "🎒", "🏡", "🌵", "⛺️", "🫶"]
+    /// Six rows of six in the picker: places and nature, then the people a
+    /// huddle is usually for, what they do together, trips and seasons.
+    static let emojiChoices = [
+        "🏔", "🌊", "🌻", "🔥", "🐾", "🌙",
+        "🍞", "🎒", "🏡", "🌵", "⛺️", "🫶",
+        "👨‍👩‍👧‍👦", "🧑‍🤝‍🧑", "❤️", "🎉", "📸", "🎂",
+        "☕️", "🍕", "🍳", "🍷", "🎮", "🎵",
+        "📚", "⚽️", "🏃", "🚲", "✈️", "🎓",
+        "🏖", "🌸", "🍂", "❄️", "🐶", "🐱",
+    ]
 
     var canCreate: Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,6 +192,8 @@ final class HuddleSettingsViewModel {
         do {
             inviteCode = try await deps.huddleService.inviteCode(for: huddle)
             inviteMessage = inviteCode == nil ? HuddleServiceError.inviteUnavailable.errorDescription : nil
+        } catch where error.isCancellation {
+            // Left the screen mid-load; "Try again" is still there.
         } catch {
             inviteMessage = HuddleServiceError.inviteUnavailable.errorDescription
         }

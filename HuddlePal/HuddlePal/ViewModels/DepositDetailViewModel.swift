@@ -81,19 +81,44 @@ final class DepositDetailViewModel {
         }
     }
 
+    /// Your reactions as of your last tap, per emoji, ahead of the stored
+    /// ones. The bar changes the moment you tap instead of after the round
+    /// trip, and doesn't rely on SwiftData reporting the new row to this
+    /// screen (it didn't until the screen was opened again).
+    private var tappedReactions: [String: Bool] = [:]
+    /// Emojis whose toggle is still on its way to the server. A second tap
+    /// waits: the service decides add or remove from what's stored.
+    private var reactionsInFlight: Set<String> = []
+
     func reactionCount(for emoji: String) -> Int {
-        deposit.reactions.filter { $0.emoji == emoji }.count
+        let stored = deposit.reactions.filter { $0.emoji == emoji }.count
+        guard let mine = tappedReactions[emoji], mine != storedReaction(emoji) else { return stored }
+        return max(0, stored + (mine ? 1 : -1))
     }
 
     func currentUserReacted(with emoji: String) -> Bool {
+        tappedReactions[emoji] ?? storedReaction(emoji)
+    }
+
+    private func storedReaction(_ emoji: String) -> Bool {
         guard let userID = deps.session.currentUser?.id else { return false }
         return deposit.reactions.contains { $0.emoji == emoji && $0.user?.id == userID }
     }
 
     func toggleReaction(_ emoji: String) async {
-        guard let user = deps.session.currentUser else { return }
+        guard let user = deps.session.currentUser, !reactionsInFlight.contains(emoji) else { return }
         Haptics.light()
-        try? await deps.depositService.toggleReaction(emoji, on: deposit, by: user)
+        let before = tappedReactions[emoji]
+        tappedReactions[emoji] = !currentUserReacted(with: emoji)
+        reactionsInFlight.insert(emoji)
+        defer { reactionsInFlight.remove(emoji) }
+        do {
+            try await deps.depositService.toggleReaction(emoji, on: deposit, by: user)
+        } catch {
+            // Didn't reach the server: show what's really there.
+            tappedReactions[emoji] = before
+            if !error.isCancellation { errorMessage = error.localizedDescription }
+        }
     }
 
     func postComment() async {
