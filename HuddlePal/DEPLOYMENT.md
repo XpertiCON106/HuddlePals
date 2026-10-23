@@ -86,6 +86,17 @@ seeded **mock** world. No code changes to switch.
    turns the downloaded Storage object back into a JPEG. A report stays when
    its reporter (or the reported person) deletes their account, so what you
    report to NCMEC stays reviewable for the year the law requires.
+   To take a reported photo down, use the SQL editor, never a manual delete:
+   - Child sexual abuse material: report it to NCMEC first, then
+     `select remove_reported_photo('<deposit id>', true, 'CyberTip #…');`.
+     The photo leaves the huddle; its file stays in Storage, and
+     `preserved_photos` keeps what finds and opens it for a year.
+   - A removal the law doesn't ask you to keep (an adult's intimate image,
+     which must go within 48 hours, or a copyright notice):
+     `select remove_reported_photo('<deposit id>', false);`, then delete the
+     file it returns under Storage → `deposits`.
+   - Yearly: `select * from expired_preserved_photos();` lists what's past
+     its keep-until date. Delete each file in Storage, then its row.
 
 ## Phase 2 — Point the app at it (~5 minutes)
 

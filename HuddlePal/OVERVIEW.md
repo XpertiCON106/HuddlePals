@@ -308,7 +308,7 @@ Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤8 people
 
 Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sql](supabase/schema.sql)) run once in the Supabase SQL editor. Three pillars:
 
-**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `join_attempts`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
+**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `preserved_photos`, `join_attempts`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
 
 **Row Level Security** — privacy *is* the product, so the database enforces it even against a malicious client (the anon key ships in the binary by design; RLS is the boundary):
 
@@ -325,6 +325,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | huddle_invite_keys | nobody (no policies, no privileges) | via the invite RPCs only |
 | device_tokens | your own | your own |
 | terms_acceptances | your own | insert your own (the server stamps `recorded_at`); no updates or deletes |
+| preserved_photos | nobody (no policies, no privileges) | the operator only, through `remove_reported_photo` |
 | storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
 
 Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, `can_see_deposit`) are `SECURITY DEFINER` — the standard way to avoid the memberships-policy-reads-memberships RLS recursion trap.

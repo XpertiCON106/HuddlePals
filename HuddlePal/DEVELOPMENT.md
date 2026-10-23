@@ -248,7 +248,7 @@ codes, tokens and keys are never logged.
   writable by the owner. Uploads are plain inserts: **never send
   `x-upsert`** (permanence, and huddle paths have no update policy).
 - **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
-  (001–011, idempotent, run in order) upgrades the deployed one;
+  (001–012, idempotent, run in order) upgrades the deployed one;
   `supabase/scripts/reset_database.sql` wipes an old database for a fresh
   start. Writes that need rules RLS can't express go through SECURITY
   DEFINER functions (key sharing, invites, joins, skips, streaks).

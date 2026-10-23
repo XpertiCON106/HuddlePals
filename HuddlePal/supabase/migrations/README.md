@@ -19,6 +19,7 @@ that both end up identical (`npm test`).
 | `009_push_notifications.sql` | Push notifications: `device_tokens`, `push_targets`, and the `pg_net` triggers that call the `send-push` function (they do nothing until the Vault secrets in DEVELOPMENT.md exist) |
 | `010_terms_acceptances.sql` | Which version of the Terms each account agreed to, and when (`terms_acceptances`), recorded by the app after sign-in |
 | `011_keep_reports_after_account_deletion.sql` | A report outlives its reporter's account (`reporter_id` becomes null instead of the report being deleted), so reported photos stay reviewable for NCMEC's one-year preservation |
+| `012_remove_reported_photo.sql` | Operator tool: `remove_reported_photo(id)` takes a reported photo out of its huddle and keeps what finds and opens it in `preserved_photos` for a year; `expired_preserved_photos()` lists what can then go |
 
 Ship the app build with 008 and 009: run them first, and older builds keep
 working (they keep joining with old codes until someone on the new build
@@ -26,4 +27,5 @@ opens that huddle, which retires its old code).
 
 Run 010 before shipping the build that records Terms agreements. Until the
 table exists that build's recording fails quietly and retries on the next
-launch. 011 changes nothing the app sees.
+launch. 011 changes nothing the app sees. Neither does 012, which only the
+operator can call (SQL editor).
