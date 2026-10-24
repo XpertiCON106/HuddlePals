@@ -281,7 +281,7 @@ sequenceDiagram
     VM->>Med: saveDepositPhoto(jpeg, "huddleID/uuid.jpg", huddleID)
     Note over Med: live: seal with a fresh photo key (§10a),<br>upload the ciphertext, cache it locally
     VM->>Dep: createDeposit(huddle, author, path, wrappedPhotoKey, caption, dayKey)
-    Note over Dep: live: POST deposits (plain insert;<br>unique (huddle,author,day) refuses a repeat)<br>mock: insert, refuse a repeat
+    Note over Dep: live: POST deposits (plain insert,<br>unique (huddle,author,day) refuses a repeat)<br>mock: insert, refuse a repeat
     Dep-->>VM: Deposit row
     VM-->>V: success → dismiss sheet
     V->>H: handleDepositSuccess()
@@ -363,7 +363,7 @@ sequenceDiagram
     participant A as Inviting app
     participant DB as Supabase
     participant B as Joiner's app
-    A->>A: new code = lookup + secret; seal huddle key with HKDF(secret, salt)
+    A->>A: new code = lookup + secret, seal huddle key with HKDF(secret, salt)
     A->>DB: create_huddle_invite(lookup, proof, salt, sealed key, secret sealed with huddle key)
     A-->>B: code, shared out of band (link or paste)
     B->>DB: redeem_huddle_invite(lookup, proof)
