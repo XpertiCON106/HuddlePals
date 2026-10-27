@@ -300,11 +300,6 @@ final class ProfileViewModel {
         return until
     }
 
-    var simulateFreeLimits: Bool {
-        get { deps.mockPlans?.freeLimitsActive ?? false }
-        set { deps.mockPlans?.freeLimitsActive = newValue }
-    }
-
     var simulatePurchasesLinkedElsewhere: Bool {
         get { deps.mockPlans?.purchasesLinkedElsewhere ?? false }
         set { deps.mockPlans?.purchasesLinkedElsewhere = newValue }

@@ -93,7 +93,7 @@ private struct ArchiveContent: View {
         .onChange(of: deps.dateProvider.dayOffset) {
             Task { await viewModel.refresh() }
         }
-        // Plus bought, run out, or the free limits started: the window moves.
+        // Plus bought or run out: the window moves.
         .onChange(of: deps.plus.status) {
             Task { await viewModel.refresh() }
         }

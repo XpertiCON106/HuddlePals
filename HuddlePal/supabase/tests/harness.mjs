@@ -135,11 +135,6 @@ export async function videoDeposit(db, uid, huddleId, dayKey, { durationMs = 600
   return rows[0]
 }
 
-/** Turns the free plan's limits on, as the operator does once Plus is in the App Store. */
-export async function startFreeLimits(db) {
-  await admin(db, `update app_limits set free_limits_start = now() - interval '1 minute'`)
-}
-
 /**
  * Gives `uid` HuddlePals Plus, as verify-subscription records it: until
  * `expiresIn` from now (an interval; negative for one that has run out),

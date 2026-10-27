@@ -11,12 +11,9 @@ struct PlanStatus: Codable, Equatable {
     var isPremium: Bool
     /// When Plus ends (after any billing grace period); nil without one.
     var premiumUntil: Date?
-    /// When the free plan's limits start (`app_limits.free_limits_start`);
-    /// nil while they're off.
-    var freeLimitsStart: Date?
     /// Huddles the account keeps, inherited ones included.
     var keptHuddles: Int
-    /// 3 or 10 huddles kept; nil while the free limits are off.
+    /// 3 or 10 huddles kept.
     var huddleLimit: Int?
     /// The server's clock minus the device's, when it answered.
     var clockOffset: TimeInterval
@@ -30,13 +27,6 @@ struct PlanStatus: Codable, Equatable {
     func isPremium(at deviceNow: Date = .now) -> Bool {
         guard isPremium, let premiumUntil else { return false }
         return premiumUntil > serverNow(deviceNow: deviceNow)
-    }
-
-    /// Whether the free plan's limits (and the archive's 30-day window)
-    /// apply right now.
-    func freeLimitsActive(at deviceNow: Date = .now) -> Bool {
-        guard let freeLimitsStart else { return false }
-        return freeLimitsStart <= serverNow(deviceNow: deviceNow)
     }
 }
 
@@ -112,8 +102,6 @@ protocol PlusServiceProtocol: AnyObject {
 extension PlusServiceProtocol {
     /// Plus right now, by the server's clock.
     var isPremium: Bool { status?.isPremium(at: .now) ?? false }
-    /// Whether the free plan's limits apply right now.
-    var freeLimitsActive: Bool { status?.freeLimitsActive(at: .now) ?? false }
 }
 
 /// The App Store's catalog, and the offline world's prices for it.
@@ -150,9 +138,8 @@ final class MockPlusService: PlusServiceProtocol {
         return PlanStatus(
             isPremium: premium,
             premiumUntil: plans.plusUntil[user.id],
-            freeLimitsStart: plans.freeLimitsActive ? .distantPast : nil,
             keptHuddles: user.memberships.filter { $0.role == .keeper }.count,
-            huddleLimit: plans.freeLimitsActive ? (premium ? HuddleLimits.plusHuddlesKept : HuddleLimits.freeHuddlesKept) : nil,
+            huddleLimit: premium ? HuddleLimits.plusHuddlesKept : HuddleLimits.freeHuddlesKept,
             clockOffset: 0
         )
     }

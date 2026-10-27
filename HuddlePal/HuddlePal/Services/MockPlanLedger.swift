@@ -1,17 +1,13 @@
 import Foundation
 import Observation
 
-/// The offline world's `user_entitlements` and `app_limits`: who has
-/// HuddlePals Plus and until when, and whether the free plan's limits are on.
+/// The offline world's `user_entitlements`: who has HuddlePals Plus and
+/// until when.
 /// In memory, like `SkipLedger`; the mock services read it so they refuse
 /// what the server would, and Profile's DEBUG section flips it.
 @MainActor
 @Observable
 final class MockPlanLedger {
-    /// Off until switched on, as `app_limits.free_limits_start` ships: the
-    /// old rules (8 members, no cap on huddles kept) until then, except that
-    /// a Plus keeper's huddles take 10.
-    var freeLimitsActive = false
     /// Whether the Apple subscription on "this device" is already linked to
     /// another HuddlePals account, so buying or restoring it here is refused
     /// (`subscription_in_use`).
@@ -37,7 +33,6 @@ final class MockPlanLedger {
     }
 
     func removeAll() {
-        freeLimitsActive = false
         purchasesLinkedElsewhere = false
         plusUntil.removeAll()
     }

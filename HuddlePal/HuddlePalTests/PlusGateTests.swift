@@ -99,13 +99,7 @@ final class PlusGateTests: XCTestCase {
 
     // MARK: The archive
 
-    func testNothingIsLockedUntilTheFreeLimitsStart() async {
-        let viewModel = await archive()
-        XCTAssertEqual(lockedDays(viewModel), [])
-    }
-
     func testOnTheFreePlanDaysPast30AreLockedAndPlusOpensThemAll() async {
-        plans.freeLimitsActive = true
         let locked = lockedDays(await archive())
         XCTAssertEqual(locked.count, 16, "days -45…-30")
         XCTAssertEqual(locked.first, dayKey(-45))
@@ -118,14 +112,12 @@ final class PlusGateTests: XCTestCase {
     }
 
     func testSettingThePhonesClockBackOpensNoOlderDay() async {
-        plans.freeLimitsActive = true
         deps.dateProvider.dayOffset = -60 // the phone thinks it's two months ago
         let locked = lockedDays(await archive())
         XCTAssertEqual(locked.count, 16, "the server's clock and the newest deposit still say when today is")
     }
 
     func testADepositPastTheWindowIsLockedInItsDetailScreen() throws {
-        plans.freeLimitsActive = true
         let old = try XCTUnwrap(crew.deposits.first { $0.dayKey == dayKey(-40) })
         let recent = try XCTUnwrap(crew.deposits.first { $0.dayKey == dayKey(-2) })
         XCTAssertTrue(DepositDetailViewModel(deps: deps, deposit: old).isLocked)
@@ -137,7 +129,6 @@ final class PlusGateTests: XCTestCase {
     // MARK: Creating a huddle
 
     func testTheCreateScreenSaysWhenTheFreeCapIsReached() async {
-        plans.freeLimitsActive = true
         let first = CreateHuddleViewModel(deps: deps)
         XCTAssertNil(first.limitReached, "You keep 2")
         first.name = "Third"
@@ -156,7 +147,6 @@ final class PlusGateTests: XCTestCase {
     }
 
     func testPlusSaysTenIsTheMostAnyoneKeeps() async {
-        plans.freeLimitsActive = true
         plans.setPlus(true, for: you.id)
         for index in 0..<8 {
             let viewModel = CreateHuddleViewModel(deps: deps)
@@ -173,10 +163,6 @@ final class PlusGateTests: XCTestCase {
     func testAFullFreeHuddleExplainsInsteadOfShowingItsCode() async {
         let settings = HuddleSettingsViewModel(deps: deps, huddle: crew)
         await settings.loadJoinStatus()
-        XCTAssertNil(settings.invitesClosedMessage, "the old rules: 4 of 8")
-
-        plans.freeLimitsActive = true
-        await settings.loadJoinStatus()
         XCTAssertEqual(settings.joinStatus, HuddleJoinStatus(refusal: .freeLimit, memberCount: 4, memberCap: 4))
         XCTAssertTrue(settings.invitesClosedMessage?.contains("full on the free plan") == true)
         XCTAssertTrue(settings.canReopenWithPlus, "the keeper can")
@@ -188,7 +174,6 @@ final class PlusGateTests: XCTestCase {
     }
 
     func testAMemberSeesWhoCanReopenIt() async throws {
-        plans.freeLimitsActive = true
         deps.session.currentUser = try XCTUnwrap(crew.members.first { $0.id != you.id })
         let settings = HuddleSettingsViewModel(deps: deps, huddle: crew)
         await settings.loadJoinStatus()
@@ -197,7 +182,6 @@ final class PlusGateTests: XCTestCase {
     }
 
     func testAKeepersHuddlesPastTheFirstThreeArePaused() async throws {
-        plans.freeLimitsActive = true
         plans.setPlus(true, for: you.id)
         _ = try await deps.huddleService.createHuddle(name: "Third", emoji: "🧪", keeper: you)
         let fourth = try await deps.huddleService.createHuddle(name: "Fourth", emoji: "🧪", keeper: you)

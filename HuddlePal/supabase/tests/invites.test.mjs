@@ -172,9 +172,11 @@ describe('redeeming an invite', () => {
     await assert.rejects(redeem(db, D, invite.lookup, invite.proof), /blocked/)
     assert.deepEqual(await admin(db, 'select 1 from memberships where user_id = $1', [D]), [])
 
-    for (let i = 0; i < 7; i++) await redeem(db, await signUp(db, `m${i}`), invite.lookup, invite.proof)
-    const ninth = await signUp(db, 'ninth')
-    await assert.rejects(redeem(db, ninth, invite.lookup, invite.proof), /huddle_full/)
+    // Its keeper is on the free plan: 4 members.
+    const members = async () => (await admin(db, 'select count(*)::int n from memberships where huddle_id = $1', [h.id]))[0].n
+    while (await members() < 4) await redeem(db, await signUp(db, `m${await members()}`), invite.lookup, invite.proof)
+    const fifth = await signUp(db, 'fifth')
+    await assert.rejects(redeem(db, fifth, invite.lookup, invite.proof), /join_blocked_free_limit/)
     assert.equal((await admin(db, 'select count(*)::int n from join_attempts'))[0].n, 0)
   })
 

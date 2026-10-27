@@ -141,6 +141,8 @@ final class CriticalFlowTests: XCTestCase {
 
     func testJoiningAHuddleKeepsItsStreak() async throws {
         let user = try await signedInUser()
+        // The Crew is full on the free plan (4 people): its keeper has Plus here.
+        deps.mockPlans?.setPlus(true, for: user.id)
         let huddles = try await deps.huddleService.huddles(for: user)
         let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
         let now = deps.dateProvider.now
@@ -246,6 +248,8 @@ final class CriticalFlowTests: XCTestCase {
 
     func testOnlyTheKeeperMakesANewInviteCodeAndTheOldOneStopsWorking() async throws {
         let keeper = try await signedInUser()
+        // The Crew is full on the free plan (4 people): its keeper has Plus here.
+        deps.mockPlans?.setPlus(true, for: keeper.id)
         let huddles = try await deps.huddleService.huddles(for: keeper)
         let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
         let current = try await deps.huddleService.inviteCode(for: crew)
@@ -307,6 +311,8 @@ final class CriticalFlowTests: XCTestCase {
 
     func testSomeoneAMemberBlockedCantJoin() async throws {
         let keeper = try await signedInUser()
+        // The Crew is full on the free plan (4 people): its keeper has Plus here.
+        deps.mockPlans?.setPlus(true, for: keeper.id)
         deps.session.currentUser = keeper
         let huddles = try await deps.huddleService.huddles(for: keeper)
         let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })

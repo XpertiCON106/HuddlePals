@@ -1,9 +1,8 @@
 import XCTest
 
-/// The free plan and HuddlePals Plus, end to end in the seeded world, with
-/// the free limits on (`-ui-testing-free-limits`): the paywall shows what App
-/// Review asks of a subscription, and each place the free plan holds
-/// something back leads to it.
+/// The free plan and HuddlePals Plus, end to end in the seeded world: the
+/// paywall shows what App Review asks of a subscription, and each place the
+/// free plan holds something back leads to it.
 final class PlusJourneyTests: HuddleUITestCase {
     private func paywallHeadline(_ text: String) -> XCUIElement {
         app.staticTexts[text]
@@ -12,7 +11,7 @@ final class PlusJourneyTests: HuddleUITestCase {
     /// Price, period, renewal terms, the Terms of Use / Terms / Privacy links
     /// and Restore Purchases (guideline 3.1.2); buying turns Plus on.
     func testThePaywallShowsWhatAppleAsksAndBuyingTurnsPlusOn() {
-        launchToShelf(arguments: ["-ui-testing-free-limits"])
+        launchToShelf()
         openTab("Profile")
         let getPlus = app.buttons["Get HuddlePals Plus"]
         scrollTo(getPlus)
@@ -42,7 +41,7 @@ final class PlusJourneyTests: HuddleUITestCase {
     /// A day past the free plan's 30 days shows who posted, locked, and opens
     /// the paywall; buying Plus opens every day there and then.
     func testADayPastTheFreeWindowIsLockedAndPlusOpensIt() {
-        launchToShelf(arguments: ["-ui-testing-free-limits"])
+        launchToShelf()
         openHuddle("The Crew")
         waitFor(app.buttons["Archive"]).tap()
         waitFor(app.navigationBars["Archive"])
@@ -68,7 +67,7 @@ final class PlusJourneyTests: HuddleUITestCase {
 
     /// Free: Video opens the paywall; after buying, the video camera.
     func testVideoOnTheFreePlanLeadsToPlusThenTheVideoCamera() {
-        launchToShelf(arguments: ["-ui-testing-free-limits"])
+        launchToShelf()
         openHuddle("The Crew")
         waitFor(app.buttons["Add today's memory"]).tap()
         waitFor(app.buttons["Take test photo"])
@@ -81,7 +80,7 @@ final class PlusJourneyTests: HuddleUITestCase {
 
     /// The free plan keeps 3 huddles: the 4th says so, with the way to 10.
     func testAFourthHuddleNeedsPlus() {
-        launchToShelf(arguments: ["-ui-testing-free-limits"])
+        launchToShelf()
         openAddMenu("Create a Huddle")
         let name = waitFor(app.textFields["Huddle name"])
         name.tap()
@@ -101,7 +100,7 @@ final class PlusJourneyTests: HuddleUITestCase {
     /// the free plan's first 3, so its invites are paused, and its settings
     /// say so to its keeper with the way back.
     func testAHuddlePastTheFirst3PausesItsInvitesWhenPlusEnds() {
-        launchToShelf(arguments: ["-ui-testing-free-limits", "-ui-testing-plus"])
+        launchToShelf(arguments: ["-ui-testing-plus"])
         for name in ["Third", "Fourth"] {
             openAddMenu("Create a Huddle")
             let field = waitFor(app.textFields["Huddle name"])
@@ -155,7 +154,7 @@ final class PlusJourneyTests: HuddleUITestCase {
     /// The Crew is 4 people: full on the free plan, so its settings explain
     /// that instead of showing a code that would fail.
     func testAFullFreeHuddleExplainsItsInvite() {
-        launchToShelf(arguments: ["-ui-testing-free-limits"])
+        launchToShelf()
         openHuddle("The Crew")
         waitFor(app.buttons["Huddle settings"]).tap()
         let closed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'full on the free plan'")).firstMatch

@@ -12,9 +12,6 @@ enum HuddleServiceError: LocalizedError {
     case alreadyMember
     case notAMember
     case notKeeper
-    /// Before the free limits start, a keeper without Plus: 8 members, as
-    /// always. (A huddle that grew to 10 with Plus keeps them all.)
-    case huddleFull
     /// Its keeper is on the free plan: 4 members.
     case huddleFullFree
     /// Its keeper is on the free plan, and it isn't one of the 3 huddles
@@ -42,7 +39,6 @@ enum HuddleServiceError: LocalizedError {
         case .alreadyMember: "You're already a member of this huddle."
         case .notAMember: "You're not a member of this huddle."
         case .notKeeper: "Only the huddle's keeper can do that."
-        case .huddleFull: "This huddle is full — it takes up to 8 members."
         case .huddleFullFree: "This huddle is full for now — free huddles hold 4 people. Its keeper can make room or get HuddlePals Plus for up to 10."
         case .invitesPaused: "This huddle isn't taking new members right now. Ask its keeper."
         case .huddleAtMaximum: "This huddle has 10 members — the most a huddle can have."
@@ -56,7 +52,6 @@ enum HuddleServiceError: LocalizedError {
 
     init(_ refusal: HuddleEngine.JoinRefusal) {
         switch refusal {
-        case .full: self = .huddleFull
         case .freeLimit: self = .huddleFullFree
         case .invitesPaused: self = .invitesPaused
         case .maxMembers: self = .huddleAtMaximum
@@ -182,8 +177,7 @@ final class MockHuddleService: HuddleServiceProtocol {
     private let skipLedger: SkipLedger
     /// Join days follow the (debug-shiftable) app clock, like deposits.
     private let dateProvider: DateProviding
-    /// Who has Plus and whether the free limits are on: the caps below
-    /// refuse what the server's would.
+    /// Who has Plus: the caps below refuse what the server's would.
     private let plans: MockPlanLedger
 
     init(
@@ -219,7 +213,7 @@ final class MockHuddleService: HuddleServiceProtocol {
         // create_huddle's cap: huddles kept, inherited ones included.
         let kept = keeper.memberships.filter { $0.role == .keeper }.count
         if let refusal = HuddleEngine.createRefusal(
-            keptHuddles: kept, isPremium: plans.hasPlus(keeper.id), limitsActive: plans.freeLimitsActive
+            keptHuddles: kept, isPremium: plans.hasPlus(keeper.id)
         ) {
             throw HuddleServiceError(refusal)
         }
@@ -342,8 +336,7 @@ final class MockHuddleService: HuddleServiceProtocol {
     func joinStatus(for huddle: Huddle) async -> HuddleJoinStatus? {
         let (keeperIsPremium, keeperRank) = keeperPlan(of: huddle)
         let rule = HuddleEngine.joinRule(
-            memberCount: huddle.memberships.count, keeperIsPremium: keeperIsPremium,
-            keeperRank: keeperRank, limitsActive: plans.freeLimitsActive
+            memberCount: huddle.memberships.count, keeperIsPremium: keeperIsPremium, keeperRank: keeperRank
         )
         return HuddleJoinStatus(refusal: rule.refusal, memberCount: huddle.memberships.count, memberCap: rule.memberCap)
     }
@@ -356,8 +349,7 @@ final class MockHuddleService: HuddleServiceProtocol {
             memberCount: huddle.memberships.count,
             keeperIsPremium: keeperIsPremium,
             keeperRank: keeperRank,
-            joinerHuddleCount: joiner.memberships.count,
-            limitsActive: plans.freeLimitsActive
+            joinerHuddleCount: joiner.memberships.count
         )
     }
 

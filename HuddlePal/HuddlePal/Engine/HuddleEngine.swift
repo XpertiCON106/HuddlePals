@@ -316,9 +316,6 @@ struct HuddleEngine {
     /// Why a huddle refuses one more member. Each raw value is the error the
     /// server raises for it (huddle_join_rule, migration 013).
     enum JoinRefusal: String, CaseIterable, Sendable {
-        /// Before the free limits start, a keeper without Plus: 8 members,
-        /// as always.
-        case full = "huddle_full"
         /// The keeper is on the free plan: 4 members.
         case freeLimit = "join_blocked_free_limit"
         /// The keeper is on the free plan and this isn't one of the 3
@@ -337,17 +334,11 @@ struct HuddleEngine {
     static func joinRule(
         memberCount: Int,
         keeperIsPremium: Bool,
-        keeperRank: Int?,
-        limitsActive: Bool
+        keeperRank: Int?
     ) -> (memberCap: Int, refusal: JoinRefusal?) {
-        // Plus takes 10 from the day it ships, before the free limits too.
         if keeperRank != nil, keeperIsPremium {
             let cap = HuddleLimits.plusMembers
             return (cap, memberCount >= cap ? .maxMembers : nil)
-        }
-        guard limitsActive else {
-            let cap = HuddleLimits.legacyMembers
-            return (cap, memberCount >= cap ? .full : nil)
         }
         let cap = HuddleLimits.freeMembers
         guard let keeperRank, keeperRank < HuddleLimits.freeHuddlesKept else { return (cap, .invitesPaused) }
@@ -360,14 +351,10 @@ struct HuddleEngine {
         memberCount: Int,
         keeperIsPremium: Bool,
         keeperRank: Int?,
-        joinerHuddleCount: Int,
-        limitsActive: Bool
+        joinerHuddleCount: Int
     ) -> JoinRefusal? {
-        if limitsActive, joinerHuddleCount >= HuddleLimits.huddlesJoined { return .membershipLimit }
-        return joinRule(
-            memberCount: memberCount, keeperIsPremium: keeperIsPremium,
-            keeperRank: keeperRank, limitsActive: limitsActive
-        ).refusal
+        if joinerHuddleCount >= HuddleLimits.huddlesJoined { return .membershipLimit }
+        return joinRule(memberCount: memberCount, keeperIsPremium: keeperIsPremium, keeperRank: keeperRank).refusal
     }
 
     /// A huddle's place in its keeper's queue: their huddles ordered by when
@@ -390,8 +377,7 @@ struct HuddleEngine {
     }
 
     /// create_huddle's cap: huddles kept, inherited ones included.
-    static func createRefusal(keptHuddles: Int, isPremium: Bool, limitsActive: Bool) -> CreateRefusal? {
-        guard limitsActive else { return nil }
+    static func createRefusal(keptHuddles: Int, isPremium: Bool) -> CreateRefusal? {
         if isPremium { return keptHuddles >= HuddleLimits.plusHuddlesKept ? .plusLimit : nil }
         return keptHuddles >= HuddleLimits.freeHuddlesKept ? .freeLimit : nil
     }

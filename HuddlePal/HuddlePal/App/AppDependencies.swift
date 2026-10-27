@@ -84,8 +84,8 @@ final class AppDependencies {
     /// HuddlePals Plus for the signed-in account: the server's view of it,
     /// and buying or restoring it through the App Store.
     let plus: any PlusServiceProtocol
-    /// Mock only: who has Plus and whether the free limits are on in the
-    /// offline world (live, the server knows). Nil in live mode.
+    /// Mock only: who has Plus in the offline world (live, the server
+    /// knows). Nil in live mode.
     let mockPlans: MockPlanLedger?
     let seeder: SeedDataService
     /// Per-user daily upload reminders (local notifications, backend-agnostic).

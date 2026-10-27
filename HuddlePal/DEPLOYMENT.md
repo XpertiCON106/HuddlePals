@@ -211,14 +211,11 @@ seeded **mock** world. No code changes to switch.
 ## Phase 5 — HuddlePals Plus and video drops
 
 The Plus build needs migration 013, two new edge functions, the
-subscriptions in App Store Connect, and the website's first batch of
-changes before App Review. Nothing changes for anyone who doesn't buy
-Plus: the free plan's limits wait for `app_limits.free_limits_start`, which
-you set about two weeks after release.
+subscriptions in App Store Connect, and the website's changes before App
+Review. The free plan's limits apply as soon as migration 013 runs.
 
 **Order:** App Store Connect → migration 013 → secrets and functions →
-TestFlight build → checks on a device → website batch A → App Review →
-release → about 14 days later, the free plan's limits and website batch B.
+TestFlight build → checks on a device → website → App Review → release.
 
 ### 5.1 App Store Connect (needed before anything can be bought, even in TestFlight)
 
@@ -282,15 +279,11 @@ release → about 14 days later, the free plan's limits and website batch B.
    `application/octet-stream`.
 2. **Migration 013.** SQL Editor → paste
    [`supabase/migrations/013_plus_and_video.sql`](supabase/migrations/013_plus_and_video.sql)
-   → Run (safe to re-run). Then check that the switch is off:
-
-   ```sql
-   select free_limits_start from public.app_limits;
-   ```
-
-   It should be `null`. Builds already on phones keep working: until the
-   switch is set, a huddle without Plus takes 8 members and nothing is
-   capped.
+   → Run (safe to re-run). From then on, without Plus: 3 huddles kept,
+   4 members a huddle (and only in the keeper's 3 longest-kept huddles), 25
+   huddles joined, and an archive of the last 30 days. Nobody is removed and
+   nothing is deleted. Builds from before Plus explain any refusal as "You
+   can't join this huddle."
 3. **Secrets** (DEVELOPMENT.md → "Backend setup and deploys"):
 
    ```bash
@@ -348,39 +341,20 @@ release → about 14 days later, the free plan's limits and website batch B.
 
 ### 5.4 App Review and release
 
-1. Publish **website batch A** (Support's Plus questions, the revised Terms
-   and Privacy Policy) and have the live pages checked against the repo.
+1. Publish **the website changes** (the Grok instructions: Support's Plus
+   questions, the member counts, the revised Terms and Privacy Policy) and
+   have the live pages checked against the repo.
 2. On the version page, add **both subscriptions** under In-App Purchases
    and Subscriptions (the first ones must go to review with an app
    version), use the App Review notes from Phase 3 step 7 (they cover
    Plus), and submit.
-3. Release. Leave `free_limits_start` null: for now Plus adds videos and
-   10-member huddles, and nobody loses anything.
-
-### 5.5 About two weeks later: the free plan's limits
-
-1. The same day, publish **website batch B** (the member counts).
-2. In the SQL editor, with the moment in UTC:
-
-   ```sql
-   update public.app_limits set free_limits_start = '<YYYY-MM-DD> 00:00:00+00';
-   ```
-
-   From then on, without Plus: 3 huddles kept, 4 members a huddle (and
-   only in the keeper's 3 longest-kept huddles), 25 huddles joined, and an
-   archive of the last 30 days. Nobody is removed and nothing is deleted.
-   Builds from before Plus explain any refusal as "You can't join this
-   huddle."
-3. Watch support mail and reports for a few days.
+3. Release, then watch support mail and reports for a few days.
 
 ### Undoing it
 
-- **The free plan's limits:** `update public.app_limits set free_limits_start = null;`
-  puts everyone back on the old rules at once.
 - **Selling Plus:** App Store Connect → each subscription → Remove from
   Sale. Subscribers keep Plus until their period ends.
-- **Migration 013** has no down migration. It only adds, and changes
-  nothing for anyone without Plus until the switch is set.
+- **Migration 013** has no down migration.
 
 ### Still open
 
@@ -461,8 +435,8 @@ a device before TestFlight:
 
 - the OTP `/verify` response shape and the Apple `id_token` grant;
 - PostgREST error-message pass-through in `SupabaseClient.check` (e.g.
-  joining a full huddle should say why: "8 members" before the free limits
-  start, then the free plan's 4 or Plus's 10, not a generic error);
+  joining a full huddle should say why, the free plan's 4 or Plus's 10,
+  not a generic error);
 - **posting a photo** — uploads are insert-only (no `x-upsert`), so the
   storage INSERT policy alone must allow it;
 - the huddle list's single `deposits?select=huddle_id,author_id&day_key=eq.…`

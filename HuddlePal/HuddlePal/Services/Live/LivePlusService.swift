@@ -229,7 +229,6 @@ final class LivePlusService: PlusServiceProtocol {
         let isPremium: Bool
         let premiumUntil: Date?
         let serverNow: Date
-        let freeLimitsStart: Date?
         let keptHuddles: Int
         let huddleLimit: Int?
     }
@@ -248,7 +247,6 @@ final class LivePlusService: PlusServiceProtocol {
         let fresh = PlanStatus(
             isPremium: row.isPremium,
             premiumUntil: row.premiumUntil,
-            freeLimitsStart: row.freeLimitsStart,
             keptHuddles: row.keptHuddles,
             huddleLimit: row.huddleLimit,
             clockOffset: row.serverNow.timeIntervalSinceNow
