@@ -8,9 +8,11 @@ in sync when behaviour changes.
 
 ## At a glance
 
-- **The app**: private daily photo sharing for groups of 2–8 ("huddles").
-  One photo per member per day; others' photos stay blurred until you post
-  yours (the gate); the streak belongs to the group; photos are permanent.
+- **The app**: private daily photo sharing for small groups ("huddles"):
+  up to 4 people on the free plan, 10 when the keeper has HuddlePals Plus.
+  One photo per member per day (or, with Plus, a video of up to 6 seconds);
+  others' stay blurred until you post yours (the gate); the streak belongs
+  to the group; deposits are permanent.
 - **Build**: version 1.0, bundle id `com.huddlepals.ios`, iOS 17.0+,
   Swift 5 language mode, SwiftUI + SwiftData, **no third-party
   dependencies**. Built with Xcode 26.1.1.
@@ -131,8 +133,11 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   after its start). A broken streak shows a countdown until then; if the
   missing members backfill in time, the recompute restores it.
 - **Limits**: captions ≤ 80, comments ≤ 500, names ≤ 40 (huddles 60), bios
-  ≤ 160, 3 profile photos, 8 members (enforced by the server). Lengths
-  count code points, as Postgres does (`TextLimits.swift`).
+  ≤ 160, 3 profile photos. Members per huddle 4 on the free plan and 10 with
+  Plus, huddles kept 3 and 10, huddles joined 25; before the free limits
+  start, 8 members (10 with Plus) and nothing else (`HuddleLimits.swift`;
+  all enforced by the server). Lengths count code points, as Postgres does
+  (`TextLimits.swift`).
 - **Downscaling** before upload: photos ≤ 1440 px, avatars ≤ 512 px, JPEG
   0.8. Storage only grows, so keep it.
 - **Former member**: deleting an account keeps its photos and comments
@@ -284,7 +289,8 @@ codes, tokens and keys are never logged.
   one Apple subscription entitles one account. `huddle_join_rule` decides
   joins from the keeper's plan; `create_huddle` caps huddles kept; posting a
   video (and uploading a `.mp4`) takes Plus. None of the free limits apply
-  until `app_limits.free_limits_start` is set.
+  until `app_limits.free_limits_start` is set; Plus (10 members, videos)
+  works from the start.
 - **Plus in the app** (`PlusServiceProtocol`, `deps.plus`): the server's
   word, from `my_entitlement()`, judged by the server's clock
   (`PlanStatus.clockOffset`), cached per account for offline launches.

@@ -9,7 +9,8 @@ import Observation
 @Observable
 final class MockPlanLedger {
     /// Off until switched on, as `app_limits.free_limits_start` ships: the
-    /// old rules (8 members, no cap on huddles kept) until then.
+    /// old rules (8 members, no cap on huddles kept) until then, except that
+    /// a Plus keeper's huddles take 10.
     var freeLimitsActive = false
     /// Whether the Apple subscription on "this device" is already linked to
     /// another HuddlePals account, so buying or restoring it here is refused

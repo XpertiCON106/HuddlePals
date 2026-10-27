@@ -33,8 +33,9 @@ operator can call (SQL editor).
 
 Run 013 before deploying `verify-subscription` and `app-store-notifications`
 and before shipping the Plus build. Until `app_limits.free_limits_start` is
-set it changes nothing for anyone: 8 members a huddle, no cap on huddles,
-the same `huddle_full` error builds from before Plus already explain. Once
+set it changes nothing for anyone without Plus: 8 members a huddle, no cap
+on huddles, the same `huddle_full` error builds from before Plus already
+explain. A Plus keeper's huddles take 10 from the start. Once
 Plus is on sale, start the free limits after a grace period, in the SQL
 editor (`null` turns them off again):
 

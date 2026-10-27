@@ -164,7 +164,7 @@ private struct DetailContent: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You won't see their photos or comments anymore. They won't be told.")
+            Text("You won't see their photos, videos or comments anymore. They won't be told.")
         }
         .alert(ReportFeedback.title, isPresented: $viewModel.isReportConfirmationPresented) {
             Button("OK", role: .cancel) {}

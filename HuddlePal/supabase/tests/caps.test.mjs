@@ -4,7 +4,8 @@
 // free plan 3 huddles of up to 4, and only the 3 they've kept longest take
 // new members; with Plus 10 of up to 10. Nobody is ever removed: when a
 // subscription ends, only new joins and new huddles are held back. Until
-// app_limits.free_limits_start the old rules hold: 8 members, no caps.
+// app_limits.free_limits_start the old rules hold: 8 members, no caps,
+// except that a Plus keeper's huddles take 10 from the start.
 
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -65,6 +66,21 @@ describe('before the free limits start', () => {
     const [h] = await keep(db, A, 1)
     await members(db, 7, h)
     assert.equal(await memberCount(db, h), 8)
+    assert.match(await tryJoin(db, h), /^huddle_full$/)
+  })
+
+  it("a Plus keeper's huddle takes 10 already; when Plus ends, nobody leaves and it's full at 8", async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const otid = await grantPlus(db, A)
+    const [h] = await keep(db, A, 1)
+    await members(db, 9, h)
+    assert.equal(await memberCount(db, h), 10)
+    const eleventh = await tryJoin(db, h)
+    assert.equal(eleventh, 'join_blocked_max_members')
+    assert.equal(oldBuildCopy(eleventh), "You can't join this huddle.", 'no build says "8 members" about a huddle of 10')
+    await endPlus(db, otid)
+    assert.equal(await memberCount(db, h), 10)
     assert.match(await tryJoin(db, h), /^huddle_full$/)
   })
 

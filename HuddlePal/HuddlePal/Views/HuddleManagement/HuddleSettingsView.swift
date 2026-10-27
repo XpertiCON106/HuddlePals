@@ -275,8 +275,8 @@ private struct SettingsContent: View {
         } footer: {
             if viewModel.invitesClosedMessage == nil {
                 Text(viewModel.isKeeper
-                     ? "Anyone with this code can join and see every photo. Make a new one to stop the old code working."
-                     : "Anyone with this code can join and see every photo.")
+                     ? "Anyone with this code can join and see every photo and video. Make a new one to stop the old code working."
+                     : "Anyone with this code can join and see every photo and video.")
             }
         }
     }

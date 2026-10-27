@@ -351,7 +351,7 @@ private struct ProfileContent: View {
             )) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Huddle activity")
-                    Text("New photos, comments and reactions on your photos, and new members.")
+                    Text("New photos and videos, comments and reactions on yours, and new members.")
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -376,7 +376,7 @@ private struct ProfileContent: View {
         } header: {
             Text("Notifications")
         } footer: {
-            Text("For this device. Notifications name the huddle and who posted, never what a photo shows.")
+            Text("For this device. Notifications name the huddle and who posted, never what a photo or video shows.")
         }
     }
 

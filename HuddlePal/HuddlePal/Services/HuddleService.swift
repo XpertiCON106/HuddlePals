@@ -12,7 +12,8 @@ enum HuddleServiceError: LocalizedError {
     case alreadyMember
     case notAMember
     case notKeeper
-    /// Before the free limits start: 8 members, as always.
+    /// Before the free limits start, a keeper without Plus: 8 members, as
+    /// always. (A huddle that grew to 10 with Plus keeps them all.)
     case huddleFull
     /// Its keeper is on the free plan: 4 members.
     case huddleFullFree
@@ -41,7 +42,7 @@ enum HuddleServiceError: LocalizedError {
         case .alreadyMember: "You're already a member of this huddle."
         case .notAMember: "You're not a member of this huddle."
         case .notKeeper: "Only the huddle's keeper can do that."
-        case .huddleFull: "This huddle already has 8 members — that's the limit."
+        case .huddleFull: "This huddle is full — it takes up to 8 members."
         case .huddleFullFree: "This huddle is full for now — free huddles hold 4 people. Its keeper can make room or get HuddlePals Plus for up to 10."
         case .invitesPaused: "This huddle isn't taking new members right now. Ask its keeper."
         case .huddleAtMaximum: "This huddle has 10 members — the most a huddle can have."

@@ -81,6 +81,14 @@ final class PlanRulesTests: XCTestCase {
         XCTAssertEqual(HuddleEngine.joinRule(memberCount: 2, keeperIsPremium: false, keeperRank: nil, limitsActive: false).memberCap, 8)
     }
 
+    /// What the paywall promises holds from the day Plus ships.
+    func testBeforeTheLimitsStartAPlusKeepersHuddleTakes10() {
+        XCTAssertNil(refusal(members: 9, premium: true, rank: 7, limits: false))
+        XCTAssertEqual(refusal(members: 10, premium: true, limits: false), .maxMembers)
+        XCTAssertEqual(HuddleEngine.joinRule(memberCount: 2, keeperIsPremium: true, keeperRank: 0, limitsActive: false).memberCap, 10)
+        XCTAssertEqual(refusal(members: 10, premium: false, limits: false), .full, "Plus ended: all 10 stay, nobody joins")
+    }
+
     func testAFreeKeepersHuddleTakes4() {
         XCTAssertNil(refusal(members: 3))
         XCTAssertEqual(refusal(members: 4), .freeLimit)

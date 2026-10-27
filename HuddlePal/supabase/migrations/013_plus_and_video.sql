@@ -9,7 +9,8 @@
 -- The free plan's limits start only once the operator sets
 -- app_limits.free_limits_start. Until then the old rules hold (8 members, no
 -- cap on huddles), so this can run before the Plus build is in the App
--- Store; videos and Plus work as soon as Plus can be bought. Safe to re-run.
+-- Store; Plus (videos, 10 members) works as soon as it can be bought. Safe
+-- to re-run.
 
 begin;
 
@@ -19,7 +20,8 @@ create table if not exists public.app_limits (
   -- One row.
   id boolean primary key default true check (id),
   -- When the free plan's limits start. Null (as shipped) or a time still to
-  -- come keeps the old rules for everyone: 8 members, no cap on huddles.
+  -- come keeps the old rules for everyone without Plus: 8 members, no cap on
+  -- huddles. (A Plus keeper's huddles take 10 either way.)
   -- Set it to the Plus launch plus a grace period; set it back to null to
   -- undo. Operator only (SQL editor).
   free_limits_start timestamptz
@@ -264,16 +266,14 @@ declare
   v_keeper uuid;
 begin
   select count(*)::int into member_count from memberships where huddle_id = p_huddle;
-  if not free_limits_active() then
-    member_cap := 8;
-    refusal := case when member_count >= member_cap then 'huddle_full' end;
-    return next;
-    return;
-  end if;
   select m.user_id into v_keeper from memberships m where m.huddle_id = p_huddle and m.role = 'keeper';
+  -- Plus takes 10 from the day it ships, before the free limits too.
   if v_keeper is not null and is_user_premium(v_keeper) then
     member_cap := 10;
     refusal := case when member_count >= member_cap then 'join_blocked_max_members' end;
+  elsif not free_limits_active() then
+    member_cap := 8;
+    refusal := case when member_count >= member_cap then 'huddle_full' end;
   else
     member_cap := 4;
     if v_keeper is null or p_huddle not in (

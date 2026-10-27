@@ -40,7 +40,7 @@ This document is the single place to understand everything: the product, the rul
 
 ## 1. What Huddle is
 
-A huddle is a private group of 2–8 people — and you can belong to **many huddles at once**: one with your family, one with your best friends. Each huddle tracks its own photos, members, and streak independently. Every member deposits exactly one photo per day per huddle. The hook is the **reciprocity gate**: you can see *that* your people posted today (frosted cards with their names), but not *what* — until you deposit your own. Past days are always open, like a shared album the group binds one page at a time.
+A huddle is a private group of up to 4 people, or up to 10 when its keeper has HuddlePals Plus — and you can belong to **many huddles at once** (up to 25): one with your family, one with your best friends. Each huddle tracks its own photos, members, and streak independently. Every member deposits exactly one photo per day per huddle (or, with Plus, a video of up to 6 seconds). The hook is the **reciprocity gate**: you can see *that* your people posted today (frosted cards with their names), but not *what* — until you deposit your own. Past days stay open, like a shared album the group binds one page at a time: the most recent 30 on the free plan, every one with Plus. (Until the free plan's limits are switched on, a huddle takes 8 people, or 10 if its keeper has Plus, and the whole archive is open.)
 
 The daily loop:
 
@@ -297,7 +297,7 @@ The reveal is the signature interaction: a lock springs open over a paper-toned 
 
 ## 9. Sync model
 
-Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤8 people:
+Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤10 people:
 
 - **When**: app launch, tab `.task`, app returning to foreground (`scenePhase`), pull-to-refresh, and after every mutation.
 - **What**: the Huddles shelf stays light because it refreshes on every appear and foreground. It reads the huddle rows plus a single `deposits?select=huddle_id,author_id&day_key=eq.<today>` across all huddles (`DepositServiceProtocol.depositorIDs`), and recomputes each huddle's streak at most once per day. A stored streak only goes stale when a day ends or a deposit lands, and deposits recompute on their own. Full history — deposits, reactions, comments, and any profiles not yet cached — syncs when a huddle's Home or Archive opens.
@@ -341,7 +341,7 @@ Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, 
 | `create_huddle(name, emoji, day_key)` | Huddle + keeper membership + unique invite code in one transaction; once the free limits are on, 3 huddles kept on the free plan, 10 with Plus |
 | `join_huddle(code, day_key)` | Old secret-less codes only (old app builds), until the huddle gets a new-format invite |
 | `redeem_huddle_invite(lookup, proof, day_key)` | Checks the code's proof (10 misses/hour), `huddle_join_rule`, the 25-huddle limit and blocks, inserts membership, returns the huddle key sealed for the code |
-| `huddle_join_rule(huddle)` / `huddle_join_status(huddle)` | How many members a huddle takes, from its keeper's plan (8 before the free limits start; then 4 on the free plan, and only in the keeper's 3 longest-kept huddles; 10 with Plus), and why it refuses one more. The status is for members, so the app can explain a paused invite |
+| `huddle_join_rule(huddle)` / `huddle_join_status(huddle)` | How many members a huddle takes, from its keeper's plan (10 with Plus, from the start; otherwise 8 before the free limits start, then 4, and only in the keeper's 3 longest-kept huddles), and why it refuses one more. The status is for members, so the app can explain a paused invite |
 | `my_entitlement()` | The caller's plan: Plus or not and until when, the server's clock, the free limits' start, huddles kept against the cap |
 | `apply_entitlement(…)` | Service role only: records what Apple signed about one subscription, keeping it with one account and ignoring anything signed earlier than what it has |
 | `huddle_invite(huddle)` | For members: the lookup, the secret sealed with the huddle key, and whether the huddle is still on an old code |
@@ -468,7 +468,7 @@ HuddlePal/
 
 - **Modes**: no `Supabase.plist` → mock; filled-in plist → live. The plist is gitignored; the anon key it holds is publishable (RLS is the security boundary). A Release-only build phase fails any Release build or Archive that lacks a real plist, so the mock world can't ship.
 - **Entitlements**: `HuddlePal.entitlements` carries Sign in with Apple and Push Notifications (`aps-environment`); wired via `CODE_SIGN_ENTITLEMENTS`. Registering the capabilities needs the paid Apple Developer Program.
-- **App Store readiness**: 1024px opaque icon, privacy manifest (no tracking; photos/name/user-id collected for app functionality only), `ITSAppUsesNonExemptEncryption = NO` (the photo encryption uses only Apple's CryptoKit; see DEPLOYMENT.md "Export compliance").
+- **App Store readiness**: 1024px opaque icon, privacy manifest (no tracking; photos and videos, audio, name, user id, email, phone, other user content and purchase history, collected for app functionality only), `ITSAppUsesNonExemptEncryption = NO` (the photo encryption uses only Apple's CryptoKit; see DEPLOYMENT.md "Export compliance").
 - **Build**: `GENERATE_INFOPLIST_FILE = YES`, merged with the small partial `Config/Info.plist` (kept outside the synchronized folders), iOS 17.0 target, Swift 5 language mode, Universal device family (iPhone + iPad; iPhone-only is an open decision), synchronized folder groups (drop a file in, it's in the build).
 
 ## 16. Known limitations & roadmap

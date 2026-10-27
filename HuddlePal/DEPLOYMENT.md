@@ -167,7 +167,7 @@ seeded **mock** world. No code changes to switch.
      something like this:
 
      > HuddlePals is a private, invite-only photo app for small groups (up
-     > to 8 people who know each other). Sign in with Apple is the only
+     > to 4 people who know each other, or 10 with HuddlePals Plus). Sign in with Apple is the only
      > sign-in. To try it: agree to the Terms, sign in, create a huddle and
      > take today's photo. Other members' photos for today unlock once you
      > post yours. To see a group with other members, join with invite
@@ -175,8 +175,10 @@ seeded **mock** world. No code changes to switch.
      > the Terms (zero tolerance for objectionable content) before signing
      > in; any photo (••• menu), comment (touch and hold) or profile (•••
      > menu) can be reported; members can be blocked; we review reports
-     > within 24 hours. Photos are end-to-end encrypted; a report sends us
-     > that one photo's key so we can review it. Account deletion: Profile
+     > within 24 hours. Photos and videos are end-to-end encrypted; a
+     > report sends us that one post's key so we can review it. HuddlePals
+     > Plus (auto-renewable, monthly or yearly) is in Profile → Plan and
+     > behind Video when posting; Restore Purchases is in both places. Account deletion: Profile
      > → Delete account (Apple confirms, then the account is deleted and
      > its Sign in with Apple token revoked).
 
@@ -279,7 +281,8 @@ a device before TestFlight:
 
 - the OTP `/verify` response shape and the Apple `id_token` grant;
 - PostgREST error-message pass-through in `SupabaseClient.check` (e.g.
-  joining a full huddle should say "8 members", not a generic error);
+  joining a full huddle should say why: "8 members" before the free limits
+  start, then the free plan's 4 or Plus's 10, not a generic error);
 - **posting a photo** — uploads are insert-only (no `x-upsert`), so the
   storage INSERT policy alone must allow it;
 - the huddle list's single `deposits?select=huddle_id,author_id&day_key=eq.…`

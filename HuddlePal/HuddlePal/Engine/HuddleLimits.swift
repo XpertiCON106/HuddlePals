@@ -11,8 +11,8 @@ enum HuddleLimits {
     /// Members a huddle takes, the keeper included, by the keeper's plan.
     static let freeMembers = 4
     static let plusMembers = 10
-    /// Every huddle's cap before the free limits start
-    /// (`app_limits.free_limits_start`).
+    /// The cap before the free limits start (`app_limits.free_limits_start`)
+    /// for a keeper without Plus; with Plus it's `plusMembers` from the start.
     static let legacyMembers = 8
     /// Huddles one account can be in at all, kept and joined.
     static let huddlesJoined = 25

@@ -171,7 +171,7 @@ private struct CreateHuddleContent: View {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .strokeBorder(Theme.hairline, lineWidth: 1)
                     )
-                Text("Anyone with this code can join and see every photo, so share it only with people you'd invite.")
+                Text("Anyone with this code can join and see every photo and video, so share it only with people you'd invite.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
