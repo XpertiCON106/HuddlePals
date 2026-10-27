@@ -148,7 +148,11 @@ private struct DayRow: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 // 146pt tile → 450px covers @3x displays.
+                                // A video shows its poster here; it plays in detail.
                                 LocalDepositImage(deposit: deposit, maxPixelSize: 450)
+                                    .overlay(alignment: .topLeading) {
+                                        if deposit.isVideo { VideoBadge(durationMs: deposit.durationMs).padding(6) }
+                                    }
                                     .frame(width: 110, height: 146)
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .overlay(

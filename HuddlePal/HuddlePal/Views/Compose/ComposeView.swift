@@ -47,21 +47,11 @@ struct ComposeView: View {
         }
         .interactiveDismissDisabled(viewModel?.isSaving ?? false)
         .fullScreenCover(isPresented: $showCamera) {
-            #if DEBUG
-            if UITestHooks.fakeCamera {
-                FakeCameraView { image in viewModel?.setCapturedImage(image) }
+            if viewModel?.medium == .video {
+                videoCamera
             } else {
-                CameraPicker { image in
-                    viewModel?.setCapturedImage(image)
-                }
-                .ignoresSafeArea()
+                photoCamera
             }
-            #else
-            CameraPicker { image in
-                viewModel?.setCapturedImage(image)
-            }
-            .ignoresSafeArea()
-            #endif
         }
         .onAppear {
             if viewModel == nil {
@@ -77,6 +67,38 @@ struct ComposeView: View {
         guard let viewModel else { return "" }
         if viewModel.stage == .confirm { return "Last look" }
         return viewModel.isBackfill ? "Yesterday's photo" : "Today's deposit"
+    }
+
+    @ViewBuilder
+    private var photoCamera: some View {
+        #if DEBUG
+        if UITestHooks.fakeCamera {
+            FakeCameraView { image in viewModel?.setCapturedImage(image) }
+        } else {
+            CameraPicker { image in
+                viewModel?.setCapturedImage(image)
+            }
+            .ignoresSafeArea()
+        }
+        #else
+        CameraPicker { image in
+            viewModel?.setCapturedImage(image)
+        }
+        .ignoresSafeArea()
+        #endif
+    }
+
+    @ViewBuilder
+    private var videoCamera: some View {
+        #if DEBUG
+        if UITestHooks.fakeCamera {
+            FakeVideoCameraView { clip in viewModel?.setCapturedVideo(clip) }
+        } else {
+            VideoCaptureView { clip in viewModel?.setCapturedVideo(clip) }
+        }
+        #else
+        VideoCaptureView { clip in viewModel?.setCapturedVideo(clip) }
+        #endif
     }
 }
 
@@ -110,8 +132,13 @@ private struct ComposeContent: View {
 
     private var pickStage: some View {
         VStack(spacing: 18) {
+            if viewModel.canRecordVideo || viewModel.medium == .video {
+                mediumPicker
+                    .padding(.top, 12)
+            }
+
             photoArea
-                .padding(.top, 12)
+                .padding(.top, viewModel.canRecordVideo || viewModel.medium == .video ? 0 : 12)
 
             CaptionTextField(text: $viewModel.caption)
                 .focused($captionFocused)
@@ -137,6 +164,22 @@ private struct ComposeContent: View {
         .padding(Theme.screenPadding)
     }
 
+    /// Photo or video (Plus): switching opens that camera.
+    private var mediumPicker: some View {
+        Picker("Today's deposit", selection: Binding(
+            get: { viewModel.medium },
+            set: { medium in
+                viewModel.choose(medium)
+                if camera == .ready { showCamera = true }
+            }
+        )) {
+            Label("Photo", systemImage: "camera.fill").tag(ComposeViewModel.Medium.photo)
+            Label("Video", systemImage: "video.fill").tag(ComposeViewModel.Medium.video)
+        }
+        .pickerStyle(.segmented)
+        .disabled(viewModel.isSaving)
+    }
+
     private var photoArea: some View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
@@ -144,7 +187,24 @@ private struct ComposeContent: View {
                 .strokeBorder(Theme.hairline, lineWidth: 1)
                 .aspectRatio(3 / 4, contentMode: .fit)
 
-            if let image = viewModel.previewImage {
+            if let clip = viewModel.clip {
+                ClipPreview(clip: clip)
+                    .aspectRatio(3 / 4, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                    .overlay(alignment: .bottomTrailing) {
+                        Button {
+                            showCamera = true
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(10)
+                                .background(.black.opacity(0.55), in: Circle())
+                        }
+                        .accessibilityLabel("Record again")
+                        .padding(12)
+                    }
+            } else if let image = viewModel.previewImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -170,7 +230,7 @@ private struct ComposeContent: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
         .onTapGesture {
-            if viewModel.previewImage == nil, camera == .ready { showCamera = true }
+            if viewModel.previewImage == nil, viewModel.clip == nil, camera == .ready { showCamera = true }
         }
     }
 
@@ -179,16 +239,16 @@ private struct ComposeContent: View {
         switch camera {
         case .ready:
             VStack(spacing: 16) {
-                Image(systemName: "camera.fill")
+                Image(systemName: viewModel.medium == .video ? "video.fill" : "camera.fill")
                     .font(.system(size: 42, weight: .light))
                     .foregroundStyle(Theme.accent)
-                Text("Take today's photo")
+                Text(viewModel.medium == .video ? "Record today's video, up to 6 seconds" : "Take today's photo")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
                 Button {
                     showCamera = true
                 } label: {
-                    Label("Open camera", systemImage: "camera")
+                    Label("Open camera", systemImage: viewModel.medium == .video ? "video" : "camera")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                         .padding(.horizontal, 16)
@@ -254,7 +314,17 @@ private struct ComposeContent: View {
 
     private var confirmStage: some View {
         VStack(spacing: 18) {
-            if let image = viewModel.previewImage {
+            if let clip = viewModel.clip {
+                ClipPreview(clip: clip)
+                    .aspectRatio(3 / 4, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                    )
+                    .padding(.top, 12)
+                    .transition(.scale(scale: 0.97).combined(with: .opacity))
+            } else if let image = viewModel.previewImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -292,6 +362,20 @@ private struct ComposeContent: View {
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.destructive)
                     .multilineTextAlignment(.center)
+            }
+
+            if viewModel.videoNeedsPlus {
+                Button {
+                    viewModel.takePhotoInstead()
+                    if camera == .ready { showCamera = true }
+                } label: {
+                    Label("Take a photo instead", systemImage: "camera")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Theme.surfaceElevated, in: Capsule())
+                }
             }
 
             Spacer()

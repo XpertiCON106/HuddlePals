@@ -192,6 +192,97 @@ final class InviteKeyTests: XCTestCase {
         assertServerNeverSaw(code)
     }
 
+    func testPostingAVideoRightAfterJoining() async throws {
+        let code = try installInvite()
+        let (client, keyring, _) = try await signIn(ben.id, token: "ben")
+        StubURLProtocol.respond(with: server.handle)
+        let huddle = try await huddleService(client, keyring).joinHuddle(inviteCode: code.compact, user: ben)
+
+        let clip = try await ClipPreparer.placeholder(seed: 12)
+        let base = "\(huddleID.uuidString.lowercased())/\(UUID().uuidString.lowercased())"
+        let media = LiveMediaService(client: client, keyring: keyring)
+        let stored = try await media.saveDepositVideo(poster: clip.poster, clip: clip.clip, baseName: base, huddleID: huddleID)
+        cachedPaths += [stored.posterPath, stored.videoPath]
+        let deposit = try await LiveDepositService(client: client, store: store, keyring: keyring).createDeposit(
+            in: huddle, author: ben, localImagePath: stored.posterPath, wrappedPhotoKey: stored.wrappedPhotoKey,
+            caption: nil, dayKey: "2026-10-22",
+            video: DepositVideo(localVideoPath: stored.videoPath, durationMs: clip.durationMs)
+        )
+
+        XCTAssertTrue(deposit.isVideo)
+        XCTAssertEqual(deposit.localVideoPath, stored.videoPath)
+        let row = try XCTUnwrap(server.lastDeposit)
+        XCTAssertEqual(row["media_type"] as? String, "video")
+        XCTAssertEqual(row["storage_path"] as? String, "\(base).jpg", "the poster where a photo goes")
+        XCTAssertEqual(row["video_path"] as? String, "\(base).mp4", "the clip next to it")
+        XCTAssertEqual(row["duration_ms"] as? Int, clip.durationMs)
+
+        let uploads = StubURLProtocol.requests
+            .filter { $0.httpMethod == "POST" && $0.url!.path.hasPrefix("/storage/v1/object/deposits/") }
+            .map { $0.url!.pathExtension }
+        XCTAssertEqual(uploads, ["jpg", "mp4"], "the poster first")
+        let poster = try XCTUnwrap(server.object(at: "\(base).jpg"))
+        let uploadedClip = try XCTUnwrap(server.object(at: "\(base).mp4"))
+        XCTAssertNotEqual(uploadedClip, clip.clip, "Storage gets ciphertext")
+        let wrapped = try XCTUnwrap(stored.wrappedPhotoKey)
+        XCTAssertEqual(try PhotoCrypto.openPhoto(poster, wrappedPhotoKey: wrapped, huddleKey: huddleKey), clip.poster)
+        XCTAssertEqual(try PhotoCrypto.openPhoto(uploadedClip, wrappedPhotoKey: wrapped, huddleKey: huddleKey), clip.clip, "Ada can play it")
+
+        let played = await media.loadDepositPhoto(at: stored.videoPath, huddleID: huddleID, wrappedPhotoKey: wrapped)
+        XCTAssertEqual(played, clip.clip, "opened from the cache, in memory")
+        assertServerNeverSaw(code)
+    }
+
+    func testAVideoAfterPlusEndedIsRefusedAndNothingIsPosted() async throws {
+        let code = try installInvite()
+        let (client, keyring, _) = try await signIn(ben.id, token: "ben")
+        StubURLProtocol.respond(with: server.handle)
+        let huddle = try await huddleService(client, keyring).joinHuddle(inviteCode: code.compact, user: ben)
+        let media = LiveMediaService(client: client, keyring: keyring)
+        let deposits = LiveDepositService(client: client, store: store, keyring: keyring)
+        let clip = try await ClipPreparer.placeholder(seed: 13)
+
+        // Plus ended before the clip went up: Storage refuses it.
+        server.setPlus(false)
+        let refusedBase = "\(huddleID.uuidString.lowercased())/\(UUID().uuidString.lowercased())"
+        do {
+            _ = try await media.saveDepositVideo(poster: clip.poster, clip: clip.clip, baseName: refusedBase, huddleID: huddleID)
+            XCTFail("Storage takes a clip only with Plus")
+        } catch DepositError.videoNeedsPlus {}
+        cachedPaths.append(LiveMediaService.cachePath(forStoragePath: "\(refusedBase).jpg"))
+        XCTAssertNil(server.object(at: "\(refusedBase).mp4"))
+
+        // Plus ended between the upload and the row: the database refuses it.
+        server.setPlus(true)
+        let base = "\(huddleID.uuidString.lowercased())/\(UUID().uuidString.lowercased())"
+        let stored = try await media.saveDepositVideo(poster: clip.poster, clip: clip.clip, baseName: base, huddleID: huddleID)
+        cachedPaths += [stored.posterPath, stored.videoPath]
+        server.setPlus(false)
+        do {
+            try await deposits.createDeposit(
+                in: huddle, author: ben, localImagePath: stored.posterPath, wrappedPhotoKey: stored.wrappedPhotoKey,
+                caption: nil, dayKey: "2026-10-22",
+                video: DepositVideo(localVideoPath: stored.videoPath, durationMs: clip.durationMs)
+            )
+            XCTFail("the insert policy takes a video only with Plus")
+        } catch DepositError.videoNeedsPlus {}
+        XCTAssertNil(server.lastDeposit, "nothing posted")
+        XCTAssertTrue(huddle.deposits.isEmpty)
+
+        // A photo for the day still goes up, and carries no video fields.
+        let jpeg = PlaceholderImageGenerator.jpegData(seed: 14)
+        let photo = try await media.saveDepositPhoto(jpeg, preferredName: "\(huddleID.uuidString.lowercased())/\(UUID().uuidString.lowercased()).jpg", huddleID: huddleID)
+        cachedPaths.append(photo.path)
+        try await deposits.createDeposit(
+            in: huddle, author: ben, localImagePath: photo.path, wrappedPhotoKey: photo.wrappedPhotoKey,
+            caption: nil, dayKey: "2026-10-22"
+        )
+        let row = try XCTUnwrap(server.lastDeposit)
+        XCTAssertNil(row["media_type"], "a photo row is what it always was")
+        XCTAssertNil(row["video_path"])
+        XCTAssertNil(row["duration_ms"])
+    }
+
     func testAWrongSecretFailsCleanly() async throws {
         let code = try installInvite()
         let guess = try XCTUnwrap(InviteCode(lookup: code.lookup, secret: InviteCode.generate().secret))
@@ -414,6 +505,10 @@ final class FakeHuddleServer: @unchecked Sendable {
     private var objects: [String: Data] = [:]
     private var missCount = 0
     private var failSaveOwnCopy = false
+    /// Whether the caller has Plus: without it Storage refuses a .mp4 and
+    /// the deposits insert policy a video row (migration 013).
+    private var plus = true
+    private var acceptedDeposit: [String: Any]?
 
     init(huddleID: UUID, keeperID: UUID) {
         self.huddleID = huddleID
@@ -431,6 +526,9 @@ final class FakeHuddleServer: @unchecked Sendable {
     func setLegacy() { lock.withLock { activeInvite = nil; legacy = true; lookup = "CREW42" } }
     func putObject(_ data: Data, at path: String) { lock.withLock { objects[path] = data } }
     func failNextSaveOwnCopy() { lock.withLock { failSaveOwnCopy = true } }
+    func setPlus(_ on: Bool) { lock.withLock { plus = on } }
+    /// The last deposit row the server took, as the app sent it.
+    var lastDeposit: [String: Any]? { lock.withLock { acceptedDeposit } }
     /// Joined with an old code (or the server says so): no copy of the key.
     func addMember(_ id: UUID) { lock.withLock { if !members.contains(id) { members.append(id) } } }
     func removeKeyCopy(for id: UUID) { lock.withLock { keyCopies[id] = nil } }
@@ -559,6 +657,12 @@ final class FakeHuddleServer: @unchecked Sendable {
         case ("GET", "/rest/v1/profiles"):
             return json(members.map { ["id": $0.uuidString, "display_name": $0 == keeperID ? "Ada" : "Ben", "avatar_color_hex": "E5484D"] })
         case ("POST", "/rest/v1/deposits"):
+            if body["media_type"] as? String == "video", !plus {
+                return .init(status: 403, body: LiveStub.json([
+                    "code": "42501", "message": "new row violates row-level security policy for table \"deposits\"",
+                ]))
+            }
+            acceptedDeposit = body
             var row = body
             row["id"] = UUID().uuidString
             row["created_at"] = "2026-10-22T09:00:00Z"
@@ -570,6 +674,12 @@ final class FakeHuddleServer: @unchecked Sendable {
             guard let data = objects[key] else { return .init(status: 404, body: LiveStub.json(["message": "not found"])) }
             return .init(body: data)
         case ("POST", let p) where p.hasPrefix("/storage/v1/object/deposits/"):
+            if p.lowercased().hasSuffix(".mp4"), !plus {
+                // What Supabase Storage answers when its insert policy says no.
+                return .init(status: 400, body: LiveStub.json([
+                    "statusCode": "403", "error": "Unauthorized", "message": "new row violates row-level security policy",
+                ]))
+            }
             objects[String(p.dropFirst("/storage/v1/object/deposits/".count))] = request.httpBody ?? Data()
             return json(["Key": p])
         default:

@@ -36,14 +36,20 @@ private struct DetailContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                LocalDepositImage(deposit: deposit)
-                    .aspectRatio(3 / 4, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
-                            .strokeBorder(Theme.hairline, lineWidth: 1)
-                    )
-                    .shadow(color: Theme.shadow, radius: 14, x: 0, y: 5)
+                Group {
+                    if deposit.isVideo {
+                        DepositVideoPlayer(deposit: deposit, startsMuted: false)
+                    } else {
+                        LocalDepositImage(deposit: deposit)
+                    }
+                }
+                .aspectRatio(3 / 4, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
+                .shadow(color: Theme.shadow, radius: 14, x: 0, y: 5)
 
                 if let caption = deposit.caption {
                     Text(caption)

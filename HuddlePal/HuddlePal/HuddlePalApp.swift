@@ -13,6 +13,9 @@ struct HuddlePalApp: App {
         // Live when a filled-in Supabase.plist is bundled (and this isn't a
         // test run); mock otherwise.
         UITestHooks.resetPersistentStateIfTesting()
+        // A recording left behind by a kill mid-capture: the only plaintext
+        // video that is ever on disk.
+        CaptureFiles.sweep()
         let deps: AppDependencies
         let config = BackendConfig.load()
         if let config, !UITestHooks.isUITesting,

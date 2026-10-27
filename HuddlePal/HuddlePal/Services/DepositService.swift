@@ -3,13 +3,30 @@ import SwiftData
 
 enum DepositError: LocalizedError {
     case alreadyDepositedToday
+    /// HuddlePals Plus wasn't on when the video went up (it ended since it
+    /// was recorded): Storage or the database refused it, and nothing was
+    /// posted.
+    case videoNeedsPlus
+    case videoTooLarge
 
     var errorDescription: String? {
         switch self {
         case .alreadyDepositedToday:
             "That day's photo is already in the huddle. One a day — forever."
+        case .videoNeedsPlus:
+            "Your HuddlePals Plus has ended, so this video can't be posted. Nothing was posted: take a photo for today instead, or renew Plus to post the video."
+        case .videoTooLarge:
+            "That clip is too large to post. Record it again."
         }
     }
+}
+
+/// A video drop's clip, posted with its poster at `localImagePath`.
+struct DepositVideo: Equatable {
+    /// Documents-relative, like `localImagePath`: the poster's path ending
+    /// in .mp4.
+    let localVideoPath: String
+    let durationMs: Int
 }
 
 @MainActor
@@ -19,7 +36,10 @@ protocol DepositServiceProtocol: AnyObject {
     /// `DepositError.alreadyDepositedToday` if the author already has one
     /// for that day. Deposits can never be edited, replaced, or deleted.
     /// `wrappedPhotoKey` comes from `MediaServiceProtocol.saveDepositPhoto`
-    /// (required live, where every photo is end-to-end encrypted).
+    /// or `saveDepositVideo` (required live, where every deposit is
+    /// end-to-end encrypted). With `video`, it's a video drop whose poster is
+    /// at `localImagePath`; posting one takes Plus, and without it throws
+    /// `DepositError.videoNeedsPlus`.
     @discardableResult
     func createDeposit(
         in huddle: Huddle,
@@ -27,7 +47,8 @@ protocol DepositServiceProtocol: AnyObject {
         localImagePath: String,
         wrappedPhotoKey: String?,
         caption: String?,
-        dayKey: String
+        dayKey: String,
+        video: DepositVideo?
     ) async throws -> Deposit
     /// Who has deposited on `dayKey`, keyed by huddle id (every requested
     /// huddle gets an entry). A lightweight read for the huddle list: it does
@@ -38,16 +59,37 @@ protocol DepositServiceProtocol: AnyObject {
     func addComment(_ text: String, to deposit: Deposit, by user: User) async throws -> Comment
 }
 
+extension DepositServiceProtocol {
+    /// A photo.
+    @discardableResult
+    func createDeposit(
+        in huddle: Huddle,
+        author: User,
+        localImagePath: String,
+        wrappedPhotoKey: String?,
+        caption: String?,
+        dayKey: String
+    ) async throws -> Deposit {
+        try await createDeposit(
+            in: huddle, author: author, localImagePath: localImagePath,
+            wrappedPhotoKey: wrappedPhotoKey, caption: caption, dayKey: dayKey, video: nil
+        )
+    }
+}
+
 // MARK: - Mock
 
 @MainActor
 final class MockDepositService: DepositServiceProtocol {
     private let context: ModelContext
     private let engine: HuddleEngine
+    /// Who has Plus: a video takes it, as the deposits insert policy says.
+    private let plans: MockPlanLedger
 
-    init(context: ModelContext, engine: HuddleEngine) {
+    init(context: ModelContext, engine: HuddleEngine, plans: MockPlanLedger) {
         self.context = context
         self.engine = engine
+        self.plans = plans
     }
 
     func deposits(in huddle: Huddle) async throws -> [Deposit] {
@@ -63,7 +105,8 @@ final class MockDepositService: DepositServiceProtocol {
         localImagePath: String,
         wrappedPhotoKey: String?,
         caption: String?,
-        dayKey: String
+        dayKey: String,
+        video: DepositVideo?
     ) async throws -> Deposit {
         // Once-and-permanent: a day that already holds this member's photo
         // is closed forever.
@@ -72,13 +115,19 @@ final class MockDepositService: DepositServiceProtocol {
         }) else {
             throw DepositError.alreadyDepositedToday
         }
+        if video != nil, !plans.hasPlus(author.id) {
+            throw DepositError.videoNeedsPlus
+        }
         let deposit = Deposit(
             huddle: huddle,
             author: author,
             localImagePath: localImagePath,
             caption: HuddleEngine.sanitizedCaption(caption),
             dayKey: dayKey,
-            wrappedPhotoKey: wrappedPhotoKey
+            wrappedPhotoKey: wrappedPhotoKey,
+            mediaType: video == nil ? .photo : .video,
+            localVideoPath: video?.localVideoPath,
+            durationMs: video?.durationMs
         )
         context.insert(deposit)
         try context.save()

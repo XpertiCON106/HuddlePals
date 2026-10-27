@@ -104,8 +104,23 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   edited or deleted (`DepositError.alreadyDepositedToday`; the database has
   no update or delete policy on deposits). Compose asks "This is permanent —
   post it?".
-- **Camera only** for daily photos (`CameraPicker`); profile photos use
-  `PhotosPicker`. The Simulator has no camera, so Compose says so.
+- **Camera only** for daily photos (`CameraPicker`) and videos
+  (`VideoCaptureView`); profile photos use `PhotosPicker`. The Simulator has
+  no camera, so Compose says so (`-ui-testing-fake-camera` stands in for
+  both: a test photo, or a generated 2-second clip).
+- **Video drops** (Plus): one a day instead of a photo, never both. The
+  recorder (`VideoRecorder`) feeds AVAssetWriter straight from the camera:
+  720p H.264 at ~2 Mbps, AAC mono (silent if the microphone is off), no
+  metadata, cut at exactly 6.0 s by the frames' timestamps. It records into
+  `CaptureFiles` (tmp, complete file protection, swept at launch), the only
+  plaintext video that ever touches disk; `ClipPreparer` reads it into memory,
+  makes the poster from the first frame, and deletes the file. The poster,
+  then the clip, then the row go up; if Plus has ended meanwhile Storage or
+  RLS refuses it (`DepositError.videoNeedsPlus`), nothing is posted, and
+  Compose keeps the clip and offers a photo instead. Playback is from memory
+  (`InMemoryClipLoader`, an AVAssetResourceLoader delegate): the cache only
+  ever holds ciphertext. Muted and looping in the feed (tap to unmute, ambient
+  audio so music keeps playing), with sound in detail.
 - **Streak**: a day counts when every member it waits on posted or spent a
   skip token (2 each). A day waits only on members who joined before it, so
   joining never breaks a streak, and a new huddle's first countable day is
@@ -144,7 +159,10 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
 - **Photo key**: one per photo. The JPEG is AES-GCM sealed with it (that box
   is the Storage object, `application/octet-stream`); the photo key, sealed
   with the huddle key, is `deposits.wrapped_photo_key`. A report discloses
-  only that photo's key (`tools/decrypt_reported_photo`).
+  only that photo's key (`tools/decrypt_reported_photo`). A video has one
+  photo key for two objects (`PhotoCrypto.sealVideo`): its poster JPEG at
+  `storage_path` and its MP4 at `video_path`, each with its own nonce, so the
+  one disclosed key opens both.
 - **Invite codes** (`Support/InviteCode.swift`): 32 characters of
   `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, shown as eight groups of four. The
   first 6 are a lookup, the only part the server stores

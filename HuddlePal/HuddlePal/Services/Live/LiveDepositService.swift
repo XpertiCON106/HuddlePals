@@ -66,7 +66,8 @@ final class LiveDepositService: DepositServiceProtocol {
         localImagePath: String,
         wrappedPhotoKey: String?,
         caption: String?,
-        dayKey: String
+        dayKey: String,
+        video: DepositVideo?
     ) async throws -> Deposit {
         struct NewDeposit: Encodable {
             let huddleId: UUID
@@ -76,6 +77,11 @@ final class LiveDepositService: DepositServiceProtocol {
             let encVersion: Int
             let caption: String?
             let dayKey: String
+            /// A video's only (nil is left out): a photo row is exactly
+            /// what it was before migration 013.
+            let mediaType: String?
+            let videoPath: String?
+            let durationMs: Int?
         }
         // Every live photo is end-to-end encrypted (the DB refuses one that
         // isn't); a missing key means the upload never went through
@@ -94,12 +100,19 @@ final class LiveDepositService: DepositServiceProtocol {
                     wrappedPhotoKey: wrappedPhotoKey,
                     encVersion: PhotoCrypto.formatVersion,
                     caption: HuddleEngine.sanitizedCaption(caption),
-                    dayKey: dayKey
+                    dayKey: dayKey,
+                    mediaType: video.map { _ in DepositMediaType.video.rawValue },
+                    videoPath: video.map { LiveMediaService.storagePath(forCachePath: $0.localVideoPath) },
+                    durationMs: video?.durationMs
                 )
             )
         } catch let SupabaseClient.ClientError.http(status, message) {
             if status == 409 || message.contains("duplicate key") {
                 throw DepositError.alreadyDepositedToday
+            }
+            // The insert policy takes a video only with Plus (migration 013).
+            if video != nil, message.contains("row-level security") {
+                throw DepositError.videoNeedsPlus
             }
             throw SupabaseClient.ClientError.http(status: status, message: message)
         }

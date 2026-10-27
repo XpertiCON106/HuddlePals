@@ -67,7 +67,7 @@ HuddlePal/
 │   │   ├── RootView.swift              Splash → Onboarding → MainTabView router
 │   │   ├── Onboarding/OnboardingView.swift  Terms of Service gate (Agree required) + sign-in steps
 │   │   ├── Home/HuddleHomeView.swift    LOCKED grid / UNLOCKED feed + unlock reveal
-│   │   ├── Compose/ComposeView.swift   Camera capture + caption + permanence confirm
+│   │   ├── Compose/ComposeView.swift   Camera capture (photo, or video with Plus) + caption + permanence confirm
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
 │   │   ├── Detail/DepositDetailView.swift  Reactions + comments
 │   │   ├── HuddleManagement/            CreateHuddleView / JoinHuddleView / HuddleSettingsView
@@ -76,9 +76,12 @@ HuddlePal/
 │   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,
 │   │                                   CaptionTextField (80-char enforcement),
-│   │                                   CodeEntryField, CameraPicker, TermsDocumentView
+│   │                                   CodeEntryField, CameraPicker, TermsDocumentView,
+│   │                                   VideoRecorder + VideoCaptureView (6-second clips),
+│   │                                   DepositVideoPlayer (plays decrypted clips from memory)
 │   ├── Support/                        Theme, Haptics, DateProviding (injectable clock),
 │   │                                   DailyReminders, ImageDownscaler, AppleSignInNonce,
+│   │                                   CaptureFiles + PreparedClip (a recording's short life on disk),
 │   │                                   TermsOfService (bundled text + TermsAcceptance)
 │   ├── Legal/TermsOfService.md         The Terms of Service shown in-app; host it at huddlepals.com/terms
 │   └── Assets.xcassets

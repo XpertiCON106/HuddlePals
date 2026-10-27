@@ -5,7 +5,9 @@
 	<!-- Merged with the generated Info.plist (GENERATE_INFOPLIST_FILE).
 	     Registers the huddlepal:// scheme for shareable invite links. -->
 	<key>NSCameraUsageDescription</key>
-	<string>HuddlePals uses your camera so you can capture today's photo in the moment.</string>
+	<string>HuddlePals uses your camera so you can capture today's photo or video in the moment.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>HuddlePals uses your microphone to record sound with your video drops. Without it, videos are silent.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

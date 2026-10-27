@@ -560,5 +560,13 @@ private final class ProfileMediaSpy: MediaServiceProtocol {
         StoredDepositPhoto(path: try await saveImageData(data, preferredName: preferredName), wrappedPhotoKey: nil)
     }
 
+    func saveDepositVideo(poster: Data, clip: Data, baseName: String, huddleID: UUID) async throws -> StoredDepositVideo {
+        StoredDepositVideo(
+            posterPath: try await saveImageData(poster, preferredName: "\(baseName).jpg"),
+            videoPath: try await saveImageData(clip, preferredName: "\(baseName).mp4"),
+            wrappedPhotoKey: nil
+        )
+    }
+
     func loadDepositPhoto(at relativePath: String, huddleID: UUID, wrappedPhotoKey: String?) async -> Data? { nil }
 }

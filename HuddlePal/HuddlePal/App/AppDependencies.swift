@@ -150,6 +150,7 @@ final class AppDependencies {
         session.pendingHuddleID = nil
         session.blockedUserIDs = []
         plus.reset()
+        DecryptedClipCache.shared.removeAll()
         // In the same main-actor turn as clearing the session: the next
         // render swaps the main UI for onboarding, so no mounted screen
         // reads a model after it's deleted.
@@ -191,7 +192,7 @@ final class AppDependencies {
             huddleService: MockHuddleService(
                 context: context, engine: engine, skipLedger: skipLedger, dateProvider: dateProvider, plans: plans
             ),
-            depositService: MockDepositService(context: context, engine: engine),
+            depositService: MockDepositService(context: context, engine: engine, plans: plans),
             mediaService: media,
             moderationService: MockModerationService(session: session),
             plus: MockPlusService(plans: plans, session: session),

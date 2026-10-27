@@ -129,8 +129,15 @@ struct DepositCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LocalDepositImage(deposit: deposit)
-                .aspectRatio(3 / 4, contentMode: .fit)
+            Group {
+                if deposit.isVideo {
+                    // Loops muted; a tap on it unmutes, the rest of the card opens it.
+                    DepositVideoPlayer(deposit: deposit, startsMuted: true)
+                } else {
+                    LocalDepositImage(deposit: deposit)
+                }
+            }
+            .aspectRatio(3 / 4, contentMode: .fit)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {

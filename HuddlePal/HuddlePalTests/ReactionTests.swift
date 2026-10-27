@@ -135,11 +135,11 @@ final class HeldReactionService: DepositServiceProtocol {
 
     func createDeposit(
         in huddle: Huddle, author: User, localImagePath: String,
-        wrappedPhotoKey: String?, caption: String?, dayKey: String
+        wrappedPhotoKey: String?, caption: String?, dayKey: String, video: DepositVideo?
     ) async throws -> Deposit {
         try await inner.createDeposit(
             in: huddle, author: author, localImagePath: localImagePath,
-            wrappedPhotoKey: wrappedPhotoKey, caption: caption, dayKey: dayKey
+            wrappedPhotoKey: wrappedPhotoKey, caption: caption, dayKey: dayKey, video: video
         )
     }
 
