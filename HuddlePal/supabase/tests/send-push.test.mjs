@@ -280,4 +280,12 @@ describe('send-push handler', () => {
     assert.deepEqual(join.askedMedia, [])
     assert.equal(join.apns.calls[0].body.aps.alert.body, 'Sam joined the huddle.')
   })
+
+  it("says who deleted a huddle, by the name it had, and asks about no photo", async () => {
+    const deleted = await setUp({ targets: [target({ actor_name: 'Ada' })] })
+    assert.equal((await handleSendPush(request({ kind: 'huddle_deleted', id: EVENT }), deleted.services)).status, 200)
+    assert.deepEqual(deleted.askedMedia, [])
+    assert.equal(deleted.apns.calls[0].body.aps.alert.title, '🏔 Family')
+    assert.equal(deleted.apns.calls[0].body.aps.alert.body, 'Ada deleted the huddle.')
+  })
 })

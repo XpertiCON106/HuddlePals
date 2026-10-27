@@ -158,6 +158,8 @@ final class HuddleSettingsViewModel {
     let huddle: Huddle
 
     private(set) var didLeave = false
+    private(set) var didDelete = false
+    private(set) var isDeleting = false
     private(set) var errorMessage: String?
     private(set) var inviteCode: InviteCode?
     private(set) var isLoadingInvite = false
@@ -309,6 +311,20 @@ final class HuddleSettingsViewModel {
             await deps.plus.refresh()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Keeper only: the huddle goes for everyone, with every photo and video.
+    func deleteHuddle() async {
+        guard let user = deps.session.currentUser, isKeeper, !isDeleting else { return }
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            try await deps.huddleService.deleteHuddle(huddle, by: user)
+            didDelete = true
+            await deps.plus.refresh()
+        } catch {
+            errorMessage = "The huddle wasn't deleted. \(error.localizedDescription)"
         }
     }
 }

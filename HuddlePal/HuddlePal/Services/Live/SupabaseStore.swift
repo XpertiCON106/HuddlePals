@@ -294,10 +294,20 @@ final class SupabaseStore {
         context.delete(membership)
     }
 
-    /// Prunes huddles the user no longer belongs to (left on another device).
+    /// Prunes huddles the user no longer belongs to (left on another device,
+    /// or deleted by their keeper), with their cached files.
     func pruneHuddles(keeping ids: Set<UUID>) throws {
         for huddle in try context.fetch(FetchDescriptor<Huddle>()) where !ids.contains(huddle.id) {
+            MockMediaService().deleteFiles(of: huddle)
             context.delete(huddle)
+        }
+    }
+
+    /// Everyone's membership in a deleted huddle; the next prune removes the
+    /// huddle itself, once its screens have closed.
+    func removeMembershipsLocally(of huddle: Huddle) {
+        for membership in huddle.memberships {
+            context.delete(membership)
         }
     }
 

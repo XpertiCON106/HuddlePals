@@ -127,6 +127,11 @@ protocol HuddleServiceProtocol: AnyObject {
     /// it can't be known right now (offline, or a server from before Plus).
     func joinStatus(for huddle: Huddle) async -> HuddleJoinStatus?
     func leaveHuddle(_ huddle: Huddle, user: User) async throws
+    /// Keeper only: deletes the huddle for everyone, with every photo and
+    /// video in it. Its members go at once; the huddle itself leaves this
+    /// device with the next refresh of the shelf (`huddles(for:)`), after
+    /// its screens have closed.
+    func deleteHuddle(_ huddle: Huddle, by user: User) async throws
     /// Skip-token usage per dayKey, consumed by streak math.
     func skipRecords(for huddle: Huddle) async throws -> [String: Set<UUID>]
     func spendSkipToken(membership: Membership, dayKey: String) async throws
@@ -202,7 +207,14 @@ final class MockHuddleService: HuddleServiceProtocol {
         // TODO: BACKEND — fetch huddle memberships for the authed user from
         // Supabase (`memberships` joined to `huddles`), then merge into the
         // local SwiftData cache.
-        user.memberships
+        // A huddle nobody is in any more (its keeper deleted it) goes, with
+        // its files.
+        for huddle in try context.fetch(FetchDescriptor<Huddle>()) where huddle.memberships.isEmpty {
+            MockMediaService().deleteFiles(of: huddle)
+            context.delete(huddle)
+        }
+        try context.save()
+        return user.memberships
             .compactMap(\.huddle)
             .sorted { $0.createdAt < $1.createdAt }
     }
@@ -290,6 +302,20 @@ final class MockHuddleService: HuddleServiceProtocol {
             successor.keeperSince = .now
         }
         context.delete(membership)
+        try context.save()
+    }
+
+    func deleteHuddle(_ huddle: Huddle, by user: User) async throws {
+        // Live: the delete-huddle function deletes the rows and the files,
+        // keeping anything reported for the operator. Offline there's no
+        // operator: everyone is removed, and the next shelf refresh deletes
+        // the huddle and its files.
+        guard huddle.memberships.contains(where: { $0.user?.id == user.id && $0.role == .keeper }) else {
+            throw HuddleServiceError.notKeeper
+        }
+        for membership in huddle.memberships {
+            context.delete(membership)
+        }
         try context.save()
     }
 

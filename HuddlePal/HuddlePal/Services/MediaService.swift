@@ -100,6 +100,15 @@ final class MockMediaService: MediaServiceProtocol {
         try? fileManager.removeItem(at: documentsURL.appendingPathComponent(Self.mediaDirectoryName))
     }
 
+    /// A huddle that's gone from this device: its deposits' files (each
+    /// photo or video poster, and a video's clip).
+    func deleteFiles(of huddle: Huddle) {
+        for deposit in huddle.deposits {
+            deleteImage(at: deposit.localImagePath)
+            if let clip = deposit.localVideoPath { deleteImage(at: clip) }
+        }
+    }
+
     // Offline, there is no server to hide photos from and every member is
     // on this device, so there are no keys to make or share.
     func saveDepositPhoto(_ data: Data, preferredName: String, huddleID: UUID) async throws -> StoredDepositPhoto {

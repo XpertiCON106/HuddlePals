@@ -106,6 +106,14 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   edited or deleted (`DepositError.alreadyDepositedToday`; the database has
   no update or delete policy on deposits). Compose asks "This is permanent —
   post it?".
+- **Deleting a huddle** (its keeper only, Huddle Settings → Delete huddle):
+  the `delete-huddle` edge function calls `delete_huddle` (migration 014),
+  which removes every member and row, keeps a reported deposit in
+  `preserved_photos`, and tells the other members (`send-push`,
+  `huddle_deleted`); then it deletes the huddle's Storage folder but for
+  those kept files. The app removes the memberships at once and the huddle
+  itself on the next shelf refresh (`huddles(for:)`), after its screens have
+  closed, with its cached files.
 - **Camera only** for daily photos (`CameraPicker`) and videos
   (`VideoCaptureView`); profile photos use `PhotosPicker`. The Simulator has
   no camera, so Compose says so (`-ui-testing-fake-camera` stands in for
@@ -375,6 +383,10 @@ select vault.create_secret('<webhook-secret>', 'push_webhook_secret');
 
    ```bash
    supabase functions deploy delete-account --project-ref <project-ref>
+   ```
+
+   ```bash
+   supabase functions deploy delete-huddle --project-ref <project-ref>
    ```
 
    ```bash

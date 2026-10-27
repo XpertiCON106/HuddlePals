@@ -2,9 +2,10 @@
 //
 // Sends HuddlePals' activity notifications through APNs. Called only by the
 // database: AFTER INSERT triggers on deposits, comments, reactions and
-// memberships (public.notify_push, migration 009) POST
-// {"kind": "deposit" | "comment" | "reaction" | "join", "id": "<row id>"}
-// through pg_net with the shared secret in x-push-secret. The function asks
+// memberships (public.notify_push, migration 009), and delete_huddle
+// (migration 014), POST {"kind": "deposit" | "comment" | "reaction" | "join"
+// | "huddle_deleted", "id": "<row id>"} through pg_net with the shared secret
+// in x-push-secret. The function asks
 // public.push_targets who to notify (never the person who acted, never across
 // a block) and public.push_media_type whether it's about a photo or a video
 // (migration 013), sends one alert per device, and deletes tokens APNs
