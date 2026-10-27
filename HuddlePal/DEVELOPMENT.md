@@ -134,8 +134,7 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   missing members backfill in time, the recompute restores it.
 - **Limits**: captions ≤ 80, comments ≤ 500, names ≤ 40 (huddles 60), bios
   ≤ 160, 3 profile photos. Members per huddle 4 on the free plan and 10 with
-  Plus, huddles kept 3 and 10, huddles joined 25; before the free limits
-  start, 8 members (10 with Plus) and nothing else (`HuddleLimits.swift`;
+  Plus, huddles kept 3 and 10, huddles joined 25 (`HuddleLimits.swift`;
   all enforced by the server). Lengths count code points, as Postgres does
   (`TextLimits.swift`).
 - **Downscaling** before upload: photos ≤ 1440 px, avatars ≤ 512 px, JPEG
@@ -288,9 +287,7 @@ codes, tokens and keys are never logged.
   `apply_entitlement` (service role, after Apple's signature checks out) and
   one Apple subscription entitles one account. `huddle_join_rule` decides
   joins from the keeper's plan; `create_huddle` caps huddles kept; posting a
-  video (and uploading a `.mp4`) takes Plus. None of the free limits apply
-  until `app_limits.free_limits_start` is set; Plus (10 members, videos)
-  works from the start.
+  video (and uploading a `.mp4`) takes Plus.
 - **Plus in the app** (`PlusServiceProtocol`, `deps.plus`): the server's
   word, from `my_entitlement()`, judged by the server's clock
   (`PlanStatus.clockOffset`), cached per account for offline launches.
@@ -304,8 +301,7 @@ codes, tokens and keys are never logged.
   local App Store for the tests (`SKTestSession`); selected as a scheme's
   StoreKit configuration it sells locally signed transactions, which the
   real server refuses, so it's no use against Supabase.
-- **Where the free plan shows** (only once the free limits are on, and
-  never with Plus): every gate opens `PaywallView` for its `PaywallContext`
+- **Where the free plan shows** (never with Plus): every gate opens `PaywallView` for its `PaywallContext`
   (price, period, trial, renewal terms, Terms of Use / Terms / Privacy links,
   Restore Purchases, as guideline 3.1.2 asks), which closes itself once Plus
   is on. Archive days past the last 30 show who posted, locked, and never
@@ -465,15 +461,13 @@ plus "Sunday Dinners" 🍝; 45 days of history (past the free plan's 30-day
 archive window), a couple of misses and a skip, Maya's post yesterday as a
 2-second video (`PlaceholderVideoGenerator`), and a today where everyone but
 You has posted, so the app opens locked. The Crew has 4 members: full on the
-free plan. Who has Plus and whether the free limits are on live in
-`MockPlanLedger` (off by default, as on the server); the mock huddle service
+free plan. Who has Plus lives in `MockPlanLedger`; the mock huddle service
 refuses what the server would. Profile → DEBUG (mock only): force the gate
-shut, turn the free plan's limits on, simulate Plus (or Plus that ends in a
-minute), simulate a subscription already linked to another account, advance
-the mock day, regenerate the seed (behind the splash, `session.isReady =
-false`; keep that). UI tests start with the free limits on
-(`-ui-testing-free-limits`) or with Plus (`-ui-testing-plus`); the rest of
-the launch switches are listed in `Support/UITestHooks.swift`.
+shut, simulate Plus (or Plus that ends in a minute), simulate a
+subscription already linked to another account, advance the mock day,
+regenerate the seed (behind the splash, `session.isReady = false`; keep
+that). UI tests can start with Plus (`-ui-testing-plus`); the rest of the
+launch switches are listed in `Support/UITestHooks.swift`.
 
 ## Design
 

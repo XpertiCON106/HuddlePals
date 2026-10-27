@@ -3,16 +3,14 @@
 // redeem_huddle_invite, huddle_join_rule). The keeper's plan decides: on the
 // free plan 3 huddles of up to 4, and only the 3 they've kept longest take
 // new members; with Plus 10 of up to 10. Nobody is ever removed: when a
-// subscription ends, only new joins and new huddles are held back. Until
-// app_limits.free_limits_start the old rules hold: 8 members, no caps,
-// except that a Plus keeper's huddles take 10 from the start.
+// subscription ends, only new joins and new huddles are held back.
 
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import {
   freshDatabase, q, admin, serverToday, signUp, createHuddle, joinHuddle, deposit,
-  startFreeLimits, grantPlus, endPlus, WRAPPED_KEY, PUBLIC_KEY,
+  grantPlus, endPlus, WRAPPED_KEY, PUBLIC_KEY,
 } from './harness.mjs'
 
 /** The message a refused call raised, or null if it went through. */
@@ -59,63 +57,9 @@ function oldBuildCopy(message) {
   return 'Something went wrong. Please try again.'
 }
 
-describe('before the free limits start', () => {
-  it('a huddle takes 8 members and refuses the ninth with huddle_full, as it always has', async () => {
-    const db = await freshDatabase()
-    const A = await signUp(db, 'Ada')
-    const [h] = await keep(db, A, 1)
-    await members(db, 7, h)
-    assert.equal(await memberCount(db, h), 8)
-    assert.match(await tryJoin(db, h), /^huddle_full$/)
-  })
-
-  it("a Plus keeper's huddle takes 10 already; when Plus ends, nobody leaves and it's full at 8", async () => {
-    const db = await freshDatabase()
-    const A = await signUp(db, 'Ada')
-    const otid = await grantPlus(db, A)
-    const [h] = await keep(db, A, 1)
-    await members(db, 9, h)
-    assert.equal(await memberCount(db, h), 10)
-    const eleventh = await tryJoin(db, h)
-    assert.equal(eleventh, 'join_blocked_max_members')
-    assert.equal(oldBuildCopy(eleventh), "You can't join this huddle.", 'no build says "8 members" about a huddle of 10')
-    await endPlus(db, otid)
-    assert.equal(await memberCount(db, h), 10)
-    assert.match(await tryJoin(db, h), /^huddle_full$/)
-  })
-
-  it('caps nobody on huddles kept or joined', async () => {
-    const db = await freshDatabase()
-    const A = await signUp(db, 'Ada')
-    await keep(db, A, 12)
-    const B = await signUp(db, 'Ben')
-    for (let i = 0; i < 26; i++) {
-      const [owner] = await members(db, 1)
-      const [h] = await keep(db, owner, 1)
-      await joinHuddle(db, B, h.invite_code)
-    }
-    assert.equal(Number((await admin(db, 'select count(*) n from memberships where user_id = $1', [B]))[0].n), 26)
-  })
-
-  it('a start date still to come changes nothing', async () => {
-    const db = await freshDatabase()
-    await admin(db, `update app_limits set free_limits_start = now() + interval '14 days'`)
-    const A = await signUp(db, 'Ada')
-    const huddles = await keep(db, A, 5)
-    await members(db, 6, huddles[4])
-    assert.equal(await memberCount(db, huddles[4]), 7)
-  })
-
-  it('shipped with no start date', async () => {
-    const db = await freshDatabase()
-    assert.deepEqual(await admin(db, 'select free_limits_start from app_limits'), [{ free_limits_start: null }])
-  })
-})
-
 describe('creating huddles', () => {
   it('free plan: 3 kept, the 4th refused', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     await keep(db, A, 3)
     assert.equal(await refusal(createHuddle(db, A)), 'huddle_limit_reached_free')
@@ -123,7 +67,6 @@ describe('creating huddles', () => {
 
   it('Plus: 10 kept, the 11th refused', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     await grantPlus(db, A)
     await keep(db, A, 10)
@@ -132,7 +75,6 @@ describe('creating huddles', () => {
 
   it('huddles inherited from a keeper who left count toward the cap', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
     const [inherited] = await keep(db, A, 1)
@@ -144,7 +86,6 @@ describe('creating huddles', () => {
 
   it('leaving a huddle makes room; only huddles you keep count', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
     const huddles = await keep(db, A, 3)
@@ -158,7 +99,6 @@ describe('creating huddles', () => {
 
   it('when Plus ends, every huddle stays; creating stops until fewer than 3 are kept', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const otid = await grantPlus(db, A)
     const huddles = await keep(db, A, 5)
@@ -176,7 +116,6 @@ describe('creating huddles', () => {
 describe('joining a huddle whose keeper is on the free plan', () => {
   it('takes 4 members, the keeper included, then refuses join_blocked_free_limit', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const [h] = await keep(db, A, 1)
     await members(db, 3, h)
@@ -186,7 +125,6 @@ describe('joining a huddle whose keeper is on the free plan', () => {
 
   it("only the keeper's 3 longest-kept huddles take new members; the rest are paused, even nearly empty", async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const otid = await grantPlus(db, A)
     const huddles = await keep(db, A, 10)
@@ -197,7 +135,6 @@ describe('joining a huddle whose keeper is on the free plan', () => {
 
   it("an inherited huddle joins the back of the queue and never pauses the heir's own", async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
     const [older] = await keep(db, A, 1) // created before any of Ben's
@@ -211,7 +148,6 @@ describe('joining a huddle whose keeper is on the free plan', () => {
 
   it('leaving an earlier huddle moves a paused one into the first 3', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const otid = await grantPlus(db, A)
     const huddles = await keep(db, A, 4)
@@ -226,7 +162,6 @@ describe('joining a huddle whose keeper is on the free plan', () => {
 describe('joining a huddle whose keeper has Plus', () => {
   it('takes 10 in every huddle they keep, then refuses join_blocked_max_members', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     await grantPlus(db, A)
     const huddles = await keep(db, A, 5)
@@ -238,7 +173,6 @@ describe('joining a huddle whose keeper has Plus', () => {
 
   it("a member's Plus doesn't lift the huddle: the keeper's plan decides", async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const [h] = await keep(db, A, 1)
     const [B] = await members(db, 3, h)
@@ -248,7 +182,6 @@ describe('joining a huddle whose keeper has Plus', () => {
 
   it('a billing grace period still counts; running out and refunds do not', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const cases = [
       [{ expiresIn: '-1 day', graceIn: '3 days' }, null],
       [{ expiresIn: '-1 day' }, 'join_blocked_free_limit'],
@@ -268,7 +201,6 @@ describe('joining a huddle whose keeper has Plus', () => {
 
   it('when Plus ends nobody is removed; joins wait until it comes back', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const otid = await grantPlus(db, A)
     const [h] = await keep(db, A, 1)
@@ -283,13 +215,14 @@ describe('joining a huddle whose keeper has Plus', () => {
   })
 })
 
-describe('huddles from before the limits, and keepers who leave', () => {
-  it('a huddle that grew to 6 under the old rules keeps everyone posting, reacting and commenting; only joins stop', async () => {
+describe('huddles over the free limits, and keepers who leave', () => {
+  it('a huddle that grew to 6 with Plus keeps everyone posting, reacting and commenting when it ends; only joins stop', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
+    const otid = await grantPlus(db, A)
     const [h] = await keep(db, A, 1)
     const joined = await members(db, 5, h)
-    await startFreeLimits(db)
+    await endPlus(db, otid)
     assert.equal(await tryJoin(db, h), 'join_blocked_free_limit')
     const today = await serverToday(db)
     const dep = await deposit(db, joined[0], h.id, today)
@@ -298,11 +231,12 @@ describe('huddles from before the limits, and keepers who leave', () => {
     assert.equal(await memberCount(db, h), 6)
   })
 
-  it('a keeper of 5 huddles from before the limits keeps them all; the 4th and 5th pause', async () => {
+  it('a keeper of 5 huddles made with Plus keeps them all when it ends; the 4th and 5th pause', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
+    const otid = await grantPlus(db, A)
     const huddles = await keep(db, A, 5)
-    await startFreeLimits(db)
+    await endPlus(db, otid)
     assert.equal(await tryJoin(db, huddles[2]), null)
     assert.equal(await tryJoin(db, huddles[3]), 'join_blocked_invites_paused')
     assert.equal((await q(db, A, 'select id from huddles')).length, 5)
@@ -310,7 +244,6 @@ describe('huddles from before the limits, and keepers who leave', () => {
 
   it('a Plus keeper leaving hands a 7-member huddle to a free member: everyone stays, joins stop', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     await grantPlus(db, A)
     const [h] = await keep(db, A, 1)
@@ -323,7 +256,6 @@ describe('huddles from before the limits, and keepers who leave', () => {
 
   it("a keeper deleting their account: the heir's plan decides from then on", async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const [h] = await keep(db, A, 1)
     const [heir] = await members(db, 3, h)
@@ -351,7 +283,6 @@ describe('huddles from before the limits, and keepers who leave', () => {
 describe('the 25-huddle limit', () => {
   it('nobody joins more than 25 huddles, counting those they keep', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const B = await signUp(db, 'Ben')
     await keep(db, B, 3)
     const others = []
@@ -385,8 +316,9 @@ describe('both ways in, and old app builds', () => {
   it('redeem_huddle_invite applies the same rules as join_huddle', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
+    const otid = await grantPlus(db, A)
     const huddles = await keep(db, A, 4)
-    await startFreeLimits(db)
+    await endPlus(db, otid)
     const first = await invite(db, A, huddles[0], 'A')
     const fourth = await invite(db, A, huddles[3], 'A')
     for (let i = 0; i < 3; i++) assert.equal(await redeem(db, first), null)
@@ -396,7 +328,6 @@ describe('both ways in, and old app builds', () => {
 
   it("a refusal isn't a wrong guess: no attempt is recorded", async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const A = await signUp(db, 'Ada')
     const [h] = await keep(db, A, 1)
     await members(db, 3, h)
@@ -407,7 +338,6 @@ describe('both ways in, and old app builds', () => {
 
   it('app builds from before Plus read every refusal as "You can\'t join this huddle."', async () => {
     const db = await freshDatabase()
-    await startFreeLimits(db)
     const free = await signUp(db, 'Free')
     const otid = await grantPlus(db, free)
     const freeHuddles = await keep(db, free, 4)
@@ -439,11 +369,11 @@ describe('huddle_join_status', () => {
   it('tells members whether the huddle takes new members, and why not', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
+    const otid = await grantPlus(db, A)
     const huddles = await keep(db, A, 4)
     const [B] = await members(db, 3, huddles[0])
+    await endPlus(db, otid)
     const status = (h, uid = A) => q(db, uid, 'select * from huddle_join_status($1)', [h.id])
-    assert.deepEqual(await status(huddles[0], B), [{ accepting: true, refusal: null, member_count: 4, member_cap: 8 }])
-    await startFreeLimits(db)
     assert.deepEqual(await status(huddles[0], B), [{ accepting: false, refusal: 'join_blocked_free_limit', member_count: 4, member_cap: 4 }])
     assert.deepEqual(await status(huddles[3]), [{ accepting: false, refusal: 'join_blocked_invites_paused', member_count: 1, member_cap: 4 }])
     await grantPlus(db, A)

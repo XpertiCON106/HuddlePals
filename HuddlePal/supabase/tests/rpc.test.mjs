@@ -65,8 +65,9 @@ describe('join_huddle (invites)', () => {
     const h = await createHuddle(db, A)
     await assert.rejects(q(db, null, `select * from join_huddle($1, null)`, [h.invite_code]), /not authenticated/)
     await assert.rejects(joinHuddle(db, A, h.invite_code), /already_member/)
-    for (let i = 0; i < 7; i++) await joinHuddle(db, await signUp(db, `m${i}`), h.invite_code)
-    await assert.rejects(joinHuddle(db, await signUp(db, 'ninth'), h.invite_code), /huddle_full/)
+    // Its keeper is on the free plan: 4 members.
+    for (let i = 0; i < 3; i++) await joinHuddle(db, await signUp(db, `m${i}`), h.invite_code)
+    await assert.rejects(joinHuddle(db, await signUp(db, 'fifth'), h.invite_code), /join_blocked_free_limit/)
   })
 
   it('an unknown code joins nothing', async () => {

@@ -67,26 +67,11 @@ final class PlanRulesTests: XCTestCase {
     // MARK: Joining (huddle_join_rule)
 
     private func refusal(
-        members: Int, premium: Bool = false, rank: Int? = 0, joinerIn: Int = 0, limits: Bool = true
+        members: Int, premium: Bool = false, rank: Int? = 0, joinerIn: Int = 0
     ) -> HuddleEngine.JoinRefusal? {
         HuddleEngine.joinRefusal(
-            memberCount: members, keeperIsPremium: premium, keeperRank: rank,
-            joinerHuddleCount: joinerIn, limitsActive: limits
+            memberCount: members, keeperIsPremium: premium, keeperRank: rank, joinerHuddleCount: joinerIn
         )
-    }
-
-    func testBeforeTheLimitsStartEveryHuddleTakes8() {
-        XCTAssertNil(refusal(members: 7, rank: 9, joinerIn: 40, limits: false))
-        XCTAssertEqual(refusal(members: 8, limits: false), .full)
-        XCTAssertEqual(HuddleEngine.joinRule(memberCount: 2, keeperIsPremium: false, keeperRank: nil, limitsActive: false).memberCap, 8)
-    }
-
-    /// What the paywall promises holds from the day Plus ships.
-    func testBeforeTheLimitsStartAPlusKeepersHuddleTakes10() {
-        XCTAssertNil(refusal(members: 9, premium: true, rank: 7, limits: false))
-        XCTAssertEqual(refusal(members: 10, premium: true, limits: false), .maxMembers)
-        XCTAssertEqual(HuddleEngine.joinRule(memberCount: 2, keeperIsPremium: true, keeperRank: 0, limitsActive: false).memberCap, 10)
-        XCTAssertEqual(refusal(members: 10, premium: false, limits: false), .full, "Plus ended: all 10 stay, nobody joins")
     }
 
     func testAFreeKeepersHuddleTakes4() {
@@ -104,7 +89,7 @@ final class PlanRulesTests: XCTestCase {
     func testAPlusKeepersHuddlesTake10WhereverTheyAreInTheQueue() {
         XCTAssertNil(refusal(members: 9, premium: true, rank: 8))
         XCTAssertEqual(refusal(members: 10, premium: true), .maxMembers)
-        XCTAssertEqual(HuddleEngine.joinRule(memberCount: 1, keeperIsPremium: true, keeperRank: 5, limitsActive: true).memberCap, 10)
+        XCTAssertEqual(HuddleEngine.joinRule(memberCount: 1, keeperIsPremium: true, keeperRank: 5).memberCap, 10)
     }
 
     func testNobodyJoinsMoreThan25HuddlesOnceTheLimitsAreOn() {
@@ -136,19 +121,18 @@ final class PlanRulesTests: XCTestCase {
 
     // MARK: Creating (create_huddle)
 
-    func testHuddlesKeptAreCappedAt3FreeAnd10WithPlusOnceTheLimitsAreOn() {
-        XCTAssertNil(HuddleEngine.createRefusal(keptHuddles: 12, isPremium: false, limitsActive: false))
-        XCTAssertNil(HuddleEngine.createRefusal(keptHuddles: 2, isPremium: false, limitsActive: true))
-        XCTAssertEqual(HuddleEngine.createRefusal(keptHuddles: 3, isPremium: false, limitsActive: true), .freeLimit)
-        XCTAssertNil(HuddleEngine.createRefusal(keptHuddles: 9, isPremium: true, limitsActive: true))
-        XCTAssertEqual(HuddleEngine.createRefusal(keptHuddles: 10, isPremium: true, limitsActive: true), .plusLimit)
+    func testHuddlesKeptAreCappedAt3FreeAnd10WithPlus() {
+        XCTAssertNil(HuddleEngine.createRefusal(keptHuddles: 2, isPremium: false))
+        XCTAssertEqual(HuddleEngine.createRefusal(keptHuddles: 3, isPremium: false), .freeLimit)
+        XCTAssertNil(HuddleEngine.createRefusal(keptHuddles: 9, isPremium: true))
+        XCTAssertEqual(HuddleEngine.createRefusal(keptHuddles: 10, isPremium: true), .plusLimit)
     }
 
     // MARK: The server's codes
 
     func testRefusalsCarryTheServersErrorCodes() {
         XCTAssertEqual(HuddleEngine.JoinRefusal.allCases.map(\.rawValue), [
-            "huddle_full", "join_blocked_free_limit", "join_blocked_invites_paused",
+            "join_blocked_free_limit", "join_blocked_invites_paused",
             "join_blocked_max_members", "join_blocked_membership_limit",
         ])
         XCTAssertEqual(HuddleEngine.CreateRefusal.allCases.map(\.rawValue), [
@@ -159,7 +143,7 @@ final class PlanRulesTests: XCTestCase {
     func testBuildsFromBeforePlusReadEveryNewRefusalAsYouCantJoin() {
         // Those builds map "huddle_full" to "already has 8 members" and
         // "blocked" to "You can't join this huddle.".
-        for refusal in HuddleEngine.JoinRefusal.allCases where refusal != .full {
+        for refusal in HuddleEngine.JoinRefusal.allCases {
             XCTAssertFalse(refusal.rawValue.contains("huddle_full"), refusal.rawValue)
             XCTAssertTrue(refusal.rawValue.contains("blocked"), refusal.rawValue)
         }
@@ -167,7 +151,6 @@ final class PlanRulesTests: XCTestCase {
 
     func testServerMessagesMapToTheirOwnErrors() {
         let cases: [(String, HuddleServiceError)] = [
-            ("huddle_full", .huddleFull),
             ("join_blocked_free_limit", .huddleFullFree),
             ("join_blocked_invites_paused", .invitesPaused),
             ("join_blocked_max_members", .huddleAtMaximum),
@@ -189,6 +172,5 @@ final class PlanRulesTests: XCTestCase {
         XCTAssertTrue(HuddleServiceError.tooManyHuddles.errorDescription!.contains("\(HuddleLimits.huddlesJoined) huddles"))
         XCTAssertTrue(HuddleServiceError.huddleLimitFree.errorDescription!.contains("\(HuddleLimits.freeHuddlesKept) huddles"))
         XCTAssertTrue(HuddleServiceError.huddleLimitPlus.errorDescription!.contains("\(HuddleLimits.plusHuddlesKept) huddles"))
-        XCTAssertTrue(HuddleServiceError.huddleFull.errorDescription!.contains("\(HuddleLimits.legacyMembers) members"))
     }
 }

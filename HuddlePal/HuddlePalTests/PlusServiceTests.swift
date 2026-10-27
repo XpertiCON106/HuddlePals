@@ -12,10 +12,9 @@ import XCTest
 @MainActor
 final class PlanStatusTests: XCTestCase {
     private func status(
-        premium: Bool = true, until: Date? = .now.addingTimeInterval(3600),
-        limitsStart: Date? = nil, offset: TimeInterval = 0
+        premium: Bool = true, until: Date? = .now.addingTimeInterval(3600), offset: TimeInterval = 0
     ) -> PlanStatus {
-        PlanStatus(isPremium: premium, premiumUntil: until, freeLimitsStart: limitsStart, keptHuddles: 2, huddleLimit: nil, clockOffset: offset)
+        PlanStatus(isPremium: premium, premiumUntil: until, keptHuddles: 2, huddleLimit: 10, clockOffset: offset)
     }
 
     func testPlusLastsUntilItRunsOut() {
@@ -34,13 +33,6 @@ final class PlanStatusTests: XCTestCase {
         let behind = status(until: deviceNow.addingTimeInterval(86_400 - 3600), offset: 86_400)
         XCTAssertFalse(behind.isPremium(at: deviceNow))
         XCTAssertEqual(behind.serverNow(deviceNow: deviceNow).timeIntervalSince(deviceNow), 86_400, accuracy: 0.001)
-    }
-
-    func testTheFreeLimitsApplyFromTheirStart() {
-        let now = Date.now
-        XCTAssertFalse(status(limitsStart: nil).freeLimitsActive(at: now), "off as shipped")
-        XCTAssertFalse(status(limitsStart: now.addingTimeInterval(3600)).freeLimitsActive(at: now), "a grace period")
-        XCTAssertTrue(status(limitsStart: now.addingTimeInterval(-1)).freeLimitsActive(at: now))
     }
 }
 
@@ -71,16 +63,10 @@ final class MockPlusServiceTests: XCTestCase {
     }
 
     func testTheStatusReadsTheLedger() throws {
-        var status = try XCTUnwrap(deps.plus.status)
+        let status = try XCTUnwrap(deps.plus.status)
         XCTAssertFalse(status.isPremium)
         XCTAssertEqual(status.keptHuddles, 2, "The Crew and Sunday Dinners")
-        XCTAssertNil(status.huddleLimit, "no cap while the limits are off")
-        XCTAssertFalse(deps.plus.freeLimitsActive)
-
-        plans.freeLimitsActive = true
-        status = try XCTUnwrap(deps.plus.status)
         XCTAssertEqual(status.huddleLimit, 3)
-        XCTAssertTrue(deps.plus.freeLimitsActive)
 
         plans.setPlus(true, for: you.id)
         XCTAssertTrue(deps.plus.isPremium)
@@ -88,7 +74,6 @@ final class MockPlusServiceTests: XCTestCase {
     }
 
     func testBuyingPlusLiftsTheCapsTheMockServerEnforces() async throws {
-        plans.freeLimitsActive = true
         let crew = try XCTUnwrap(you.memberships.compactMap(\.huddle).first { $0.inviteCode == SeedDataService.crewInviteCode })
         let newcomer = User(displayName: "Newcomer", avatarColorHex: "46A758")
         deps.modelContainer.mainContext.insert(newcomer)
@@ -461,7 +446,6 @@ final class FakePlusServer: @unchecked Sendable {
                 "is_premium": premium,
                 "premium_until": premiumUntil.map { iso.string(from: $0) as Any } ?? NSNull(),
                 "server_now": iso.string(from: serverNow),
-                "free_limits_start": NSNull(),
                 "kept_huddles": 1,
                 "huddle_limit": NSNull(),
             ]]))

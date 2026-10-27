@@ -7,7 +7,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  freshDatabase, q, admin, service, signUp, createHuddle, startFreeLimits, grantPlus, randomUUID,
+  freshDatabase, q, admin, service, signUp, createHuddle, grantPlus, randomUUID,
 } from './harness.mjs'
 
 const DENIED = /permission denied/
@@ -33,11 +33,11 @@ const owner = async (db, otid) =>
   (await admin(db, 'select user_id from user_entitlements where original_transaction_id = $1', [otid]))[0]?.user_id ?? null
 
 describe('who can touch subscriptions', () => {
-  it('the app can neither read nor write user_entitlements, app_limits or the notification log', async () => {
+  it('the app can neither read nor write user_entitlements or the notification log', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     await grantPlus(db, A)
-    for (const table of ['user_entitlements', 'app_limits', 'app_store_notifications']) {
+    for (const table of ['user_entitlements', 'app_store_notifications']) {
       for (const uid of [A, null]) {
         await assert.rejects(q(db, uid, `select * from ${table}`), DENIED, `${table} read`)
         await assert.rejects(q(db, uid, `delete from ${table}`), DENIED, `${table} delete`)
@@ -49,7 +49,6 @@ describe('who can touch subscriptions', () => {
       DENIED,
     )
     await assert.rejects(q(db, A, `update user_entitlements set expires_at = now() + interval '1 year'`), DENIED)
-    await assert.rejects(q(db, A, `update app_limits set free_limits_start = null`), DENIED)
   })
 
   it("nobody can ask about someone else's plan, or write one through a function", async () => {
@@ -208,14 +207,9 @@ describe('my_entitlement', () => {
     assert.equal(mine.is_premium, false)
     assert.equal(mine.premium_until, null)
     assert.ok(Math.abs(mine.server_now - Date.now()) < 60_000)
-    assert.equal(mine.free_limits_start, null)
     assert.equal(mine.kept_huddles, 2)
-    assert.equal(mine.huddle_limit, null, 'no cap while the limits are off')
-
-    await startFreeLimits(db)
-    ;[mine] = await q(db, A, 'select * from my_entitlement()')
-    assert.ok(mine.free_limits_start < mine.server_now)
     assert.equal(mine.huddle_limit, 3)
+    assert.equal('free_limits_start' in mine, false, 'no limits switch')
 
     await grantPlus(db, A, { expiresIn: '-1 day', graceIn: '3 days' })
     ;[mine] = await q(db, A, 'select * from my_entitlement()')

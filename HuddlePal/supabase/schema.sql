@@ -203,27 +203,7 @@ $$;
 -- checked by the verify-subscription and app-store-notifications edge
 -- functions) keeps up to 10 huddles of up to 10 members and can post video
 -- clips. When a subscription ends nobody is removed and nothing is deleted:
--- only new joins and new huddles are held back. The limits apply only once
--- the operator sets app_limits.free_limits_start.
-
-create table public.app_limits (
-  -- One row.
-  id boolean primary key default true check (id),
-  -- When the free plan's limits start. Null (as shipped) or a time still to
-  -- come keeps the old rules for everyone without Plus: 8 members, no cap on
-  -- huddles. (A Plus keeper's huddles take 10 either way.)
-  -- Set it to the Plus launch plus a grace period; set it back to null to
-  -- undo. Operator only (SQL editor).
-  free_limits_start timestamptz
-);
-insert into public.app_limits (id) values (true) on conflict (id) do nothing;
-alter table public.app_limits enable row level security;
-revoke all on public.app_limits from anon, authenticated;
-
-create or replace function public.free_limits_active()
-returns boolean
-language sql stable security definer set search_path = public as
-$$ select coalesce((select free_limits_start <= now() from app_limits), false); $$;
+-- only new joins and new huddles are held back.
 
 -- What Apple says about each subscription, written only by the edge
 -- functions (service role) after checking Apple's signature. One Apple
@@ -391,12 +371,11 @@ grant execute on function public.record_app_store_notification(uuid, text, text,
 
 -- The caller's own plan, for the app: whether Plus is on and until when, the
 -- server's clock (the app's "today" for the archive, whatever the phone's
--- clock says), when the free limits start, and how many huddles they keep
--- against which cap (null while the limits are off).
+-- clock says), and how many huddles they keep against which cap.
 create or replace function public.my_entitlement()
 returns table (
   is_premium boolean, premium_until timestamptz, server_now timestamptz,
-  free_limits_start timestamptz, kept_huddles int, huddle_limit int
+  kept_huddles int, huddle_limit int
 )
 language sql stable security definer set search_path = public as $$
   select
@@ -404,11 +383,8 @@ language sql stable security definer set search_path = public as $$
     (select max(greatest(e.expires_at, e.grace_period_expires_at)) from user_entitlements e
       where e.user_id = auth.uid() and e.revoked_at is null),
     now(),
-    (select l.free_limits_start from app_limits l),
     (select count(*)::int from memberships m where m.user_id = auth.uid() and m.role = 'keeper'),
-    case when not free_limits_active() then null
-         when is_user_premium(auth.uid()) then 10
-         else 3 end
+    case when is_user_premium(auth.uid()) then 10 else 3 end
   where auth.uid() is not null;
 $$;
 
@@ -493,9 +469,9 @@ create policy skips_select on public.skips for select
 
 -- Creates a huddle plus its keeper membership atomically, with a unique
 -- server-generated invite code (ambiguous glyphs excluded). `p_day_key` is
--- the caller's local today, stored as the keeper's join day. Once the free
--- limits are on, an account keeps up to 3 huddles on the free plan and 10
--- with Plus, inherited ones included. Locking the caller's profile row
+-- the caller's local today, stored as the keeper's join day. An account
+-- keeps up to 3 huddles on the free plan and 10 with Plus, inherited ones
+-- included. Locking the caller's profile row
 -- serializes their creates, so two at once can't both pass.
 create or replace function public.create_huddle(p_name text, p_emoji text, p_day_key text default null)
 returns setof public.huddles
@@ -507,14 +483,12 @@ declare
   alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
-  if free_limits_active() then
-    perform 1 from profiles where id = auth.uid() for update;
-    select count(*) into v_kept from memberships where user_id = auth.uid() and role = 'keeper';
-    if is_user_premium(auth.uid()) then
-      if v_kept >= 10 then raise exception 'huddle_limit_reached_premium'; end if;
-    elsif v_kept >= 3 then
-      raise exception 'huddle_limit_reached_free';
-    end if;
+  perform 1 from profiles where id = auth.uid() for update;
+  select count(*) into v_kept from memberships where user_id = auth.uid() and role = 'keeper';
+  if is_user_premium(auth.uid()) then
+    if v_kept >= 10 then raise exception 'huddle_limit_reached_premium'; end if;
+  elsif v_kept >= 3 then
+    raise exception 'huddle_limit_reached_free';
   end if;
   loop
     v_code := '';
@@ -549,8 +523,7 @@ alter table public.join_attempts enable row level security;
 -- The keeper's plan decides, not the members': with Plus, 10; on the free
 -- plan, 4, and only in the 3 huddles they've kept longest, so a month of Plus
 -- spent creating empty huddles fills just 3 of them for free afterwards.
--- Before the free limits start, every huddle takes 8, as it always has.
--- Once they're on, no refusal says "huddle_full" and every one says
+-- No refusal says "huddle_full" and every one says
 -- "blocked": app builds from before Plus show "This huddle already has 8
 -- members" for any message containing "huddle_full", and "You can't join
 -- this huddle." for one containing "blocked", which is true of them all.
@@ -562,13 +535,9 @@ declare
 begin
   select count(*)::int into member_count from memberships where huddle_id = p_huddle;
   select m.user_id into v_keeper from memberships m where m.huddle_id = p_huddle and m.role = 'keeper';
-  -- Plus takes 10 from the day it ships, before the free limits too.
   if v_keeper is not null and is_user_premium(v_keeper) then
     member_cap := 10;
     refusal := case when member_count >= member_cap then 'join_blocked_max_members' end;
-  elsif not free_limits_active() then
-    member_cap := 8;
-    refusal := case when member_count >= member_cap then 'huddle_full' end;
   else
     member_cap := 4;
     if v_keeper is null or p_huddle not in (
@@ -627,7 +596,7 @@ begin
   end if;
   perform 1 from profiles where id = auth.uid() for update;
   perform 1 from huddles where id = v_huddle.id for update;
-  if free_limits_active() and (select count(*) from memberships where user_id = auth.uid()) >= 25 then
+  if (select count(*) from memberships where user_id = auth.uid()) >= 25 then
     raise exception 'join_blocked_membership_limit';
   end if;
   select r.refusal into v_refusal from huddle_join_rule(v_huddle.id) r;
@@ -1192,7 +1161,7 @@ begin
   end if;
   perform 1 from profiles where id = auth.uid() for update;
   perform 1 from huddles where id = v_invite.huddle_id for update;
-  if free_limits_active() and (select count(*) from memberships m where m.user_id = auth.uid()) >= 25 then
+  if (select count(*) from memberships m where m.user_id = auth.uid()) >= 25 then
     raise exception 'join_blocked_membership_limit';
   end if;
   select r.refusal into v_refusal from huddle_join_rule(v_invite.huddle_id) r;

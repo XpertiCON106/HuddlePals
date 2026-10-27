@@ -137,7 +137,7 @@ final class AccessibilityAuditTests: HuddleUITestCase {
 
     /// What the free plan holds back, and the paywall it leads to.
     func testPlusScreens() throws {
-        launchToShelf(arguments: ["-ui-testing-free-limits"])
+        launchToShelf()
         openHuddle("The Crew")
         waitFor(app.buttons["Archive"]).tap()
         waitFor(app.navigationBars["Archive"])

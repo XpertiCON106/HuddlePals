@@ -195,6 +195,8 @@ final class PushNotificationTests: XCTestCase {
     func testJoiningAHuddleAsksForPermission() async throws {
         let deps = AppDependencies.makeMock(inMemory: true, pushRegistrar: registrar)
         try await deps.seeder.regenerate()
+        // The Crew is full on the free plan (4 people): its keeper has Plus here.
+        if case .signedIn(let keeper) = try await deps.auth.currentState() { deps.mockPlans?.setPlus(true, for: keeper.id) }
         let newcomer = User(displayName: "Newcomer", avatarColorHex: "46A758")
         deps.modelContainer.mainContext.insert(newcomer)
         deps.session.currentUser = newcomer

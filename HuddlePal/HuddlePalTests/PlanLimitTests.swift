@@ -53,19 +53,9 @@ final class PlanLimitTests: XCTestCase {
         try await deps.huddleService.createHuddle(name: name, emoji: "🧪", keeper: user)
     }
 
-    // MARK: Off by default, as on the server
-
-    func testUntilTheLimitsAreOnTheOldRulesHold() async throws {
-        XCTAssertFalse(plans.freeLimitsActive)
-        let fifthMember = await refusal(joining: try huddle("The Crew"))
-        XCTAssertNil(fifthMember, "a 5th member, as before")
-        for index in 0..<4 { _ = try await create("Extra \(index)", by: you) }
-    }
-
     // MARK: Creating
 
     func testTheFreePlanKeeps3HuddlesAndPlusKeeps10() async throws {
-        plans.freeLimitsActive = true
         _ = try await create("Third", by: you)
         do {
             _ = try await create("Fourth", by: you)
@@ -83,7 +73,6 @@ final class PlanLimitTests: XCTestCase {
     // MARK: Joining
 
     func testAFullFreeHuddleRefusesUntilItsKeeperHasPlus() async throws {
-        plans.freeLimitsActive = true
         let crew = try huddle("The Crew")
         XCTAssertEqual(crew.memberships.count, 4)
         let full = await refusal(joining: crew)
@@ -100,7 +89,6 @@ final class PlanLimitTests: XCTestCase {
     }
 
     func testWhenPlusEndsOnlyTheKeepersFirst3HuddlesTakeMembers() async throws {
-        plans.freeLimitsActive = true
         plans.setPlus(true, for: you.id)
         let third = try await create("Third", by: you)
         let fourth = try await create("Fourth", by: you)
@@ -119,7 +107,6 @@ final class PlanLimitTests: XCTestCase {
     }
 
     func testAnInheritedHuddleGoesToTheBackOfTheHeirsQueue() async throws {
-        plans.freeLimitsActive = true
         let crew = try huddle("The Crew")
         let heir = try XCTUnwrap(crew.sortedMemberships.first { $0.role == .member }?.user)
         var own: [Huddle] = []
@@ -139,7 +126,6 @@ final class PlanLimitTests: XCTestCase {
     }
 
     func testNobodyJoinsMoreThan25Huddles() async throws {
-        plans.freeLimitsActive = true
         let joiner = person("Joiner")
         for index in 0..<25 {
             let owner = person("Owner \(index)")
@@ -154,7 +140,6 @@ final class PlanLimitTests: XCTestCase {
     }
 
     func testTheLimitsComeBeforeTheBlockCheckAsOnTheServer() async throws {
-        plans.freeLimitsActive = true
         deps.session.currentUser = you
         let stranger = person("Stranger")
         try await deps.moderationService.block(stranger)

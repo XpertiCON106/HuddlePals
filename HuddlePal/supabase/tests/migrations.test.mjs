@@ -109,7 +109,7 @@ describe('migrations', () => {
     assert.deepEqual(await admin(db, 'select reporter_id, deposit_id from reports'), [{ reporter_id: null, deposit_id: dep.id }])
   })
 
-  it('keepers from before 013 are keepers since they joined; members and the limits are untouched', async () => {
+  it('keepers from before 013 are keepers since they joined; members are untouched', async () => {
     const { PGlite } = await import('@electric-sql/pglite')
     const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto')
     const { STUB_SQL, DEPLOYED_SQL, signUp, createHuddle, joinHuddle, deposit, serverToday } = await import('./harness.mjs')
@@ -127,7 +127,7 @@ describe('migrations', () => {
       [{ user_id: A, since_joined: true, none: false }, { user_id: B, since_joined: null, none: true }],
     )
     assert.deepEqual(await admin(db, 'select media_type, video_path from deposits where id = $1', [dep.id]), [{ media_type: 'photo', video_path: null }])
-    assert.deepEqual(await admin(db, 'select free_limits_start from app_limits'), [{ free_limits_start: null }], 'the old rules until the operator says')
+    assert.deepEqual(await admin(db, "select to_regclass('public.app_limits') is null as gone"), [{ gone: true }], 'no limits switch')
   })
 
   it('every migration can be applied twice', async () => {

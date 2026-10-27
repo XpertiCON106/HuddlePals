@@ -187,8 +187,6 @@ final class HuddleSettingsViewModel {
         switch joinStatus?.refusal {
         case nil, .membershipLimit:
             return nil
-        case .full:
-            return HuddleServiceError.huddleFull.errorDescription
         case .maxMembers:
             return HuddleServiceError.huddleAtMaximum.errorDescription
         case .freeLimit:

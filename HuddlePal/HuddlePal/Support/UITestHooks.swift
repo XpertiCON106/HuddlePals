@@ -12,7 +12,6 @@ import UIKit
 ///                               (the Simulator can't reset a decided one)
 ///   -ui-testing-apple-unavailable   Apple can't confirm the account at
 ///                               deletion (no Apple Account, no network)
-///   -ui-testing-free-limits     the free plan's limits are on (MockPlanLedger)
 ///   -ui-testing-plus            the seeded "You" has HuddlePals Plus
 enum UITestHooks {
     #if DEBUG
@@ -23,7 +22,6 @@ enum UITestHooks {
     static let cameraDenied = arguments.contains("-ui-testing-camera-denied")
     static let notificationsDenied = arguments.contains("-ui-testing-notifications-denied")
     static let appleUnavailable = arguments.contains("-ui-testing-apple-unavailable")
-    static let freeLimits = arguments.contains("-ui-testing-free-limits")
     static let plus = arguments.contains("-ui-testing-plus")
     #else
     static let isUITesting = false
@@ -32,7 +30,6 @@ enum UITestHooks {
     static let cameraDenied = false
     static let notificationsDenied = false
     static let appleUnavailable = false
-    static let freeLimits = false
     static let plus = false
     #endif
 

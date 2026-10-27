@@ -347,7 +347,7 @@ final class LiveServiceTests: XCTestCase {
     func testRefusalsFromTheRedeemFunctionMapToTheirOwnMessages() async throws {
         let client = try await LiveStub.signedInClient(userID: me.id)
         let cases: [(String, HuddleServiceError)] = [
-            ("already_member", .alreadyMember), ("huddle_full", .huddleFull), ("blocked", .cannotJoin),
+            ("already_member", .alreadyMember), ("blocked", .cannotJoin),
             // The free plan's and Plus's limits (migration 013): each code
             // also contains "blocked", and still gets its own message.
             ("join_blocked_free_limit", .huddleFullFree),
@@ -397,8 +397,6 @@ final class LiveServiceTests: XCTestCase {
         XCTAssertEqual(paused?.refusal, .invitesPaused)
         let maximum = await status(row(false, "join_blocked_max_members", 10, 10))
         XCTAssertEqual(maximum?.refusal, .maxMembers)
-        let legacy = await status(row(false, "huddle_full", 8, 8))
-        XCTAssertEqual(legacy?.refusal, .full)
 
         let unknown = await status(row(false, "join_blocked_by_a_rule_from_later", 3, 4))
         XCTAssertNil(unknown, "a refusal this build doesn't know: no status rather than \"open\"")
