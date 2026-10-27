@@ -4,10 +4,10 @@
 
 import { type Alert, type ApnsConfig, type ApnsEnvironment, sendAlert } from "./apns.ts";
 
-export type PushKind = "deposit" | "comment" | "reaction" | "join";
+export type PushKind = "deposit" | "comment" | "reaction" | "join" | "huddle_deleted";
 /** What the event's deposit is (public.push_media_type); null for a join. */
 export type MediaType = "photo" | "video";
-const KINDS: readonly string[] = ["deposit", "comment", "reaction", "join"];
+const KINDS: readonly string[] = ["deposit", "comment", "reaction", "join", "huddle_deleted"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** One row of public.push_targets: a device to notify, and what to say. */
@@ -56,6 +56,7 @@ export function alertFor(kind: PushKind, target: PushTarget, mediaType: MediaTyp
     comment: `${who} commented on your ${what}.`,
     reaction: target.detail ? `${who} reacted ${target.detail} to your ${what}.` : `${who} reacted to your ${what}.`,
     join: `${who} joined the huddle.`,
+    huddle_deleted: `${who} deleted the huddle.`,
   }[kind];
   return { title, body, huddleId: target.huddle_id };
 }
@@ -97,7 +98,7 @@ export async function handleSendPush(req: Request, services: SendPushServices): 
 
   // Before migration 013 (or if the lookup fails) every deposit is a photo.
   let mediaType: MediaType | null = "photo";
-  if (kind !== "join") {
+  if (kind !== "join" && kind !== "huddle_deleted") {
     try {
       mediaType = (await services.mediaType(kind as PushKind, id)) ?? "photo";
     } catch (e) {

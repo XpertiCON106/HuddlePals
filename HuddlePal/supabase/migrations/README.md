@@ -21,6 +21,7 @@ that both end up identical (`npm test`).
 | `011_keep_reports_after_account_deletion.sql` | A report outlives its reporter's account (`reporter_id` becomes null instead of the report being deleted), so reported photos stay reviewable for NCMEC's one-year preservation |
 | `012_remove_reported_photo.sql` | Operator tool: `remove_reported_photo(id)` takes a reported photo out of its huddle and keeps what finds and opens it in `preserved_photos` for a year; `expired_preserved_photos()` lists what can then go |
 | `013_plus_and_video.sql` | HuddlePals+ and video drops: `user_entitlements` (written only by `apply_entitlement`, for the `verify-subscription` and `app-store-notifications` functions), `my_entitlement()`, the free plan's caps (`create_huddle`, `huddle_join_rule`, `huddle_join_status`, `memberships.keeper_since`), video deposits (`media_type`, `duration_ms`, `video_path`; posting one and uploading a `.mp4` take Plus), videos in `preserved_photos`, and `push_media_type` for the notification copy. The caps apply as soon as it runs |
+| `014_delete_huddle.sql` | A keeper deletes their huddle: `delete_huddle(huddle, user)` (service role only, for the `delete-huddle` function) keeps any reported deposit in `preserved_photos`, records the deletion in `huddle_deletions` for the members' notification (`queue_push`, `push_targets` learns `huddle_deleted`), and deletes the huddle with everything in it |
 
 Ship the app build with 008 and 009: run them first, and older builds keep
 working (they keep joining with old codes until someone on the new build
@@ -36,3 +37,7 @@ and before shipping the Plus build. The free plan's limits apply as soon as
 it runs: 3 huddles kept and 4 members a huddle without Plus, 10 and 10 with
 it, 25 huddles joined. Join refusals all contain `blocked`, which builds
 from before Plus show as "You can't join this huddle."
+
+Run 014 before deploying `delete-huddle` and before shipping the build with
+Delete huddle, then redeploy `send-push`, which learns the `huddle_deleted`
+notification. Until the build ships, nothing calls it.

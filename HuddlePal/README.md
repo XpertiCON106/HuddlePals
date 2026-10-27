@@ -102,7 +102,7 @@ HuddlePal/
 ```
 
 Next to the app: `supabase/` (schema.sql, `scripts/reset_database.sql`, the
-`delete-account` edge function) and `tools/` (app icon generator, `decrypt_reported_photo` for
+`delete-account` and `delete-huddle` edge functions) and `tools/` (app icon generator, `decrypt_reported_photo` for
 moderation).
 
 > **Widgets/** — intentionally absent. A home-screen widget ("did everyone deposit yet?") is planned post-MVP; it will live in a `Widgets/` extension target sharing the SwiftData container via an app group.

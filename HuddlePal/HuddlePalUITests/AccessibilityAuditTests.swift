@@ -24,7 +24,8 @@ final class AccessibilityAuditTests: HuddleUITestCase {
     ///   it against the overlay; scrolled clear, it's the same text that passes
     ///   higher up the screen.
     ///   Same at the top, under the translucent navigation bar (pinned
-    ///   section headers).
+    ///   section headers), and at the sides, on text a horizontal row has
+    ///   scrolled part-way off the screen (the archive's day strips).
     /// - The system keyboard (not app UI).
     /// - Hit-region on static text: hit areas apply to controls; plain text
     ///   isn't one.
@@ -36,7 +37,7 @@ final class AccessibilityAuditTests: HuddleUITestCase {
     ///   near-black text on the paper background there (verified on screen).
     static func isAccepted(
         _ issue: XCUIAccessibilityAuditIssue, knownOpen: XCUIAccessibilityAuditType,
-        chromeTop: CGFloat, chromeBottom: CGFloat, keyboard: CGRect?
+        chromeTop: CGFloat, chromeBottom: CGFloat, keyboard: CGRect?, screen: CGRect
     ) -> Bool {
         if knownOpen.contains(issue.auditType) { return true }
         if issue.compactDescription.localizedCaseInsensitiveContains("nearly passed") { return true }
@@ -49,6 +50,8 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         if (issue.auditType == .contrast || issue.auditType == .textClipped) && element.frame.minY < chromeBottom { return true }
         if issue.auditType == .contrast && !element.isEnabled { return true }
         if (issue.auditType == .contrast || issue.auditType == .textClipped) && element.frame.maxY > chromeTop { return true }
+        if (issue.auditType == .contrast || issue.auditType == .textClipped)
+            && (element.frame.minX < screen.minX || element.frame.maxX > screen.maxX) { return true }
         // Any emoji scalar (🏔 is emoji without default emoji presentation).
         let hasEmoji = element.label.unicodeScalars.contains { $0.properties.isEmoji && $0.value >= 0x2190 }
         if hasEmoji && (issue.auditType == .contrast || issue.auditType == .textClipped) { return true }
@@ -77,13 +80,14 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         // Looked up per issue: the keyboard may still be animating in when
         // the audit starts. Its host view is `inputView`.
         let keyboardHost = app.otherElements["inputView"]
+        let screen = app.frame
         try app.performAccessibilityAudit { [knownOpen] issue in
             let keyboard = keyboardHost.exists ? keyboardHost.frame : nil
             let element = issue.element.map { "type \($0.elementType.rawValue) '\($0.label)' id '\($0.identifier)' at \($0.frame)" } ?? "-"
             let entry = "[\(screen)] \(issue.compactDescription) — \(element)"
             found.append(entry)
             if !Self.isAccepted(issue, knownOpen: knownOpen, chromeTop: chromeTop,
-                                chromeBottom: chromeBottom, keyboard: keyboard) { failing.append(entry) }
+                                chromeBottom: chromeBottom, keyboard: keyboard, screen: screen) { failing.append(entry) }
             return true
         }
         let report = XCTAttachment(string: found.isEmpty ? "[\(screen)] no issues" : found.joined(separator: "\n"))

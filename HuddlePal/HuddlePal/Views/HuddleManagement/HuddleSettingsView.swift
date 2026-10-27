@@ -34,6 +34,7 @@ private struct SettingsContent: View {
 
     @State private var notificationHour: Int
     @State private var showLeaveConfirmation = false
+    @State private var showDeleteConfirmation = false
     @State private var showResetConfirmation = false
     @State private var copied = false
     @State private var checking: KeyCheck?
@@ -83,6 +84,21 @@ private struct SettingsContent: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("You'll lose access to the shared archive. The huddle keeps existing for everyone else.")
+        }
+        .confirmationDialog(
+            "Delete \(viewModel.huddle.name)?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete huddle", role: .destructive) {
+                Task {
+                    await viewModel.deleteHuddle()
+                    if viewModel.didDelete { onLeft() }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Everyone is removed, and every photo and video in it is deleted for good. This can't be undone.")
         }
     }
 
@@ -289,6 +305,16 @@ private struct SettingsContent: View {
                 Label("Leave huddle", systemImage: "rectangle.portrait.and.arrow.right")
             }
             .listRowBackground(Theme.surface)
+
+            if viewModel.isKeeper {
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    Label("Delete huddle", systemImage: "trash")
+                }
+                .disabled(viewModel.isDeleting)
+                .listRowBackground(Theme.surface)
+            }
 
             if let error = viewModel.errorMessage {
                 Text(error)

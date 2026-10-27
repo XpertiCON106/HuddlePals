@@ -309,7 +309,7 @@ TestFlight build → checks on a device → website → App Review → release.
 
 1. Bump the version or build number, archive the Plus build and upload it
    as in Phase 3. Everyone who updates sees the revised Terms (version
-   2026-10-27) and agrees once more.
+   2026-10-28) and agrees once more.
 2. On a phone with the TestFlight build:
    - **Buy.** Profile → Get HuddlePals+ → Try it free for 1 week →
      Apple's sheet. The paywall says "You have HuddlePals+" and closes;
@@ -361,6 +361,36 @@ TestFlight build → checks on a device → website → App Review → release.
 - A lawyer's review of the subscription terms against state automatic-
   renewal laws (California's, as amended in 2025, and others), and of
   §3.9(h)'s notice before Plus loses features.
+
+## Phase 6 — Deleting huddles
+
+A huddle's keeper can delete it: everyone is removed and every photo and
+video in it is deleted from Storage, except a reported one, which is kept
+for review as `remove_reported_photo` keeps one.
+
+1. **Migration 014.** SQL Editor → paste
+   [`supabase/migrations/014_delete_huddle.sql`](supabase/migrations/014_delete_huddle.sql)
+   → Run (safe to re-run).
+2. **Functions**, from `HuddlePal/`: deploy the new one, and redeploy
+   `send-push` so members hear "… deleted the huddle.":
+
+   ```bash
+   supabase functions deploy delete-huddle --project-ref <project-ref>
+   ```
+
+   ```bash
+   supabase functions deploy send-push --no-verify-jwt --project-ref <project-ref>
+   ```
+
+3. **Website**: the revised Terms (§3.2, §3.11, §4.2, §4.5; version
+   2026-10-28, so everyone agrees again) and Privacy Policy, and the
+   Support question "How do I delete a huddle?".
+4. **Check on two phones** with the new build: the keeper opens a test
+   huddle → Settings → Delete huddle → confirm. The other phone gets "…
+   deleted the huddle." and the huddle leaves its shelf. In SQL,
+   `select * from huddle_deletions order by deleted_at desc limit 1;` shows
+   it, and Storage → `deposits` has no folder named after the huddle's id.
+   A reported photo in it would still be in `preserved_photos`.
 
 ---
 

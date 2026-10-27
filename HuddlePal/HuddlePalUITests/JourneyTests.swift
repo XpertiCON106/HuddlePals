@@ -119,6 +119,19 @@ final class JourneyTests: HuddleUITestCase {
         waitUntilGone(app.staticTexts["The Crew"])
     }
 
+    /// 5b. Its keeper deletes a huddle: it's gone, for everyone.
+    func testTheKeeperDeletesAHuddle() {
+        launchToShelf()
+        openHuddle("Sunday Dinners")
+        waitFor(app.buttons["Huddle settings"]).tap()
+        let delete = app.buttons["Delete huddle"]
+        scrollTo(delete)
+        snapshot("10b delete huddle")
+        tapAndConfirm("Delete huddle")
+        waitFor(app.staticTexts["The Crew"], timeout: 15)
+        waitUntilGone(app.staticTexts["Sunday Dinners"])
+    }
+
     /// 6. Profile edits save only after confirming; reminders ask for
     /// permission; appearance switches to dark.
     func testEditingProfileRemindersAndAppearance() {

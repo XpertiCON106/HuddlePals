@@ -178,6 +178,22 @@ final class LiveHuddleService: HuddleServiceProtocol {
         try store.save()
     }
 
+    func deleteHuddle(_ huddle: Huddle, by user: User) async throws {
+        guard huddle.memberships.contains(where: { $0.user?.id == user.id && $0.role == .keeper }) else {
+            throw HuddleServiceError.notKeeper
+        }
+        let body = try JSONEncoder().encode(["huddle_id": huddle.id.uuidString.lowercased()])
+        do {
+            try await client.invokeFunction("delete-huddle", body: body)
+        } catch SupabaseClient.ClientError.http(status: 403, message: _) {
+            throw HuddleServiceError.notKeeper
+        } catch SupabaseClient.ClientError.http(status: 404, message: _) {
+            // Already deleted (from another device): only this one is left.
+        }
+        store.removeMembershipsLocally(of: huddle)
+        try store.save()
+    }
+
     func skipRecords(for huddle: Huddle) async throws -> [String: Set<UUID>] {
         let dtos: [SkipDTO] = try await client.select("skips", query: [
             URLQueryItem(name: "huddle_id", value: "eq.\(huddle.id.uuidString)"),

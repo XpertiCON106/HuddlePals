@@ -1,6 +1,6 @@
 # HuddlePals — Privacy Policy
 
-_Last updated: 2026-10-27_
+_Last updated: 2026-10-28_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
@@ -104,6 +104,15 @@ of your group's record. On the free plan, the archive shows the most recent
 30 days; older deposits are kept, not deleted, and open again with
 HuddlePals+.
 
+The one exception: a huddle's **keeper can delete the whole huddle**. That
+removes every member and permanently deletes every photo, video, caption,
+comment and reaction in it from our servers, for everyone, including what
+other members posted; each member's app removes its copies the next time it
+opens. We still keep a photo or video someone reported, as described under
+"Reporting and blocking," and copies may remain in our backups for a limited
+time. To tell the members, we keep the deleted huddle's name and who was in
+it for a week.
+
 ## Your choices and account deletion
 
 You can **delete your account at any time** from **Profile → Delete account**.
@@ -116,7 +125,9 @@ When you do:
 - **Photos and videos you already deposited remain in your shared huddles**,
   shown as "Former member" rather than under your name. This is required to
   keep the group's shared archive intact for the other members — consistent
-  with the permanence described above.
+  with the permanence described above. A huddle you keep passes to another
+  member; to delete it and everything in it instead, delete the huddle first
+  (its settings → Delete huddle).
 - **Deleting your account doesn't cancel HuddlePals+.** Apple keeps
   billing until you cancel it in Settings → your name → Subscriptions, so
   cancel it there first.
