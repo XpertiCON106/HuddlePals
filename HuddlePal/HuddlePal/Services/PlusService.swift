@@ -30,7 +30,7 @@ struct PlanStatus: Codable, Equatable {
     }
 }
 
-/// A HuddlePals Plus subscription the App Store sells, ready to show.
+/// A HuddlePals+ subscription the App Store sells, ready to show.
 struct PlusProduct: Identifiable, Equatable, Sendable {
     enum Period: Equatable, Sendable {
         case month
@@ -65,14 +65,14 @@ enum PurchaseOutcome: Equatable {
 
 enum RestoreOutcome: Equatable {
     case restored
-    /// This Apple Account has no active HuddlePals Plus subscription.
+    /// This Apple Account has no active HuddlePals+ subscription.
     case nothingToRestore
     case linkedToAnotherAccount
     case cancelled
     case failed(String)
 }
 
-/// HuddlePals Plus for the signed-in account: what the server says about it,
+/// HuddlePals+ for the signed-in account: what the server says about it,
 /// and buying or restoring it through the App Store. Observable, so screens
 /// update when `status` changes.
 @MainActor
@@ -123,8 +123,8 @@ final class MockPlusService: PlusServiceProtocol {
     private let session: AppSession
 
     static let catalog = [
-        PlusProduct(id: PlusCatalog.monthly, displayName: "HuddlePals Plus", displayPrice: "$2.99", period: .month, freeTrialDays: 7),
-        PlusProduct(id: PlusCatalog.annual, displayName: "HuddlePals Plus", displayPrice: "$24.99", period: .year, freeTrialDays: 7),
+        PlusProduct(id: PlusCatalog.monthly, displayName: "HuddlePals+", displayPrice: "$2.99", period: .month, freeTrialDays: 7),
+        PlusProduct(id: PlusCatalog.annual, displayName: "HuddlePals+", displayPrice: "$24.99", period: .year, freeTrialDays: 7),
     ]
 
     init(plans: MockPlanLedger, session: AppSession) {
@@ -152,7 +152,7 @@ final class MockPlusService: PlusServiceProtocol {
     }
 
     func purchase(_ product: PlusProduct) async -> PurchaseOutcome {
-        guard let user = session.currentUser else { return .failed("Sign in to get HuddlePals Plus.") }
+        guard let user = session.currentUser else { return .failed("Sign in to get HuddlePals+.") }
         if plans.purchasesLinkedElsewhere { return .linkedToAnotherAccount }
         let period: Calendar.Component = product.period == .year ? .year : .month
         let until = Calendar.current.date(byAdding: period, value: 1, to: .now) ?? .distantFuture

@@ -5,7 +5,7 @@ import XCTest
 
 @testable import HuddlePal
 
-/// HuddlePals Plus on the device: how a plan status reads (by the server's
+/// HuddlePals+ on the device: how a plan status reads (by the server's
 /// clock), the offline world's Plus, and the live StoreKit 2 service against
 /// a local App Store (`StoreKit/HuddlePalsPlus.storekit`) and a stand-in for
 /// the server's verify-subscription and my_entitlement().

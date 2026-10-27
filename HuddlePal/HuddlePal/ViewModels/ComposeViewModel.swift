@@ -44,7 +44,7 @@ final class ComposeViewModel {
     private(set) var videoNeedsPlus = false
 
     var canContinue: Bool { (imageData != nil || clip != nil) && !isSaving }
-    /// Video drops come with HuddlePals Plus.
+    /// Video drops come with HuddlePals+.
     var canRecordVideo: Bool { deps.plus.isPremium }
 
     /// What was posted last time ("photo" or "video"): Compose opens on it.

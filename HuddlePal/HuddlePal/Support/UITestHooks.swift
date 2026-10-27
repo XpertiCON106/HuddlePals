@@ -12,7 +12,7 @@ import UIKit
 ///                               (the Simulator can't reset a decided one)
 ///   -ui-testing-apple-unavailable   Apple can't confirm the account at
 ///                               deletion (no Apple Account, no network)
-///   -ui-testing-plus            the seeded "You" has HuddlePals Plus
+///   -ui-testing-plus            the seeded "You" has HuddlePals+
 enum UITestHooks {
     #if DEBUG
     private static let arguments = ProcessInfo.processInfo.arguments

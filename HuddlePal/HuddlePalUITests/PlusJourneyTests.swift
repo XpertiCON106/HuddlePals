@@ -1,6 +1,6 @@
 import XCTest
 
-/// The free plan and HuddlePals Plus, end to end in the seeded world: the
+/// The free plan and HuddlePals+, end to end in the seeded world: the
 /// paywall shows what App Review asks of a subscription, and each place the
 /// free plan holds something back leads to it.
 final class PlusJourneyTests: HuddleUITestCase {
@@ -13,11 +13,11 @@ final class PlusJourneyTests: HuddleUITestCase {
     func testThePaywallShowsWhatAppleAsksAndBuyingTurnsPlusOn() {
         launchToShelf()
         openTab("Profile")
-        let getPlus = app.buttons["Get HuddlePals Plus"]
+        let getPlus = app.buttons["Get HuddlePals+"]
         scrollTo(getPlus)
         getPlus.tap()
 
-        // Profile has its own "HuddlePals Plus" row: wait on the paywall's terms.
+        // Profile has its own "HuddlePals+" row: wait on the paywall's terms.
         let terms = waitFor(app.staticTexts["renewalTerms"])
         waitFor(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Yearly, $24.99 a year'")).firstMatch)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Monthly, $2.99 a month'")).firstMatch.exists)
@@ -35,7 +35,7 @@ final class PlusJourneyTests: HuddleUITestCase {
         waitUntilGone(app.buttons["Close"], timeout: 10)
         let summary = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Current period ends'")).firstMatch
         XCTAssertTrue(summary.waitForExistence(timeout: 5), "Profile shows Plus on, with its period")
-        XCTAssertFalse(app.buttons["Get HuddlePals Plus"].exists)
+        XCTAssertFalse(app.buttons["Get HuddlePals+"].exists)
     }
 
     /// A day past the free plan's 30 days shows who posted, locked, and opens
@@ -51,7 +51,7 @@ final class PlusJourneyTests: HuddleUITestCase {
         snapshot("archive locked days")
         let lockedFrame = locked.frame
         locked.tap()
-        waitFor(paywallHeadline("Unlock your full huddle archive with HuddlePals Plus"))
+        waitFor(paywallHeadline("Unlock your full huddle archive with HuddlePals+"))
         snapshot("archive paywall")
 
         let terms = app.staticTexts["renewalTerms"]
@@ -73,7 +73,7 @@ final class PlusJourneyTests: HuddleUITestCase {
         waitFor(app.buttons["Take test photo"])
         app.buttons["Cancel"].firstMatch.tap()
         waitFor(app.buttons["Video · Plus"]).tap()
-        waitFor(paywallHeadline("Post 6-second video drops with HuddlePals Plus"))
+        waitFor(paywallHeadline("Post 6-second video drops with HuddlePals+"))
         app.buttons["Try it free for 1 week"].tap()
         waitFor(app.buttons["Record test video"], timeout: 15)
     }
@@ -92,8 +92,8 @@ final class PlusJourneyTests: HuddleUITestCase {
         waitFor(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'You keep 3 huddles'")).firstMatch)
         XCTAssertFalse(app.buttons["Create huddle"].isEnabled)
         snapshot("create limit")
-        app.buttons["Get HuddlePals Plus"].tap()
-        waitFor(paywallHeadline("Keep up to 10 huddles with HuddlePals Plus"))
+        app.buttons["Get HuddlePals+"].tap()
+        waitFor(paywallHeadline("Keep up to 10 huddles with HuddlePals+"))
     }
 
     /// Two huddles made with Plus, then Plus ends: the 4th one kept is past
@@ -111,7 +111,7 @@ final class PlusJourneyTests: HuddleUITestCase {
         }
 
         openTab("Profile")
-        let plus = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: HuddlePals Plus'")).firstMatch
+        let plus = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: HuddlePals+'")).firstMatch
         scrollTo(plus, maxSwipes: 25)
         plus.switches.firstMatch.tap()
         XCTAssertEqual(plus.switches.firstMatch.value as? String, "0", "Plus has ended")
@@ -124,8 +124,8 @@ final class PlusJourneyTests: HuddleUITestCase {
         XCTAssertTrue(paused.exists, "the keeper is told why")
         XCTAssertFalse(app.staticTexts["inviteCode"].exists, "no code that would fail")
         snapshot("invites paused")
-        app.buttons["Get HuddlePals Plus"].tap()
-        waitFor(paywallHeadline("Reopen invites with HuddlePals Plus"))
+        app.buttons["Get HuddlePals+"].tap()
+        waitFor(paywallHeadline("Reopen invites with HuddlePals+"))
     }
 
     /// Deleting the account doesn't end Apple's billing: with Plus, the
@@ -161,7 +161,7 @@ final class PlusJourneyTests: HuddleUITestCase {
         scrollTo(closed)
         XCTAssertFalse(app.staticTexts["inviteCode"].exists, "no code that would fail")
         snapshot("invite paused")
-        app.buttons["Get HuddlePals Plus"].tap()
-        waitFor(paywallHeadline("Reopen invites with HuddlePals Plus"))
+        app.buttons["Get HuddlePals+"].tap()
+        waitFor(paywallHeadline("Reopen invites with HuddlePals+"))
     }
 }

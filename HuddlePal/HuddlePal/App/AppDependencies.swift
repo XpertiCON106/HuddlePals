@@ -81,7 +81,7 @@ final class AppDependencies {
     let depositService: any DepositServiceProtocol
     let mediaService: any MediaServiceProtocol
     let moderationService: any ModerationServiceProtocol
-    /// HuddlePals Plus for the signed-in account: the server's view of it,
+    /// HuddlePals+ for the signed-in account: the server's view of it,
     /// and buying or restoring it through the App Store.
     let plus: any PlusServiceProtocol
     /// Mock only: who has Plus in the offline world (live, the server

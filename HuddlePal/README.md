@@ -2,7 +2,7 @@
 
 > **New here? Read [OVERVIEW.md](OVERVIEW.md)** — the complete guide with diagrams. [DEVELOPMENT.md](DEVELOPMENT.md) is the developer reference; [DEPLOYMENT.md](DEPLOYMENT.md) is the go-live runbook.
 
-A private, daily photo-sharing app for small groups: up to 4 people, or 10 when the huddle's keeper has HuddlePals Plus. One photo per person per day (or, with Plus, a video of up to 6 seconds) goes into a shared huddle. Today's photos from the others stay **blurred until you deposit your own** (the reciprocity gate). Streaks belong to the group, not the individual. Over time the huddle becomes a permanent collective archive — the opposite of Instagram: private, permanent, small, daily.
+A private, daily photo-sharing app for small groups: up to 4 people, or 10 when the huddle's keeper has HuddlePals+. One photo per person per day (or, with Plus, a video of up to 6 seconds) goes into a shared huddle. Today's photos from the others stay **blurred until you deposit your own** (the reciprocity gate). Streaks belong to the group, not the individual. Over time the huddle becomes a permanent collective archive — the opposite of Instagram: private, permanent, small, daily.
 
 Every service is a protocol with two implementations — a seeded offline **mock** and a **live** Supabase one — picked once at launch (live when a filled-in `Supabase.plist` is bundled). No view or view model knows which one is running.
 
@@ -14,7 +14,7 @@ Every service is a protocol with two implementations — a seeded offline **mock
 4. Tap **Add today's memory** → take a photo with the camera (deposits are camera-only; on the Simulator, which has no camera, Compose shows a "no camera" state — run on a device to deposit), confirm the permanence prompt → the lock springs open and today is revealed.
 5. ⌘U runs the test suite (engine rules, critical mock flows, live sync reconciliation, sign-in input, profile editor, photo encryption).
 
-**Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), simulate HuddlePals Plus (or Plus that ends in a minute) and a subscription linked to another account, advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.
+**Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), simulate HuddlePals+ (or Plus that ends in a minute) and a subscription linked to another account, advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.
 
 ## File map
 
@@ -72,7 +72,7 @@ HuddlePal/
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
 │   │   ├── Detail/DepositDetailView.swift  Reactions + comments
 │   │   ├── HuddleManagement/            CreateHuddleView / JoinHuddleView / HuddleSettingsView
-│   │   ├── Plus/PaywallView.swift      HuddlePals Plus: plans, renewal terms, Restore Purchases
+│   │   ├── Plus/PaywallView.swift      HuddlePals+: plans, renewal terms, Restore Purchases
 │   │   └── Profile/ProfileView.swift   Draft editing + confirmed save, the Plan section,
 │   │                                   sign out + DEBUG tools; TermsReaderView
 │   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
@@ -191,5 +191,5 @@ It builds with `Supabase.plist` excluded, so a test run can never reach the live
 - `AuthInputTests` covers sign-in plumbing: the Keychain session surviving a relaunch, phone numbers without +1, and code lengths from `Supabase.plist`.
 - `ProfileConfirmationTests` covers the profile editor's confirmed-draft and dirty-exit rules.
 - `PhotoEncryptionTests` covers the E2EE crypto: huddle-key wrap/unwrap, photo seal/open, wrong keys failing cleanly, a report's key opening only that photo, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
-- `PlanRulesTests`, `PlanLimitTests`, `PlusServiceTests` and `PlusGateTests` cover HuddlePals Plus and the free plan: the rules, the mock server's caps, StoreKit 2 through `SKTestSession` (purchase, restore, renewals and refunds while the app runs), and the paywall and gates. `VideoDropTests` covers video drops from recording to playback. `PlusJourneyTests` and `VideoJourneyTests` walk them in the UI.
+- `PlanRulesTests`, `PlanLimitTests`, `PlusServiceTests` and `PlusGateTests` cover HuddlePals+ and the free plan: the rules, the mock server's caps, StoreKit 2 through `SKTestSession` (purchase, restore, renewals and refunds while the app runs), and the paywall and gates. `VideoDropTests` covers video drops from recording to playback. `PlusJourneyTests` and `VideoJourneyTests` walk them in the UI.
 - `TermsAgreementTests` covers the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end, Decline returns to the first welcome card, nothing past the cards opens without Agree, and agreement persists per `TermsOfService.version` (which must match the Terms' "Last updated" date).

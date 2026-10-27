@@ -1,4 +1,4 @@
-// HuddlePals Plus, server side: checking Apple's signature on App Store data
+// HuddlePals+, server side: checking Apple's signature on App Store data
 // (functions/_shared/apple-jws.ts), deciding it's a Plus subscription of this
 // app (functions/_shared/subscriptions.ts), and the verify-subscription and
 // app-store-notifications handlers. Runs the functions' own TypeScript (Node

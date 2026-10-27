@@ -1,5 +1,5 @@
 // Video drops: a deposit may be a clip of up to 6 seconds, posted only with
-// HuddlePals Plus. It is two Storage objects under one photo key: the poster
+// HuddlePals+. It is two Storage objects under one photo key: the poster
 // at storage_path (a JPEG, so app builds from before videos show a photo)
 // and the clip at video_path, the same path ending in .mp4. Anyone in the
 // huddle can watch it, and it stays once its poster's Plus ends.

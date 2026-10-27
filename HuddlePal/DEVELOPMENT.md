@@ -9,7 +9,7 @@ in sync when behaviour changes.
 ## At a glance
 
 - **The app**: private daily photo sharing for small groups ("huddles"):
-  up to 4 people on the free plan, 10 when the keeper has HuddlePals Plus.
+  up to 4 people on the free plan, 10 when the keeper has HuddlePals+.
   One photo per member per day (or, with Plus, a video of up to 6 seconds);
   others' stay blurred until you post yours (the gate); the streak belongs
   to the group; deposits are permanent.
@@ -279,7 +279,7 @@ codes, tokens and keys are never logged.
 - **Edge functions**: `delete-account` and `send-push`. Each splits into
   `index.ts` (wiring), `handler.ts` (logic) and a client file (`apple.ts`,
   `apns.ts`), so Node can test the logic. `verify-subscription` and
-  `app-store-notifications` (HuddlePals Plus) split the same way and share
+  `app-store-notifications` (HuddlePals+) split the same way and share
   `_shared/apple-jws.ts` (Apple's certificate chain, checked with WebCrypto
   against the pinned Apple Root CA - G3) and `_shared/subscriptions.ts`.
 - **Plus and the free plan** (migration 013): Postgres enforces them, by
@@ -353,7 +353,7 @@ supabase secrets set --project-ref <project-ref> APPLE_TEAM_ID=<TEAM_ID> APPLE_K
 supabase secrets set --project-ref <project-ref> APPLE_PRIVATE_KEY="$(cat /path/to/AuthKey_<SIWA_KEY_ID>.p8)" APNS_PRIVATE_KEY="$(cat /path/to/AuthKey_<APNS_KEY_ID>.p8)"
 ```
 
-HuddlePals Plus (the product ids as created in App Store Connect):
+HuddlePals+ (the product ids as created in App Store Connect):
 
 ```bash
 supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.yearly
@@ -432,7 +432,7 @@ Commands run from the repo root.
 - **Covered**: engine rules, mock flows, store reconciliation, live
   services over stubbed HTTP (`StubURLProtocol`), encryption and invite
   joins against an in-process fake server, push coordination, accessibility
-  audits; HuddlePals Plus through StoreKit's local test store
+  audits; HuddlePals+ through StoreKit's local test store
   (`SKTestSession`: purchase, restore, renewal and refund while running,
   failures) and every free-plan gate, video recording, sealing and
   playback; schema, RLS, functions and triggers in PGlite; edge-function

@@ -1,4 +1,4 @@
-// The free plan and HuddlePals Plus: how many huddles an account keeps and
+// The free plan and HuddlePals+: how many huddles an account keeps and
 // how many members a huddle takes (create_huddle, join_huddle,
 // redeem_huddle_invite, huddle_join_rule). The keeper's plan decides: on the
 // free plan 3 huddles of up to 4, and only the 3 they've kept longest take

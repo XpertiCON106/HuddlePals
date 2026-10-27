@@ -466,7 +466,7 @@ private struct ProfileContent: View {
     private var plusSection: some View {
         Section {
             HStack {
-                Label("HuddlePals Plus", systemImage: "sparkles")
+                Label("HuddlePals+", systemImage: "sparkles")
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Text(viewModel.plusSummary)
@@ -479,7 +479,7 @@ private struct ProfileContent: View {
                 Button("Manage subscription") { showManageSubscription = true }
                     .listRowBackground(Theme.surface)
             } else if !viewModel.isPremium {
-                Button("Get HuddlePals Plus") { showPaywall = true }
+                Button("Get HuddlePals+") { showPaywall = true }
                     .listRowBackground(Theme.surface)
             }
 
@@ -541,7 +541,7 @@ private struct ProfileContent: View {
 
             Toggle(isOn: $viewModel.simulatePlus) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Simulate: HuddlePals Plus")
+                    Text("Simulate: HuddlePals+")
                     if let until = viewModel.simulatedPlusUntil {
                         Text("Ends \(until, format: .dateTime.hour().minute().second())")
                             .font(.system(size: 11))

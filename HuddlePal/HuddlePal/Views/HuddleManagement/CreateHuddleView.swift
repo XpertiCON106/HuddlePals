@@ -125,7 +125,7 @@ private struct CreateHuddleContent: View {
                 Button {
                     showPaywall = true
                 } label: {
-                    Label("Get HuddlePals Plus", systemImage: "sparkles")
+                    Label("Get HuddlePals+", systemImage: "sparkles")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                         .padding(.horizontal, 16)

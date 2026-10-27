@@ -1,6 +1,6 @@
 import Foundation
 
-/// The free plan's and HuddlePals Plus's limits. Postgres enforces every one
+/// The free plan's and HuddlePals+'s limits. Postgres enforces every one
 /// (supabase migration 013: create_huddle, huddle_join_rule, the deposits and
 /// Storage insert policies); the app mirrors them to explain a refusal before
 /// it happens, and the mock backend to behave like the server.

@@ -3,7 +3,7 @@ import SwiftData
 
 enum DepositError: LocalizedError {
     case alreadyDepositedToday
-    /// HuddlePals Plus wasn't on when the video went up (it ended since it
+    /// HuddlePals+ wasn't on when the video went up (it ended since it
     /// was recorded): Storage or the database refused it, and nothing was
     /// posted.
     case videoNeedsPlus
@@ -14,7 +14,7 @@ enum DepositError: LocalizedError {
         case .alreadyDepositedToday:
             "That day's photo is already in the huddle. One a day — forever."
         case .videoNeedsPlus:
-            "Your HuddlePals Plus has ended, so this video can't be posted. Nothing was posted: take a photo for today instead, or renew Plus to post the video."
+            "Your HuddlePals+ has ended, so this video can't be posted. Nothing was posted: take a photo for today instead, or renew Plus to post the video."
         case .videoTooLarge:
             "That clip is too large to post. Record it again."
         }

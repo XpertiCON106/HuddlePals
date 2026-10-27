@@ -29,7 +29,7 @@ final class VideoJourneyTests: HuddleUITestCase {
     func testAPlusMemberPostsAVideoAndItLoopsInTheFeed() {
         launchToShelf()
         openTab("Profile")
-        let plus = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: HuddlePals Plus'")).firstMatch
+        let plus = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: HuddlePals+'")).firstMatch
         scrollTo(plus)
         plus.switches.firstMatch.tap()
         XCTAssertEqual(plus.switches.firstMatch.value as? String, "1", "Plus is on")

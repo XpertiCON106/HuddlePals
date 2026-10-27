@@ -4,7 +4,7 @@
 // the subscription's renewal info when it has it) after a purchase, a
 // restore, a renewal it sees through Transaction.updates, and on launch. This
 // checks Apple's signature on it (../_shared/apple-jws.ts: the certificate
-// chain up to the pinned Apple Root CA - G3), checks it's a HuddlePals Plus
+// chain up to the pinned Apple Root CA - G3), checks it's a HuddlePals+
 // subscription (../_shared/subscriptions.ts), and records it for the caller
 // with public.apply_entitlement (migration 013), which keeps each Apple
 // subscription with one HuddlePals account. Postgres then enforces Plus

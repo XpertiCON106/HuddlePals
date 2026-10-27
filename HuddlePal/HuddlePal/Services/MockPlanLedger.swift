@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// The offline world's `user_entitlements`: who has HuddlePals Plus and
+/// The offline world's `user_entitlements`: who has HuddlePals+ and
 /// until when.
 /// In memory, like `SkipLedger`; the mock services read it so they refuse
 /// what the server would, and Profile's DEBUG section flips it.

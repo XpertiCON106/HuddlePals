@@ -136,7 +136,7 @@ export async function videoDeposit(db, uid, huddleId, dayKey, { durationMs = 600
 }
 
 /**
- * Gives `uid` HuddlePals Plus, as verify-subscription records it: until
+ * Gives `uid` HuddlePals+, as verify-subscription records it: until
  * `expiresIn` from now (an interval; negative for one that has run out),
  * with an optional billing grace period after that, or refunded.
  * Returns the subscription's original transaction id.

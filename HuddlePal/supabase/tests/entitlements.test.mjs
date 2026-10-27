@@ -1,4 +1,4 @@
-// HuddlePals Plus on the server: user_entitlements, written only through
+// HuddlePals+ on the server: user_entitlements, written only through
 // apply_entitlement (service role: the verify-subscription and
 // app-store-notifications edge functions, once Apple's signature checks out)
 // and read by the app only through my_entitlement(). One Apple subscription

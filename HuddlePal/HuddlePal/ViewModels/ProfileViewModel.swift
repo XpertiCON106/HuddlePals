@@ -221,7 +221,7 @@ final class ProfileViewModel {
         await deps.push.setEnabled(enabled)
     }
 
-    // MARK: HuddlePals Plus surface
+    // MARK: HuddlePals+ surface
 
     var isPremium: Bool { deps.plus.isPremium }
 
@@ -244,10 +244,10 @@ final class ProfileViewModel {
         defer { isRestoring = false }
         switch await deps.plus.restore() {
         case .restored:
-            plusMessage = "HuddlePals Plus is on."
+            plusMessage = "HuddlePals+ is on."
             Haptics.success()
         case .nothingToRestore:
-            plusMessage = "No HuddlePals Plus subscription was found for this Apple Account."
+            plusMessage = "No HuddlePals+ subscription was found for this Apple Account."
         case .linkedToAnotherAccount:
             plusMessage = PaywallViewModel.linkedElsewhere
         case .cancelled:
@@ -266,7 +266,7 @@ final class ProfileViewModel {
     }
 
     /// Store-wide wording, also checked by tests.
-    static let billingContinuesWarning = "Your HuddlePals Plus subscription is billed by Apple and keeps renewing after your account is deleted. To stop it, cancel it in Settings › your name › Subscriptions."
+    static let billingContinuesWarning = "Your HuddlePals+ subscription is billed by Apple and keeps renewing after your account is deleted. To stop it, cancel it in Settings › your name › Subscriptions."
 
     #if DEBUG
     // DEBUG bindings surface

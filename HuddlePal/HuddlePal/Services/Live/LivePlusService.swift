@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import StoreKit
 
-/// HuddlePals Plus through StoreKit 2 and the server. The App Store sells
+/// HuddlePals+ through StoreKit 2 and the server. The App Store sells
 /// the subscription; the server decides: every transaction goes to the
 /// verify-subscription edge function, which checks Apple's signature and
 /// records it for this account, and `my_entitlement()` says what the account
@@ -94,10 +94,10 @@ final class LivePlusService: PlusServiceProtocol {
     }
 
     func purchase(_ product: PlusProduct) async -> PurchaseOutcome {
-        guard let userID = session.currentUser?.id else { return .failed("Sign in to get HuddlePals Plus.") }
+        guard let userID = session.currentUser?.id else { return .failed("Sign in to get HuddlePals+.") }
         do {
             guard let storeProduct = try await storeProduct(for: product.id) else {
-                return .failed("HuddlePals Plus isn't available right now. Try again later.")
+                return .failed("HuddlePals+ isn't available right now. Try again later.")
             }
             switch try await storeProduct.purchase(options: [.appAccountToken(userID)]) {
             case .success(let result):

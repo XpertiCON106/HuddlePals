@@ -1,5 +1,5 @@
 // What a verified App Store transaction (and its renewal info) means for
-// HuddlePals Plus, once it passes our own checks: this app, a Plus product,
+// HuddlePals+, once it passes our own checks: this app, a Plus product,
 // a subscription bought by this Apple Account (Family Sharing is off), in
 // production or the sandbox (App Review and TestFlight buy there; a local
 // StoreKit test signs with a certificate Apple's root never issued, so it

@@ -167,7 +167,7 @@ seeded **mock** world. No code changes to switch.
      something like this:
 
      > HuddlePals is a private, invite-only photo app for small groups (up
-     > to 4 people who know each other, or 10 with HuddlePals Plus). Sign in with Apple is the only
+     > to 4 people who know each other, or 10 with HuddlePals+). Sign in with Apple is the only
      > sign-in. To try it: agree to the Terms, sign in, create a huddle and
      > take today's photo. Other members' photos for today unlock once you
      > post yours. To see a group with other members, join with invite
@@ -208,7 +208,7 @@ seeded **mock** world. No code changes to switch.
    decryptable — A holds the huddle key), and the photo's "•••" menu still
    offers Report.
 
-## Phase 5 — HuddlePals Plus and video drops
+## Phase 5 — HuddlePals+ and video drops
 
 The Plus build needs migration 013, two new edge functions, the
 subscriptions in App Store Connect, and the website's changes before App
@@ -221,18 +221,18 @@ TestFlight build → checks on a device → website → App Review → release.
 
 1. **Agreements first.** Business → Agreements: accept the **Paid Apps**
    agreement and complete the tax forms and banking. Until it's active,
-   StoreKit returns no products and the paywall says "HuddlePals Plus isn't
+   StoreKit returns no products and the paywall says "HuddlePals+ isn't
    available right now".
 2. **Subscription group.** Your app → Monetization → Subscriptions → **+**
-   a group named **HuddlePals Plus**, with a display-name localization
-   (e.g. "HuddlePals Plus").
+   a group named **HuddlePals+**, with a display-name localization
+   (e.g. "HuddlePals+").
 3. **Two subscriptions** in it, both at **the same level** (a switch
    between them then takes effect at the next renewal):
 
    | Reference name | Product ID | Duration |
    |---|---|---|
-   | HuddlePals Plus Monthly | `com.huddlepals.ios.plus.monthly` | 1 month |
-   | HuddlePals Plus Yearly | `com.huddlepals.ios.plus.yearly` | 1 year |
+   | HuddlePals+ Monthly | `com.huddlepals.ios.plus.monthly` | 1 month |
+   | HuddlePals+ Yearly | `com.huddlepals.ios.plus.yearly` | 1 year |
 
    The IDs must match exactly: the app (`PlusCatalog`) and the
    `APPSTORE_PRODUCT_IDS` secret use them. For each, set your price (the
@@ -240,7 +240,7 @@ TestFlight build → checks on a device → website → App Review → release.
    test store's $2.99 and $24.99 are only for the tests), a localization
    (display name and a short description, e.g. "Videos, bigger huddles,
    your whole archive"), and a **review screenshot** of the paywall
-   (Profile → Get HuddlePals Plus, on a TestFlight build).
+   (Profile → Get HuddlePals+, on a TestFlight build).
 4. **Free trial.** Each subscription → Subscription Prices → Introductory
    Offers → **Free, 1 week**, all territories. Eligible people then see
    "Try it free for 1 week".
@@ -311,8 +311,8 @@ TestFlight build → checks on a device → website → App Review → release.
    as in Phase 3. Everyone who updates sees the revised Terms (version
    2026-10-27) and agrees once more.
 2. On a phone with the TestFlight build:
-   - **Buy.** Profile → Get HuddlePals Plus → Try it free for 1 week →
-     Apple's sheet. The paywall says "You have HuddlePals Plus" and closes;
+   - **Buy.** Profile → Get HuddlePals+ → Try it free for 1 week →
+     Apple's sheet. The paywall says "You have HuddlePals+" and closes;
      Profile shows "Current period ends …". In SQL,
      `select product_id, environment, expires_at from user_entitlements;`
      shows one `Sandbox` row.

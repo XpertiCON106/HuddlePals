@@ -191,12 +191,12 @@ final class HuddleSettingsViewModel {
             return HuddleServiceError.huddleAtMaximum.errorDescription
         case .freeLimit:
             return isKeeper
-                ? "This huddle is full on the free plan: \(HuddleLimits.freeMembers) people. It takes new members again when someone leaves, or with HuddlePals Plus for up to \(HuddleLimits.plusMembers)."
-                : "This huddle is full on the free plan: \(HuddleLimits.freeMembers) people. It takes new members again when someone leaves, or when its keeper gets HuddlePals Plus."
+                ? "This huddle is full on the free plan: \(HuddleLimits.freeMembers) people. It takes new members again when someone leaves, or with HuddlePals+ for up to \(HuddleLimits.plusMembers)."
+                : "This huddle is full on the free plan: \(HuddleLimits.freeMembers) people. It takes new members again when someone leaves, or when its keeper gets HuddlePals+."
         case .invitesPaused:
             return isKeeper
-                ? "On the free plan only the \(HuddleLimits.freeHuddlesKept) huddles you've kept longest take new members, so invites to this one are paused. Leave one of those, or get HuddlePals Plus to reopen them."
-                : "Invites are paused: on the free plan only a keeper's \(HuddleLimits.freeHuddlesKept) longest-kept huddles take new members. Its keeper can reopen them with HuddlePals Plus."
+                ? "On the free plan only the \(HuddleLimits.freeHuddlesKept) huddles you've kept longest take new members, so invites to this one are paused. Leave one of those, or get HuddlePals+ to reopen them."
+                : "Invites are paused: on the free plan only a keeper's \(HuddleLimits.freeHuddlesKept) longest-kept huddles take new members. Its keeper can reopen them with HuddlePals+."
         }
     }
 

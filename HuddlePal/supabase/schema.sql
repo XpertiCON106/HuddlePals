@@ -7,7 +7,7 @@
 -- end-to-end encrypted huddle photos and video clips). Push notifications
 -- also need the send-push edge function and two Vault secrets
 -- (DEVELOPMENT.md, "Backend setup and deploys"); this file enables pg_net for
--- them. HuddlePals Plus needs the verify-subscription and
+-- them. HuddlePals+ needs the verify-subscription and
 -- app-store-notifications edge functions.
 
 -- pgcrypto provides gen_random_bytes() for crypto-strength invite codes.
@@ -197,7 +197,7 @@ language sql stable set search_path = public as $$
      and not exists (select 1 from required r where r.user_id not in (select u from covered where u is not null));
 $$;
 
--- ============================================ plans: free and HuddlePals Plus
+-- ============================================ plans: free and HuddlePals+
 -- On the free plan an account keeps up to 3 huddles, and a huddle whose
 -- keeper is on it takes up to 4 members. Plus (an App Store subscription,
 -- checked by the verify-subscription and app-store-notifications edge

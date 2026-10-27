@@ -20,7 +20,7 @@
       "localizations" : [
 
       ],
-      "name" : "HuddlePals Plus",
+      "name" : "HuddlePals+",
       "subscriptions" : [
         {
           "adHocOffers" : [
@@ -42,7 +42,7 @@
           "localizations" : [
             {
               "description" : "10 huddles of up to 10 people, video drops, and your whole archive.",
-              "displayName" : "HuddlePals Plus",
+              "displayName" : "HuddlePals+",
               "locale" : "en_US"
             }
           ],
@@ -72,7 +72,7 @@
           "localizations" : [
             {
               "description" : "10 huddles of up to 10 people, video drops, and your whole archive.",
-              "displayName" : "HuddlePals Plus",
+              "displayName" : "HuddlePals+",
               "locale" : "en_US"
             }
           ],

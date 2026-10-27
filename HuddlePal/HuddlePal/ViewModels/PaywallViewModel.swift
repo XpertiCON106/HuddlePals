@@ -13,11 +13,11 @@ enum PaywallContext: String, Identifiable {
 
     var headline: String {
         switch self {
-        case .archive: "Unlock your full huddle archive with HuddlePals Plus"
-        case .video: "Post 6-second video drops with HuddlePals Plus"
-        case .createHuddle: "Keep up to 10 huddles with HuddlePals Plus"
-        case .invites: "Reopen invites with HuddlePals Plus"
-        case .profile: "HuddlePals Plus"
+        case .archive: "Unlock your full huddle archive with HuddlePals+"
+        case .video: "Post 6-second video drops with HuddlePals+"
+        case .createHuddle: "Keep up to 10 huddles with HuddlePals+"
+        case .invites: "Reopen invites with HuddlePals+"
+        case .profile: "HuddlePals+"
         }
     }
 
@@ -56,7 +56,7 @@ final class PaywallViewModel {
     /// Plus just turned on: the paywall closes itself.
     private(set) var didUnlock = false
 
-    static let linkedElsewhere = "This Apple Account's HuddlePals Plus is already linked to another HuddlePals account. Sign in to that account to use it, or write to \(AppLinks.contactEmail) to move it."
+    static let linkedElsewhere = "This Apple Account's HuddlePals+ is already linked to another HuddlePals account. Sign in to that account to use it, or write to \(AppLinks.contactEmail) to move it."
 
     init(deps: AppDependencies, context: PaywallContext) {
         self.deps = deps
@@ -76,7 +76,7 @@ final class PaywallViewModel {
         do {
             products = try await deps.plus.products()
             selectedID = products.first { $0.period == .year }?.id ?? products.first?.id
-            phase = products.isEmpty ? .unavailable("HuddlePals Plus isn't available right now. Try again later.") : .ready
+            phase = products.isEmpty ? .unavailable("HuddlePals+ isn't available right now. Try again later.") : .ready
         } catch {
             phase = .unavailable("Couldn't reach the App Store. Check your connection and try again.")
         }
@@ -112,7 +112,7 @@ final class PaywallViewModel {
         case .restored:
             unlock()
         case .nothingToRestore:
-            message = "No HuddlePals Plus subscription was found for this Apple Account."
+            message = "No HuddlePals+ subscription was found for this Apple Account."
         case .linkedToAnotherAccount:
             message = Self.linkedElsewhere
         case .cancelled:
@@ -160,7 +160,7 @@ final class PaywallViewModel {
         if let days = selected.freeTrialDays {
             terms += "Free for \(Self.trialLength(days: days)), then \(selected.displayPrice) a \(period). "
         }
-        terms += "Payment is charged to your Apple Account. HuddlePals Plus renews automatically at \(selected.displayPrice) a \(period) unless it's turned off at least 24 hours before the end of the current period. Manage or cancel it any time in Settings › your name › Subscriptions."
+        terms += "Payment is charged to your Apple Account. HuddlePals+ renews automatically at \(selected.displayPrice) a \(period) unless it's turned off at least 24 hours before the end of the current period. Manage or cancel it any time in Settings › your name › Subscriptions."
         return terms
     }
 }

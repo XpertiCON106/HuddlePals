@@ -25,7 +25,7 @@ described under "How your data is stored and protected."
 | **Reactions and comments** | The core function | Yes |
 | **Push notification token** (only if you allow notifications) | To notify your device about activity in your huddles: new photos, comments and reactions on your photos, and new members | Yes |
 | **Terms agreement record**: which version of the Terms of Service you agreed to, when, and the app version | To show that you agreed to the Terms | Yes |
-| **Subscription records** (only if you get HuddlePals Plus): the plan (monthly or yearly), Apple's transaction IDs, when it was bought and when it renews or ends, any billing grace period, refund or revocation, whether it will renew, and whether it was a test purchase | To give you Plus and keep it in step with Apple, and so that one subscription unlocks only one account. Apple handles payment: we never receive your card or billing details | Yes |
+| **Subscription records** (only if you get HuddlePals+): the plan (monthly or yearly), Apple's transaction IDs, when it was bought and when it renews or ends, any billing grace period, refund or revocation, whether it will renew, and whether it was a test purchase | To give you Plus and keep it in step with Apple, and so that one subscription unlocks only one account. Apple handles payment: we never receive your card or billing details | Yes |
 
 We do **not** use third-party advertising or tracking, we do **not** sell your
 data, and we do **not** collect location, contacts, or device-tracking
@@ -76,12 +76,12 @@ turning them off removes your device's token.
 Not end-to-end encrypted: captions, comments, reactions, your display name,
 bio, and profile photos, and information such as who is in which huddle,
 when deposits were posted, whether each is a photo or a video and how long a
-video is, and whether you have HuddlePals Plus. These are protected by the
+video is, and whether you have HuddlePals+. These are protected by the
 access rules above and are visible to us as the operator.
 
-## HuddlePals Plus purchases
+## HuddlePals+ purchases
 
-HuddlePals Plus is sold through Apple's App Store, and Apple handles the
+HuddlePals+ is sold through Apple's App Store, and Apple handles the
 payment: we never receive your payment card or billing details. When you
 buy, renew or restore Plus, your device sends us the signed record of the
 purchase that Apple gave it, and Apple's servers tell us about renewals,
@@ -102,7 +102,7 @@ huddle is permanent.** It becomes part of that group's shared archive and
 only deposit photos and videos you are comfortable making a permanent part
 of your group's record. On the free plan, the archive shows the most recent
 30 days; older deposits are kept, not deleted, and open again with
-HuddlePals Plus.
+HuddlePals+.
 
 ## Your choices and account deletion
 
@@ -117,7 +117,7 @@ When you do:
   shown as "Former member" rather than under your name. This is required to
   keep the group's shared archive intact for the other members — consistent
   with the permanence described above.
-- **Deleting your account doesn't cancel HuddlePals Plus.** Apple keeps
+- **Deleting your account doesn't cancel HuddlePals+.** Apple keeps
   billing until you cancel it in Settings → your name → Subscriptions, so
   cancel it there first.
 

@@ -201,7 +201,7 @@ private struct DayRow: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(Self.accessibilityLabel(for: deposit, locked: day.isLocked))
-                        .accessibilityHint(day.isLocked ? "Unlock your full huddle archive with HuddlePals Plus." : "")
+                        .accessibilityHint(day.isLocked ? "Unlock your full huddle archive with HuddlePals+." : "")
                     }
                 }
             }

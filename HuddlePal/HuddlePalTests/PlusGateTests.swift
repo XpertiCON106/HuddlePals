@@ -64,7 +64,7 @@ final class PlusGateTests: XCTestCase {
         }
         paywall.selectedID = PlusCatalog.monthly
         XCTAssertTrue(paywall.renewalTerms.contains("$2.99 a month"))
-        XCTAssertEqual(PaywallContext.archive.headline, "Unlock your full huddle archive with HuddlePals Plus")
+        XCTAssertEqual(PaywallContext.archive.headline, "Unlock your full huddle archive with HuddlePals+")
     }
 
     func testBuyingTurnsPlusOnAndClosesThePaywall() async {
@@ -80,7 +80,7 @@ final class PlusGateTests: XCTestCase {
         let paywall = PaywallViewModel(deps: deps, context: .profile)
         await paywall.load()
         await paywall.restore()
-        XCTAssertEqual(paywall.message, "No HuddlePals Plus subscription was found for this Apple Account.")
+        XCTAssertEqual(paywall.message, "No HuddlePals+ subscription was found for this Apple Account.")
         plans.purchasesLinkedElsewhere = true
         await paywall.purchase()
         XCTAssertEqual(paywall.message, PaywallViewModel.linkedElsewhere)
@@ -177,7 +177,7 @@ final class PlusGateTests: XCTestCase {
         deps.session.currentUser = try XCTUnwrap(crew.members.first { $0.id != you.id })
         let settings = HuddleSettingsViewModel(deps: deps, huddle: crew)
         await settings.loadJoinStatus()
-        XCTAssertTrue(settings.invitesClosedMessage?.contains("when its keeper gets HuddlePals Plus") == true)
+        XCTAssertTrue(settings.invitesClosedMessage?.contains("when its keeper gets HuddlePals+") == true)
         XCTAssertFalse(settings.canReopenWithPlus, "only the keeper's plan opens it")
     }
 
@@ -216,10 +216,10 @@ final class PlusGateTests: XCTestCase {
         XCTAssertEqual(profile.plusSummary, "Free plan")
         XCTAssertFalse(profile.canManageSubscription, "no Apple subscription to manage offline")
         await profile.restorePurchases()
-        XCTAssertEqual(profile.plusMessage, "No HuddlePals Plus subscription was found for this Apple Account.")
+        XCTAssertEqual(profile.plusMessage, "No HuddlePals+ subscription was found for this Apple Account.")
         plans.setPlus(true, for: you.id)
         await profile.restorePurchases()
-        XCTAssertEqual(profile.plusMessage, "HuddlePals Plus is on.")
+        XCTAssertEqual(profile.plusMessage, "HuddlePals+ is on.")
         XCTAssertEqual(profile.plusSummary, "On")
     }
 

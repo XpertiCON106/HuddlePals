@@ -1,7 +1,7 @@
 import StoreKit
 import SwiftUI
 
-/// HuddlePals Plus: what it adds, the plans with their price and renewal
+/// HuddlePals+: what it adds, the plans with their price and renewal
 /// terms, links to the Terms of Use (Apple's standard EULA), our Terms and
 /// the Privacy Policy, and Restore Purchases. With Plus already on, it says
 /// so and offers Apple's subscription settings instead.
@@ -145,7 +145,7 @@ private struct PaywallContent: View {
 
     private var subscribed: some View {
         VStack(spacing: 12) {
-            Label("You have HuddlePals Plus", systemImage: "checkmark.seal.fill")
+            Label("You have HuddlePals+", systemImage: "checkmark.seal.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Theme.accent)
             if let until = viewModel.premiumUntil, until != .distantFuture {

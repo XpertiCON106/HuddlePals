@@ -1,4 +1,4 @@
--- HuddlePals Plus and video drops. On the free plan an account keeps up to 3
+-- HuddlePals+ and video drops. On the free plan an account keeps up to 3
 -- huddles, and a huddle whose keeper is on it takes up to 4 members. Plus
 -- (an App Store subscription, checked by the verify-subscription and
 -- app-store-notifications edge functions) keeps up to 10 huddles of up to 10

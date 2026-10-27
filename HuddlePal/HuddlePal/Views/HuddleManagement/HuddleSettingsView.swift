@@ -201,7 +201,7 @@ private struct SettingsContent: View {
                     Button {
                         showPaywall = true
                     } label: {
-                        Label("Get HuddlePals Plus", systemImage: "sparkles")
+                        Label("Get HuddlePals+", systemImage: "sparkles")
                     }
                     .listRowBackground(Theme.surface)
                 }
