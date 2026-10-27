@@ -8,6 +8,9 @@ final class ArchiveViewModel {
         let dayKey: String
         let date: Date
         let deposits: [Deposit]
+        /// Past the free plan's 30 days (`ArchiveGate`): shown with its date
+        /// and who posted, never its photos.
+        var isLocked = false
         var id: String { dayKey }
     }
 
@@ -60,7 +63,10 @@ final class ArchiveViewModel {
                     && !blocked.contains($0.author?.id ?? UUID())
             }
 
-            months = Self.group(visible, engine: engine)
+            let newest = all.map(\.dayKey).max()
+            months = Self.group(visible, engine: engine) { [deps] key in
+                ArchiveGate.isLocked(key, newestDayKey: newest, deps: deps)
+            }
 
             // Backfill: offered when yesterday is inside the 48h window and
             // the current user has no deposit there.
@@ -90,14 +96,19 @@ final class ArchiveViewModel {
         await deps.reminders.refresh()
     }
 
-    private static func group(_ deposits: [Deposit], engine: HuddleEngine) -> [MonthSection] {
+    private static func group(
+        _ deposits: [Deposit],
+        engine: HuddleEngine,
+        isLocked: (String) -> Bool
+    ) -> [MonthSection] {
         let byDay = Dictionary(grouping: deposits, by: \.dayKey)
         let days: [DaySection] = byDay.compactMap { key, items in
             guard let date = engine.date(fromDayKey: key) else { return nil }
             return DaySection(
                 dayKey: key,
                 date: date,
-                deposits: items.sorted { $0.createdAt < $1.createdAt }
+                deposits: items.sorted { $0.createdAt < $1.createdAt },
+                isLocked: isLocked(key)
             )
         }
         .sorted { $0.dayKey > $1.dayKey } // newest first

@@ -135,6 +135,27 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         try audit("profile")
     }
 
+    /// What the free plan holds back, and the paywall it leads to.
+    func testPlusScreens() throws {
+        launchToShelf(arguments: ["-ui-testing-free-limits"])
+        openHuddle("The Crew")
+        waitFor(app.buttons["Archive"]).tap()
+        waitFor(app.navigationBars["Archive"])
+        let locked = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Locked:'")).firstMatch
+        scrollTo(locked, maxSwipes: 30)
+        try audit("archive locked")
+        locked.tap()
+        waitFor(app.staticTexts["renewalTerms"])
+        try audit("paywall")
+        app.buttons["Close"].tap()
+        waitUntilGone(app.staticTexts["renewalTerms"])
+        app.navigationBars.buttons.firstMatch.tap()
+        waitFor(app.buttons["Huddle settings"]).tap()
+        let closed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'full on the free plan'")).firstMatch
+        scrollTo(closed)
+        try audit("invite closed")
+    }
+
     func testCreateJoinAndCompose() throws {
         launchToShelf()
         openAddMenu("Create a Huddle")

@@ -37,6 +37,7 @@ private struct SettingsContent: View {
     @State private var showResetConfirmation = false
     @State private var copied = false
     @State private var checking: KeyCheck?
+    @State private var showPaywall = false
 
     init(viewModel: HuddleSettingsViewModel, onLeft: @escaping () -> Void) {
         self.viewModel = viewModel
@@ -59,6 +60,12 @@ private struct SettingsContent: View {
         .background(Theme.background)
         .task { await viewModel.loadInvite() }
         .task { await viewModel.loadKeyChecks() }
+        .task { await viewModel.loadJoinStatus() }
+        .sheet(isPresented: $showPaywall, onDismiss: {
+            Task { await viewModel.loadJoinStatus() }
+        }) {
+            PaywallView(context: .invites)
+        }
         .sheet(item: $checking) { check in
             KeyCheckSheet(viewModel: viewModel, check: check) { checking = nil }
         }
@@ -184,7 +191,21 @@ private struct SettingsContent: View {
 
     private var inviteSection: some View {
         Section {
-            if let code = viewModel.inviteCode {
+            if let closed = viewModel.invitesClosedMessage {
+                // No code to share while nobody can join with it.
+                Label(closed, systemImage: "person.crop.circle.badge.xmark")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.textPrimary)
+                    .listRowBackground(Theme.surface)
+                if viewModel.canReopenWithPlus {
+                    Button {
+                        showPaywall = true
+                    } label: {
+                        Label("Get HuddlePals Plus", systemImage: "sparkles")
+                    }
+                    .listRowBackground(Theme.surface)
+                }
+            } else if let code = viewModel.inviteCode {
                 Text(code.displayed)
                     .font(.system(size: 15, weight: .bold, design: .monospaced))
                     .foregroundStyle(Theme.accent)
@@ -252,9 +273,11 @@ private struct SettingsContent: View {
         } header: {
             Text("Invite code")
         } footer: {
-            Text(viewModel.isKeeper
-                 ? "Anyone with this code can join and see every photo. Make a new one to stop the old code working."
-                 : "Anyone with this code can join and see every photo.")
+            if viewModel.invitesClosedMessage == nil {
+                Text(viewModel.isKeeper
+                     ? "Anyone with this code can join and see every photo and video. Make a new one to stop the old code working."
+                     : "Anyone with this code can join and see every photo and video.")
+            }
         }
     }
 

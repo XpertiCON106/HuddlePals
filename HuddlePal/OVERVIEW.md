@@ -40,7 +40,7 @@ This document is the single place to understand everything: the product, the rul
 
 ## 1. What Huddle is
 
-A huddle is a private group of 2–8 people — and you can belong to **many huddles at once**: one with your family, one with your best friends. Each huddle tracks its own photos, members, and streak independently. Every member deposits exactly one photo per day per huddle. The hook is the **reciprocity gate**: you can see *that* your people posted today (frosted cards with their names), but not *what* — until you deposit your own. Past days are always open, like a shared album the group binds one page at a time.
+A huddle is a private group of up to 4 people, or up to 10 when its keeper has HuddlePals Plus — and you can belong to **many huddles at once** (up to 25): one with your family, one with your best friends. Each huddle tracks its own photos, members, and streak independently. Every member deposits exactly one photo per day per huddle (or, with Plus, a video of up to 6 seconds). The hook is the **reciprocity gate**: you can see *that* your people posted today (frosted cards with their names), but not *what* — until you deposit your own. Past days stay open, like a shared album the group binds one page at a time: the most recent 30 on the free plan, every one with Plus. (Until the free plan's limits are switched on, a huddle takes 8 people, or 10 if its keeper has Plus, and the whole archive is open.)
 
 The daily loop:
 
@@ -111,13 +111,14 @@ flowchart TD
 | **Onboarding** | Terms of Service first: the full text with Agree / Decline; Agree unlocks only after scrolling to the end. Decline returns to the first concept card, and nothing past the cards opens until Agree (re-asked whenever `TermsOfService.version` changes). Then three concept cards → sign-in method (Apple; email / phone when the feature flag is on) → verification code → profile (name + avatar ink). Returning accounts skip the profile step. |
 | **Huddles shelf** | Every huddle you belong to: emoji, name, member stack, streak, lock state, "N waiting for you". Tap to step inside; create/join from the toolbar. |
 | **Huddle Home (Today)** | One huddle's day. Serif huddle name, member stack, streak badge, and — when a streak just broke — the 24h recovery banner with a live countdown. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards + "waiting on…" row. |
-| **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. |
-| **Archive** | Full history: month headers → day rows → horizontal photo strips. Today appears only once unlocked. Pull-to-refresh. Backfill banner when eligible. |
+| **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; a photo, or with Plus a video of up to 6 seconds; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. On the free plan the picker shows "Video · Plus", which opens the paywall; it opens on Video again after a video, while you have Plus. |
+| **Archive** | Full history: month headers → day rows → horizontal photo strips. Today appears only once unlocked. Pull-to-refresh. Backfill banner when eligible. On the free plan (once its limits are on) days past the last 30 show who posted and how many, locked, without loading anything; tapping one opens the paywall. |
 | **Deposit Detail** | Framed photo, caption, author, date, 5-emoji reaction row (tap toggles yours), comment thread + input bar. |
-| **Create Huddle** | Name + emoji picker → the new invite code → ShareLink with a working `huddlepal://join/{code}` deep link and the code in the message (the app registers the scheme and prefills Join). Then the notification permission prompt, the first time. |
+| **Create Huddle** | Name + emoji picker → the new invite code → ShareLink with a working `huddlepal://join/{code}` deep link and the code in the message (the app registers the scheme and prefills Join). Then the notification permission prompt, the first time. Once you keep 3 huddles on the free plan (10 with Plus), it says so instead, with the way to Plus. |
 | **Join Huddle** | Code entry (paste, type, or arrive by link; dashes and case don't matter) with error states (not found / old code / already member / huddle full / can't join). |
-| **Huddle Settings** | Members with roles + skip tokens, streak detail, the huddle's preferred reminder hour (stored only — notification delivery is the per-user reminder in Profile), invite code with copy and share, **New invite code** for the keeper (confirmed), leave huddle (destructive, confirmed). |
-| **Your profile** | Up to 3 profile photos (the first is your profile picture/avatar), display name, 160-char bio, curated identity color (6 solids + 2 gradients), activity-notifications toggle, daily-reminder toggle + time, light/dark appearance picker, sign out, **delete account** (both confirmed) — and in mock mode only, the DEBUG section. Profile photos, avatar color, name, and bio stay in a local draft until the user confirms **Save Changes**. A dirty exit attempt is blocked before navigation; Keep Editing preserves the draft and Discard restores the saved state, with both actions remaining on Profile. |
+| **HuddlePals Plus** (sheet) | The paywall, from any place the free plan holds something back (a locked archive day, Video, a 4th huddle, a closed invite) or from Profile: what Plus adds, monthly and yearly plans with price, period and trial, the renewal terms, Terms of Use / Terms / Privacy links, and Restore Purchases. Closes itself once Plus is on. |
+| **Huddle Settings** | Members with roles + skip tokens, streak detail, the huddle's preferred reminder hour (stored only — notification delivery is the per-user reminder in Profile), invite code with copy and share (or, when the huddle is full or its invites are paused on the keeper's free plan, why — and Get HuddlePals Plus for the keeper), **New invite code** for the keeper (confirmed), leave huddle (destructive, confirmed). |
+| **Your profile** | Up to 3 profile photos (the first is your profile picture/avatar), display name, 160-char bio, curated identity color (6 solids + 2 gradients), activity-notifications toggle, daily-reminder toggle + time, light/dark appearance picker, the Plan (free or HuddlePals Plus, Manage subscription, Restore Purchases), sign out, **delete account** (both confirmed; with Plus it warns that Apple keeps billing until the subscription is cancelled) — and in mock mode only, the DEBUG section. Profile photos, avatar color, name, and bio stay in a local draft until the user confirms **Save Changes**. A dirty exit attempt is blocked before navigation; Keep Editing preserves the draft and Discard restores the saved state, with both actions remaining on Profile. |
 | **Report / block** | Any other person's photo has a "•••" menu (Deposit Detail) with **report** — including a Former member's photo — and **block** while the author still has an account; anyone else's comment can be reported by touching and holding it; any member's profile menu offers **report** and **block/unblock**. Every report ends with a "Thanks for reporting" confirmation. Blocking hides that person's photos/comments from you (presentational only — never changes the huddle or streak). UGC safeguards for App Review (guideline 1.2). |
 | **Member profile** | Opened by tapping any name or avatar anywhere: swipeable photo pager, bio, and the huddles + streaks you share with them. |
 
@@ -166,7 +167,8 @@ The decision happens once, at launch, in `HuddlePalApp.init`: if a `HuddlePal/Hu
 | Streak | `HuddleEngine.computeStreak` on-device | `recompute_streak` RPC — server is the single source of truth so all phones agree |
 | Skips | In-memory `SkipLedger`, seeded | `skips` table + `spend_skip_token` RPC |
 | Notifications | Per-user local reminders (`ReminderCoordinator`); push permission and registration run, but nothing sends | Same reminders, plus activity pushes: `device_tokens` + database triggers → `send-push` edge function → APNs |
-| Seeding / DEBUG | 30 days of history; debug tools visible | Disabled / hidden |
+| Plans (free / Plus) | In-memory `MockPlanLedger`; `MockPlusService` buys by flipping it, and the mock huddle service applies the same caps | `LivePlusService`: StoreKit 2 purchases checked by `verify-subscription`, status from `my_entitlement()`; `user_entitlements` + `huddle_join_rule` / `create_huddle` (migration 013), enforced by Postgres |
+| Seeding / DEBUG | 45 days of history and a video; debug tools visible | Disabled / hidden |
 
 ## 6. Data model
 
@@ -295,7 +297,7 @@ The reveal is the signature interaction: a lock springs open over a paper-toned 
 
 ## 9. Sync model
 
-Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤8 people:
+Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤10 people:
 
 - **When**: app launch, tab `.task`, app returning to foreground (`scenePhase`), pull-to-refresh, and after every mutation.
 - **What**: the Huddles shelf stays light because it refreshes on every appear and foreground. It reads the huddle rows plus a single `deposits?select=huddle_id,author_id&day_key=eq.<today>` across all huddles (`DepositServiceProtocol.depositorIDs`), and recomputes each huddle's streak at most once per day. A stored streak only goes stale when a day ends or a deposit lands, and deposits recompute on their own. Full history — deposits, reactions, comments, and any profiles not yet cached — syncs when a huddle's Home or Archive opens.
@@ -308,7 +310,7 @@ Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤8 people
 
 Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sql](supabase/schema.sql)) run once in the Supabase SQL editor. Three pillars:
 
-**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `preserved_photos`, `join_attempts`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
+**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `preserved_photos`, `join_attempts`, `user_entitlements`, `app_store_notifications`, `app_limits`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
 
 **Row Level Security** — privacy *is* the product, so the database enforces it even against a malicious client (the anon key ships in the binary by design; RLS is the boundary):
 
@@ -317,7 +319,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | profiles | yourself + anyone sharing a huddle with you | only your own row |
 | huddles | huddles you belong to | keeper updates settings; create/join via RPC only |
 | memberships | co-members | delete your own (leave); insert via RPC only |
-| deposits | your huddles' | only your own, only into your huddles, only within the 48h window |
+| deposits | your huddles' | only your own, only into your huddles, only within the 48h window; a video only with Plus |
 | reactions / comments | wherever you can see the deposit | your own |
 | reports / blocks | your own | your own |
 | user_keys | your own + co-members' public keys | only your own row |
@@ -326,7 +328,9 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | device_tokens | your own | your own |
 | terms_acceptances | your own | insert your own (the server stamps `recorded_at`); no updates or deletes |
 | preserved_photos | nobody (no policies, no privileges) | the operator only, through `remove_reported_photo` |
-| storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
+| user_entitlements | nobody; your own plan through `my_entitlement()` | the edge functions only, through `apply_entitlement`, once Apple's signature checks out |
+| app_store_notifications, app_limits | nobody (no policies, no privileges) | the edge functions / the operator |
+| storage objects | bucket `deposits`: huddle photos and video clips (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites; a `.mp4` clip only with Plus); `avatars/<your id>/…` only |
 
 Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, `can_see_deposit`) are `SECURITY DEFINER` — the standard way to avoid the memberships-policy-reads-memberships RLS recursion trap.
 
@@ -334,9 +338,12 @@ Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, 
 
 | Function | Purpose |
 |---|---|
-| `create_huddle(name, emoji, day_key)` | Huddle + keeper membership + unique invite code in one transaction |
+| `create_huddle(name, emoji, day_key)` | Huddle + keeper membership + unique invite code in one transaction; once the free limits are on, 3 huddles kept on the free plan, 10 with Plus |
 | `join_huddle(code, day_key)` | Old secret-less codes only (old app builds), until the huddle gets a new-format invite |
-| `redeem_huddle_invite(lookup, proof, day_key)` | Checks the code's proof (10 misses/hour), the 8-member cap and blocks, inserts membership, returns the huddle key sealed for the code |
+| `redeem_huddle_invite(lookup, proof, day_key)` | Checks the code's proof (10 misses/hour), `huddle_join_rule`, the 25-huddle limit and blocks, inserts membership, returns the huddle key sealed for the code |
+| `huddle_join_rule(huddle)` / `huddle_join_status(huddle)` | How many members a huddle takes, from its keeper's plan (10 with Plus, from the start; otherwise 8 before the free limits start, then 4, and only in the keeper's 3 longest-kept huddles), and why it refuses one more. The status is for members, so the app can explain a paused invite |
+| `my_entitlement()` | The caller's plan: Plus or not and until when, the server's clock, the free limits' start, huddles kept against the cap |
+| `apply_entitlement(…)` | Service role only: records what Apple signed about one subscription, keeping it with one account and ignoring anything signed earlier than what it has |
 | `huddle_invite(huddle)` | For members: the lookup, the secret sealed with the huddle key, and whether the huddle is still on an old code |
 | `create_huddle_invite` / `reset_huddle_invite` | Issue the first new-format invite (any member holding the key) / replace it (keeper); both retire the previous code |
 | `save_own_huddle_key(huddle, wrapped key…)` | A member who joined with an invite stores their own copy; never over a working one |
@@ -354,7 +361,7 @@ The operator — anyone with the Supabase dashboard — must not be able to view
 
 - **Identity key** — each user's Curve25519 key pair, made on first sign-in on a device. The private half stays in the iCloud Keychain (synchronizable, so it reaches the user's other devices and survives a reinstall; only account deletion removes it). The public half goes in `user_keys`.
 - **Huddle key** — a random 256-bit key made by the creator's device. Each member has a copy in `huddle_keys`, wrapped to their public key: an ephemeral X25519 agreement, then HKDF-SHA256 bound to the huddle and member ids, then AES-GCM.
-- **Photo key** — fresh per photo. The JPEG is AES-GCM sealed with it, and that box is the Storage object. The photo key is itself sealed with the huddle key into `deposits.wrapped_photo_key`. A report discloses only this key (`reports.photo_key`), so the operator can review one reported photo with [tools/decrypt_reported_photo](tools/decrypt_reported_photo/README.md) and nothing else.
+- **Photo key** — fresh per photo. The JPEG is AES-GCM sealed with it, and that box is the Storage object. The photo key is itself sealed with the huddle key into `deposits.wrapped_photo_key`. A report discloses only this key (`reports.photo_key`), so the operator can review one reported photo with [tools/decrypt_reported_photo](tools/decrypt_reported_photo/README.md) and nothing else. A video drop (Plus) is two boxes under one photo key: its poster JPEG and its MP4 clip. The clip is recorded straight into a compressed file, read into memory and deleted at once; it's played from memory too (an `AVAssetResourceLoader` delegate serves the decrypted bytes), so no plaintext video stays on disk.
 
 The invite code carries the huddle key, so a joiner needs nobody else online ([InviteCrypto](HuddlePal/Services/Live/InviteCrypto.swift), [LivePhotoKeyring](HuddlePal/Services/Live/LivePhotoKeyring.swift)). The code's secret never reaches the server; from it both apps derive, with HKDF-SHA256, a **proof** (the server keeps only its hash) and a **wrapping key** (with a random salt) that seals the huddle key:
 
@@ -394,11 +401,11 @@ No red badges, no infinite scroll, no engagement tricks.
 First launch (mock mode) builds a complete demo world ([Seeding/SeedDataService.swift](HuddlePal/Seeding/SeedDataService.swift)):
 
 - Two huddles: **"The Crew" 🏔** (code `CREW42` — You as keeper, Maya, Sam, Riley) and **"Sunday Dinners" 🍝** (code `PASTA7` — You + Maya), so the multi-huddle shelf is alive from the first second. Members have bios, profile photos, and vibrant identity colors.
-- 30 days of history with deliberate texture: misses at day −24 (Riley) and −7 (Maya) that reset the streak, a skip-token save at day −14 (Sam, who therefore has 1 token left), reactions and comments on yesterday. Net seeded streak: **6**.
-- ~100 placeholder photos generated on-device (gradient + SF Symbol via `UIGraphicsImageRenderer`) — no bundled assets, no network.
+- 45 days of history with deliberate texture: misses at day −24 (Riley) and −7 (Maya) that reset the streak, a skip-token save at day −14 (Sam, who therefore has 1 token left), reactions and comments on yesterday. Net seeded streak: **6**. Days −30 and older are past the free plan's 30-day archive window.
+- ~200 placeholder photos generated on-device (gradient + SF Symbol via `UIGraphicsImageRenderer`) — no bundled assets, no network — and one video: Maya's post yesterday, a 2-second clip of a placeholder photo zooming in (`PlaceholderVideoGenerator`, H.264 through `AVAssetWriter`), with that photo as its poster.
 - Today: Maya, Sam, and Riley have posted; **you haven't** — so the app opens straight into the LOCKED state and the core mechanic is visible within the first second.
 
-Profile → DEBUG (mock only): **simulate "I haven't posted today"** (forces the gate shut), **advance mock day by 1** (shifts the injected clock — the streak math runs for real), **regenerate seed data** (full teardown + rebuild behind the splash screen). Sign out and walk the whole auth flow with code `123456`; a fresh sign-up gets an empty account that can join `CREW42`.
+Profile → DEBUG (mock only): **simulate "I haven't posted today"** (forces the gate shut), **free plan limits** (on: the App Store build's caps; off: the old rules), **simulate HuddlePals Plus**, **Plus that ends in a minute**, **simulate a subscription linked elsewhere** (buying or restoring finds it on another account), **advance mock day by 1** (shifts the injected clock — the streak math runs for real), **regenerate seed data** (full teardown + rebuild behind the splash screen). Sign out and walk the whole auth flow with code `123456`; a fresh sign-up gets an empty account that can join `CREW42`.
 
 ## 13. Testing & verification
 
@@ -410,7 +417,10 @@ Run everything with ⌘U (or `xcodebuild test`, see DEVELOPMENT.md):
 - [`HuddlePalTests/AuthInputTests.swift`](HuddlePalTests/AuthInputTests.swift) — the Keychain session round-trips (including one saved by the earlier build), US/Canada phone numbers without +1, as-you-type phone formatting, and code lengths read from `Supabase.plist`.
 - [`HuddlePalTests/ProfileConfirmationTests.swift`](HuddlePalTests/ProfileConfirmationTests.swift) — the profile editor's confirmed-draft rules: nothing persists before **Save Changes**, failures keep the draft, dirty exits are blocked and never replayed.
 - [`HuddlePalTests/PhotoEncryptionTests.swift`](HuddlePalTests/PhotoEncryptionTests.swift) — the E2EE crypto: huddle-key wrap/unwrap (and refusal for another identity, huddle, or member), photo seal/open, wrong keys and tampered files failing cleanly, a report's key opening only its own photo, wire formats matching the DB checks, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
-- [`HuddlePalTests/TermsAgreementTests.swift`](HuddlePalTests/TermsAgreementTests.swift) — the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end (again after each Decline), Decline returns to the first welcome card, "Get started" re-asks until Agree, an interrupted sign-up resumes at the profile, agreement survives a relaunch and is re-asked for a new version, and the bundled text has all 15 sections, no placeholders, and a "Last updated" date matching `TermsOfService.version`.
+- [`HuddlePalTests/TermsAgreementTests.swift`](HuddlePalTests/TermsAgreementTests.swift) — the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end (again after each Decline), Decline returns to the first welcome card, "Get started" re-asks until Agree, an interrupted sign-up resumes at the profile, agreement survives a relaunch and is re-asked for a new version, and the bundled text has all 17 sections, no placeholders, and a "Last updated" date matching `TermsOfService.version`.
+- HuddlePals Plus and the free plan: [`PlanRulesTests`](HuddlePalTests/PlanRulesTests.swift) (the archive window's edges and the clock set back, the join and create rule tables, Plus at 10 before the limits start, error codes and what builds from before Plus show), [`PlanLimitTests`](HuddlePalTests/PlanLimitTests.swift) (the mock server's caps, keeper succession, the 25-huddle limit), [`PlusServiceTests`](HuddlePalTests/PlusServiceTests.swift) (StoreKit 2 through `SKTestSession` against a stubbed server: products, purchase naming the account, a purchase the server didn't confirm, Ask to Buy, restore, a renewal or refund while the app runs, a failed purchase, the server's clock and the offline cache), and [`PlusGateTests`](HuddlePalTests/PlusGateTests.swift) (the paywall's wording, each gate's view model, the deletion warning).
+- Video drops: [`VideoDropTests`](HuddlePalTests/VideoDropTests.swift) (one key for poster and clip, the recording's short life on disk, the writer's settings and 6-second cut, playback from memory and the loader's byte ranges, Compose with and without Plus), the live upload and a video report in [`InviteKeyTests`](HuddlePalTests/InviteKeyTests.swift), and [`StoreMigrationTests`](HuddlePalTests/StoreMigrationTests.swift) (a store from before videos opens with every row as a photo).
+- UI tests (`HuddlePalUITests`), on the mock world: the journeys, unhappy paths and accessibility audits, and for Plus [`PlusJourneyTests`](HuddlePalUITests/PlusJourneyTests.swift) (the paywall's contents and buying, a locked day that buying opens, Video · Plus, the 4th huddle, a full and a paused invite, the deletion warning) and [`VideoJourneyTests`](HuddlePalUITests/VideoJourneyTests.swift) (recording, posting and the looping feed).
 - What tests can't cover: the live wire formats against the real Supabase project — exercise those by hand (DEPLOYMENT.md lists the spots).
 
 ## 14. File map
@@ -452,16 +462,21 @@ HuddlePal/
 │   │                          DailyReminders, ImageDownscaler, TermsOfService
 │   ├── Legal/TermsOfService.md  The Terms of Service shown in-app (host the same text publicly)
 │   └── Assets.xcassets        App icon + ink accent color
-└── HuddlePalTests/                HuddleEngineTests, CriticalFlowTests, LiveSyncTests,
-                               AuthInputTests, ProfileConfirmationTests,
-                               PhotoEncryptionTests, TermsAgreementTests
+├── HuddlePalTests/                HuddleEngineTests, CriticalFlowTests, LiveSyncTests,
+│                              AuthInputTests, ProfileConfirmationTests,
+│                              PhotoEncryptionTests, TermsAgreementTests, PlanRulesTests,
+│                              PlanLimitTests, PlusServiceTests, PlusGateTests,
+│                              VideoDropTests, StoreMigrationTests, … (StoreKit/
+│                              HuddlePalsPlus.storekit for SKTestSession)
+└── HuddlePalUITests/              Journeys, unhappy paths, accessibility audits,
+                               PlusJourneyTests, VideoJourneyTests
 ```
 
 ## 15. Project configuration
 
 - **Modes**: no `Supabase.plist` → mock; filled-in plist → live. The plist is gitignored; the anon key it holds is publishable (RLS is the security boundary). A Release-only build phase fails any Release build or Archive that lacks a real plist, so the mock world can't ship.
 - **Entitlements**: `HuddlePal.entitlements` carries Sign in with Apple and Push Notifications (`aps-environment`); wired via `CODE_SIGN_ENTITLEMENTS`. Registering the capabilities needs the paid Apple Developer Program.
-- **App Store readiness**: 1024px opaque icon, privacy manifest (no tracking; photos/name/user-id collected for app functionality only), `ITSAppUsesNonExemptEncryption = NO` (the photo encryption uses only Apple's CryptoKit; see DEPLOYMENT.md "Export compliance").
+- **App Store readiness**: 1024px opaque icon, privacy manifest (no tracking; photos and videos, audio, name, user id, email, phone, other user content and purchase history, collected for app functionality only), `ITSAppUsesNonExemptEncryption = NO` (the photo encryption uses only Apple's CryptoKit; see DEPLOYMENT.md "Export compliance").
 - **Build**: `GENERATE_INFOPLIST_FILE = YES`, merged with the small partial `Config/Info.plist` (kept outside the synchronized folders), iOS 17.0 target, Swift 5 language mode, Universal device family (iPhone + iPad; iPhone-only is an open decision), synchronized folder groups (drop a file in, it's in the build).
 
 ## 16. Known limitations & roadmap

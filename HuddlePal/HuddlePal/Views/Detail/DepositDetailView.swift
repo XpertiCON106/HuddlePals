@@ -10,7 +10,11 @@ struct DepositDetailView: View {
     var body: some View {
         Group {
             if let viewModel {
-                DetailContent(viewModel: viewModel)
+                if viewModel.isLocked {
+                    LockedDetail(deposit: deposit)
+                } else {
+                    DetailContent(viewModel: viewModel)
+                }
             } else {
                 Color.clear
             }
@@ -20,6 +24,37 @@ struct DepositDetailView: View {
             if viewModel == nil {
                 viewModel = DepositDetailViewModel(deps: deps, deposit: deposit)
             }
+        }
+    }
+}
+
+/// A deposit from a day past the free plan's 30 days: who posted it and
+/// when, under a lock, and the way to Plus. Nothing of it is loaded.
+private struct LockedDetail: View {
+    let deposit: Deposit
+    @State private var showPaywall = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                LockedArchiveTile(author: deposit.author)
+                    .aspectRatio(3 / 4, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                Text("\(deposit.author?.displayName ?? "Former member") · \(deposit.createdAt.formatted(.dateTime.month().day().year()))")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                Text("This day is past the free plan's 30 days. It's still here, kept safe for good.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.textPrimary)
+                    .multilineTextAlignment(.center)
+                PrimaryButton(title: "Unlock your full archive", systemImage: "lock.open.fill") {
+                    showPaywall = true
+                }
+            }
+            .padding(Theme.screenPadding)
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(context: .archive)
         }
     }
 }
@@ -36,14 +71,20 @@ private struct DetailContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                LocalDepositImage(deposit: deposit)
-                    .aspectRatio(3 / 4, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
-                            .strokeBorder(Theme.hairline, lineWidth: 1)
-                    )
-                    .shadow(color: Theme.shadow, radius: 14, x: 0, y: 5)
+                Group {
+                    if deposit.isVideo {
+                        DepositVideoPlayer(deposit: deposit, startsMuted: false)
+                    } else {
+                        LocalDepositImage(deposit: deposit)
+                    }
+                }
+                .aspectRatio(3 / 4, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
+                .shadow(color: Theme.shadow, radius: 14, x: 0, y: 5)
 
                 if let caption = deposit.caption {
                     Text(caption)
@@ -123,7 +164,7 @@ private struct DetailContent: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You won't see their photos or comments anymore. They won't be told.")
+            Text("You won't see their photos, videos or comments anymore. They won't be told.")
         }
         .alert(ReportFeedback.title, isPresented: $viewModel.isReportConfirmationPresented) {
             Button("OK", role: .cancel) {}

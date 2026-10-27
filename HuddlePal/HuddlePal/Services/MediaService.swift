@@ -16,8 +16,14 @@ protocol MediaServiceProtocol: AnyObject {
     /// key before upload (`PhotoCrypto`); the returned wrapped key goes on
     /// the deposit row. Mock: stored as-is (nothing leaves the device).
     func saveDepositPhoto(_ data: Data, preferredName: String, huddleID: UUID) async throws -> StoredDepositPhoto
-    /// A huddle photo's image bytes, decrypted when stored encrypted. nil when
-    /// this device can't show it (yet): no huddle key, or unreadable data.
+    /// Stores a video drop: its poster at "<baseName>.jpg" and its clip at
+    /// "<baseName>.mp4" (baseName is "<huddle_id>/<uuid>"). Live: both sealed
+    /// with one fresh photo key, the poster uploaded first; a clip Storage
+    /// refuses because Plus has ended throws `DepositError.videoNeedsPlus`.
+    func saveDepositVideo(poster: Data, clip: Data, baseName: String, huddleID: UUID) async throws -> StoredDepositVideo
+    /// A huddle photo's bytes, or a video's poster or clip, decrypted when
+    /// stored encrypted (in memory: never written back to disk). nil when
+    /// this device can't open it (yet): no huddle key, or unreadable data.
     func loadDepositPhoto(at relativePath: String, huddleID: UUID, wrappedPhotoKey: String?) async -> Data?
 }
 
@@ -25,6 +31,14 @@ protocol MediaServiceProtocol: AnyObject {
 /// encrypted, the photo key sealed with the huddle key.
 struct StoredDepositPhoto {
     let path: String
+    let wrappedPhotoKey: String?
+}
+
+/// A saved video drop: its poster's and clip's Documents-relative paths and,
+/// when encrypted, the one photo key for both, sealed with the huddle key.
+struct StoredDepositVideo {
+    let posterPath: String
+    let videoPath: String
     let wrappedPhotoKey: String?
 }
 
@@ -90,6 +104,15 @@ final class MockMediaService: MediaServiceProtocol {
     // on this device, so there are no keys to make or share.
     func saveDepositPhoto(_ data: Data, preferredName: String, huddleID: UUID) async throws -> StoredDepositPhoto {
         StoredDepositPhoto(path: try await saveImageData(data, preferredName: preferredName), wrappedPhotoKey: nil)
+    }
+
+    func saveDepositVideo(poster: Data, clip: Data, baseName: String, huddleID: UUID) async throws -> StoredDepositVideo {
+        guard clip.count <= HuddleLimits.maxVideoBytes else { throw DepositError.videoTooLarge }
+        return StoredDepositVideo(
+            posterPath: try await saveImageData(poster, preferredName: "\(baseName).jpg"),
+            videoPath: try await saveImageData(clip, preferredName: "\(baseName).mp4"),
+            wrappedPhotoKey: nil
+        )
     }
 
     func loadDepositPhoto(at relativePath: String, huddleID: UUID, wrappedPhotoKey: String?) async -> Data? {

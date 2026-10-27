@@ -122,6 +122,53 @@ export async function deposit(db, uid, huddleId, dayKey, { caption = null } = {}
   return rows[0]
 }
 
+/** A video deposit as the app posts one: its poster at storage_path, the clip next to it. */
+export async function videoDeposit(db, uid, huddleId, dayKey, { durationMs = 6000 } = {}) {
+  const name = `${huddleId}/${randomUUID()}`
+  const rows = await q(
+    db,
+    uid,
+    `insert into deposits (huddle_id, author_id, storage_path, video_path, media_type, duration_ms, wrapped_photo_key, day_key)
+     values ($1, $2, $3, $4, 'video', $5, $6, $7) returning *`,
+    [huddleId, uid, `${name}.jpg`, `${name}.mp4`, durationMs, WRAPPED_KEY, dayKey],
+  )
+  return rows[0]
+}
+
+/** Turns the free plan's limits on, as the operator does once Plus is in the App Store. */
+export async function startFreeLimits(db) {
+  await admin(db, `update app_limits set free_limits_start = now() - interval '1 minute'`)
+}
+
+/**
+ * Gives `uid` HuddlePals Plus, as verify-subscription records it: until
+ * `expiresIn` from now (an interval; negative for one that has run out),
+ * with an optional billing grace period after that, or refunded.
+ * Returns the subscription's original transaction id.
+ */
+export async function grantPlus(db, uid, { expiresIn = '30 days', graceIn = null, revoked = false } = {}) {
+  const otid = String(2_000_000_000_000_000 + Math.floor(Math.random() * 1e12))
+  await admin(
+    db,
+    `insert into user_entitlements (original_transaction_id, user_id, product_id, transaction_id, environment,
+                                    purchased_at, expires_at, grace_period_expires_at, revoked_at, transaction_signed_at)
+     values ($1, $2, 'com.huddlepals.ios.plus.monthly', $1, 'Production', now(), now() + $3::interval,
+             now() + $4::interval, case when $5 then now() end, now())`,
+    [otid, uid, expiresIn, graceIn, revoked],
+  )
+  return otid
+}
+
+/** Plus ran out a minute ago (no renewal, no grace). */
+export async function endPlus(db, otid) {
+  await admin(
+    db,
+    `update user_entitlements set expires_at = now() - interval '1 minute', grace_period_expires_at = null
+     where original_transaction_id = $1`,
+    [otid],
+  )
+}
+
 /** Puts an object row in storage, as the Storage API does after an upload. */
 export async function storeObject(db, name) {
   await admin(db, `insert into storage.objects (bucket_id, name) values ('deposits', $1)`, [name])

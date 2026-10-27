@@ -109,6 +109,27 @@ describe('migrations', () => {
     assert.deepEqual(await admin(db, 'select reporter_id, deposit_id from reports'), [{ reporter_id: null, deposit_id: dep.id }])
   })
 
+  it('keepers from before 013 are keepers since they joined; members and the limits are untouched', async () => {
+    const { PGlite } = await import('@electric-sql/pglite')
+    const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto')
+    const { STUB_SQL, DEPLOYED_SQL, signUp, createHuddle, joinHuddle, deposit, serverToday } = await import('./harness.mjs')
+    const db = new PGlite({ extensions: { pgcrypto } })
+    await db.exec(STUB_SQL)
+    await db.exec(DEPLOYED_SQL)
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const h = await createHuddle(db, A)
+    await joinHuddle(db, B, h.invite_code)
+    const dep = await deposit(db, B, h.id, await serverToday(db))
+    for (const { sql } of migrations()) await db.exec(sql)
+    assert.deepEqual(
+      await admin(db, 'select user_id, keeper_since = joined_at as since_joined, keeper_since is null as none from memberships order by role'),
+      [{ user_id: A, since_joined: true, none: false }, { user_id: B, since_joined: null, none: true }],
+    )
+    assert.deepEqual(await admin(db, 'select media_type, video_path from deposits where id = $1', [dep.id]), [{ media_type: 'photo', video_path: null }])
+    assert.deepEqual(await admin(db, 'select free_limits_start from app_limits'), [{ free_limits_start: null }], 'the old rules until the operator says')
+  })
+
   it('every migration can be applied twice', async () => {
     const db = await freshDatabase({ mode: 'migrated' })
     for (const { name, sql } of migrations()) {

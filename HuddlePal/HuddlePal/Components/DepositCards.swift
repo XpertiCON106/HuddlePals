@@ -129,8 +129,15 @@ struct DepositCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LocalDepositImage(deposit: deposit)
-                .aspectRatio(3 / 4, contentMode: .fit)
+            Group {
+                if deposit.isVideo {
+                    // Loops muted; a tap on it unmutes, the rest of the card opens it.
+                    DepositVideoPlayer(deposit: deposit, startsMuted: true)
+                } else {
+                    LocalDepositImage(deposit: deposit)
+                }
+            }
+            .aspectRatio(3 / 4, contentMode: .fit)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
@@ -179,6 +186,37 @@ struct DepositCard: View {
             .padding(14)
         }
         .cardSurface()
+    }
+}
+
+// MARK: - Archive tile past the free window
+
+/// A deposit from a day past the free plan's 30 days: its author's color
+/// under frosted glass, and a lock. Drawn from the author alone: the photo
+/// (or video) is never loaded, downloaded or decrypted, so there's nothing
+/// for a blur to reveal.
+struct LockedArchiveTile: View {
+    let author: User?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AvatarStyle.base(for: author?.avatarColorHex ?? "555555").opacity(0.45),
+                            Theme.surfaceElevated,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            Image(systemName: "lock.fill")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Theme.accent.opacity(0.6))
+        }
+        .accessibilityHidden(true)
     }
 }
 

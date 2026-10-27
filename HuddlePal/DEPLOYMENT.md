@@ -97,6 +97,10 @@ seeded **mock** world. No code changes to switch.
      file it returns under Storage → `deposits`.
    - Yearly: `select * from expired_preserved_photos();` lists what's past
      its keep-until date. Delete each file in Storage, then its row.
+   - Videos work the same way, with two files under the one key: the poster
+     at `storage_path` (`<file>.jpg`, what these return) and the clip at
+     `video_path` (the same name ending in `.mp4`). Review the clip, and when
+     deleting, delete both.
 
 ## Phase 2 — Point the app at it (~5 minutes)
 
@@ -133,10 +137,10 @@ seeded **mock** world. No code changes to switch.
    below.) Users must agree to the Terms of Service in-app before they
    can sign in (`HuddlePal/Legal/TermsOfService.md`). Publish that same
    text at https://huddlepals.com/terms and PRIVACY.md at
-   https://huddlepals.com/privacy, the URLs the Terms cite. Then paste
-   the Terms into the app record's **License Agreement** field (App
-   Information), replacing Apple's standard EULA; they already include
-   Apple's required minimum terms (Section 14).
+   https://huddlepals.com/privacy, the URLs the Terms cite. Keep Apple's
+   **standard EULA** as the app's License Agreement (don't upload a custom
+   one): the Terms apply alongside it and already include Apple's required
+   minimum terms (Section 15).
 4. Xcode: select **Any iOS Device (arm64)** → *Product → Archive* →
    *Distribute App → App Store Connect → Upload*.
 5. App Store Connect → your app → **TestFlight** tab:
@@ -163,7 +167,7 @@ seeded **mock** world. No code changes to switch.
      something like this:
 
      > HuddlePals is a private, invite-only photo app for small groups (up
-     > to 8 people who know each other). Sign in with Apple is the only
+     > to 4 people who know each other, or 10 with HuddlePals Plus). Sign in with Apple is the only
      > sign-in. To try it: agree to the Terms, sign in, create a huddle and
      > take today's photo. Other members' photos for today unlock once you
      > post yours. To see a group with other members, join with invite
@@ -171,8 +175,10 @@ seeded **mock** world. No code changes to switch.
      > the Terms (zero tolerance for objectionable content) before signing
      > in; any photo (••• menu), comment (touch and hold) or profile (•••
      > menu) can be reported; members can be blocked; we review reports
-     > within 24 hours. Photos are end-to-end encrypted; a report sends us
-     > that one photo's key so we can review it. Account deletion: Profile
+     > within 24 hours. Photos and videos are end-to-end encrypted; a
+     > report sends us that one post's key so we can review it. HuddlePals
+     > Plus (auto-renewable, monthly or yearly) is in Profile → Plan and
+     > behind Video when posting; Restore Purchases is in both places. Account deletion: Profile
      > → Delete account (Apple confirms, then the account is deleted and
      > its Sign in with Apple token revoked).
 
@@ -201,6 +207,186 @@ seeded **mock** world. No code changes to switch.
    photos and comments are still there as "Former member" (still
    decryptable — A holds the huddle key), and the photo's "•••" menu still
    offers Report.
+
+## Phase 5 — HuddlePals Plus and video drops
+
+The Plus build needs migration 013, two new edge functions, the
+subscriptions in App Store Connect, and the website's first batch of
+changes before App Review. Nothing changes for anyone who doesn't buy
+Plus: the free plan's limits wait for `app_limits.free_limits_start`, which
+you set about two weeks after release.
+
+**Order:** App Store Connect → migration 013 → secrets and functions →
+TestFlight build → checks on a device → website batch A → App Review →
+release → about 14 days later, the free plan's limits and website batch B.
+
+### 5.1 App Store Connect (needed before anything can be bought, even in TestFlight)
+
+1. **Agreements first.** Business → Agreements: accept the **Paid Apps**
+   agreement and complete the tax forms and banking. Until it's active,
+   StoreKit returns no products and the paywall says "HuddlePals Plus isn't
+   available right now".
+2. **Subscription group.** Your app → Monetization → Subscriptions → **+**
+   a group named **HuddlePals Plus**, with a display-name localization
+   (e.g. "HuddlePals Plus").
+3. **Two subscriptions** in it, both at **the same level** (a switch
+   between them then takes effect at the next renewal):
+
+   | Reference name | Product ID | Duration |
+   |---|---|---|
+   | HuddlePals Plus Monthly | `com.huddlepals.ios.plus.monthly` | 1 month |
+   | HuddlePals Plus Yearly | `com.huddlepals.ios.plus.annual` | 1 year |
+
+   The IDs must match exactly: the app (`PlusCatalog`) and the
+   `APPSTORE_PRODUCT_IDS` secret use them. For each, set your price (the
+   paywall shows whatever App Store Connect returns, in local currency; the
+   test store's $2.99 and $24.99 are only for the tests), a localization
+   (display name and a short description, e.g. "Videos, bigger huddles,
+   your whole archive"), and a **review screenshot** of the paywall
+   (Profile → Get HuddlePals Plus, on a TestFlight build).
+4. **Free trial.** Each subscription → Subscription Prices → Introductory
+   Offers → **Free, 1 week**, all territories. Eligible people then see
+   "Try it free for 1 week".
+5. **Billing Grace Period: on** (Subscriptions → Billing Grace Period; 16
+   days is a reasonable length). Plus continues while Apple retries a
+   failed renewal; the server already honours it.
+6. **Family Sharing: leave it off.** It's off by default and can't be
+   turned off once on; Terms §3.9(g) says Plus isn't shared.
+7. **App Store Server Notifications.** App Information → App Store Server
+   Notifications: set both the **Production** and the **Sandbox** Server URL
+   to `https://<project-ref>.supabase.co/functions/v1/app-store-notifications`,
+   **Version 2**.
+8. **Sandbox testers** (Users and Access → Sandbox → Test Accounts) only for
+   testing outside TestFlight. TestFlight builds buy in the sandbox with each
+   tester's own Apple Account, free, and renew on a fast clock.
+9. **App Privacy** (App Privacy → Edit): add **Purchases → Purchase
+   History** and **User Content → Audio Data**, both linked to the user, for
+   App Functionality, not used for tracking. "Photos or Videos" is already
+   declared. This matches `PrivacyInfo.xcprivacy`.
+10. **Terms of Use.** Keep Apple's standard EULA (Phase 3 step 3).
+    Guideline 3.1.2 also wants the Terms of Use linked in the metadata, so
+    end the App Store description with:
+
+    > Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+    > Privacy Policy: https://huddlepals.com/privacy
+
+    The paywall links the same Terms of Use, plus huddlepals.com/terms and
+    /privacy.
+
+### 5.2 Supabase (additive: nothing existing changes)
+
+1. **Storage limits.** Storage → `deposits` → settings: a file size limit
+   of at least **5 MB**, and allowed MIME types including
+   `application/octet-stream`, as Phase 1 step 3 set them. A clip is at most
+   4 MB before encryption, and posters and clips upload as encrypted
+   `application/octet-stream`.
+2. **Migration 013.** SQL Editor → paste
+   [`supabase/migrations/013_plus_and_video.sql`](supabase/migrations/013_plus_and_video.sql)
+   → Run (safe to re-run). Then check that the switch is off:
+
+   ```sql
+   select free_limits_start from public.app_limits;
+   ```
+
+   It should be `null`. Builds already on phones keep working: until the
+   switch is set, a huddle without Plus takes 8 members and nothing is
+   capped.
+3. **Secrets** (DEVELOPMENT.md → "Backend setup and deploys"):
+
+   ```bash
+   supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.annual
+   ```
+
+4. **Functions**, from `HuddlePal/`, after 013 (`send-push` now asks the
+   database whether a post is a video, so it needs redeploying too):
+
+   ```bash
+   supabase functions deploy verify-subscription --project-ref <project-ref>
+   ```
+
+   ```bash
+   supabase functions deploy app-store-notifications --no-verify-jwt --project-ref <project-ref>
+   ```
+
+   ```bash
+   supabase functions deploy send-push --no-verify-jwt --project-ref <project-ref>
+   ```
+
+### 5.3 TestFlight and checks on a device
+
+1. Bump the version or build number, archive the Plus build and upload it
+   as in Phase 3. Everyone who updates sees the revised Terms (version
+   2026-10-27) and agrees once more.
+2. On a phone with the TestFlight build:
+   - **Buy.** Profile → Get HuddlePals Plus → Try it free for 1 week →
+     Apple's sheet. The paywall says "You have HuddlePals Plus" and closes;
+     Profile shows "Current period ends …". In SQL,
+     `select product_id, environment, expires_at from user_entitlements;`
+     shows one `Sandbox` row.
+   - **Apple's notifications arrive.**
+     `select notification_type, subtype, received_at from app_store_notifications order by received_at desc limit 5;`
+     shows `SUBSCRIBED`. If nothing arrives, check the URLs in 5.1 step 7
+     and Edge Functions → `app-store-notifications` → Logs.
+   - **Renewal.** After a sandbox renewal, `expires_at` has moved on and a
+     `DID_RENEW` row has arrived.
+   - **Cancel.** Profile → Manage subscription → cancel. Plus lasts until
+     the period ends; then Profile says Free plan, Compose shows
+     "Video · Plus", and videos already posted still play.
+   - **Restore elsewhere.** Signed in to another HuddlePals account on the
+     same phone, Restore Purchases says it's "already linked to another
+     HuddlePals account".
+   - **Video.** Record one (the microphone prompt comes with the first;
+     Don't Allow gives a silent clip) and post it. On the second phone it
+     loops muted in the feed and plays with sound in detail, and its push
+     says "posted a video".
+   - **Report a video** from the second phone, then decrypt its clip with
+     [`tools/decrypt_reported_photo`](tools/decrypt_reported_photo/README.md)
+     (it writes `.mp4`).
+   - **Delete a test account that has Plus.** The confirmation warns that
+     Apple keeps billing; afterwards its `user_entitlements` row is gone and
+     the subscription still shows in Settings until it's cancelled.
+
+### 5.4 App Review and release
+
+1. Publish **website batch A** (Support's Plus questions, the revised Terms
+   and Privacy Policy) and have the live pages checked against the repo.
+2. On the version page, add **both subscriptions** under In-App Purchases
+   and Subscriptions (the first ones must go to review with an app
+   version), use the App Review notes from Phase 3 step 7 (they cover
+   Plus), and submit.
+3. Release. Leave `free_limits_start` null: for now Plus adds videos and
+   10-member huddles, and nobody loses anything.
+
+### 5.5 About two weeks later: the free plan's limits
+
+1. The same day, publish **website batch B** (the member counts).
+2. In the SQL editor, with the moment in UTC:
+
+   ```sql
+   update public.app_limits set free_limits_start = '<YYYY-MM-DD> 00:00:00+00';
+   ```
+
+   From then on, without Plus: 3 huddles kept, 4 members a huddle (and
+   only in the keeper's 3 longest-kept huddles), 25 huddles joined, and an
+   archive of the last 30 days. Nobody is removed and nothing is deleted.
+   Builds from before Plus explain any refusal as "You can't join this
+   huddle."
+3. Watch support mail and reports for a few days.
+
+### Undoing it
+
+- **The free plan's limits:** `update public.app_limits set free_limits_start = null;`
+  puts everyone back on the old rules at once.
+- **Selling Plus:** App Store Connect → each subscription → Remove from
+  Sale. Subscribers keep Plus until their period ends.
+- **Migration 013** has no down migration. It only adds, and changes
+  nothing for anyone without Plus until the switch is set.
+
+### Still open
+
+- A lawyer's review of the subscription terms against state automatic-
+  renewal laws (California's, as amended in 2025, and others), and of
+  §3.9(h)'s notice before Plus loses features.
 
 ---
 
@@ -275,7 +461,8 @@ a device before TestFlight:
 
 - the OTP `/verify` response shape and the Apple `id_token` grant;
 - PostgREST error-message pass-through in `SupabaseClient.check` (e.g.
-  joining a full huddle should say "8 members", not a generic error);
+  joining a full huddle should say why: "8 members" before the free limits
+  start, then the free plan's 4 or Plus's 10, not a generic error);
 - **posting a photo** — uploads are insert-only (no `x-upsert`), so the
   storage INSERT policy alone must allow it;
 - the huddle list's single `deposits?select=huddle_id,author_id&day_key=eq.…`

@@ -8,9 +8,11 @@ in sync when behaviour changes.
 
 ## At a glance
 
-- **The app**: private daily photo sharing for groups of 2–8 ("huddles").
-  One photo per member per day; others' photos stay blurred until you post
-  yours (the gate); the streak belongs to the group; photos are permanent.
+- **The app**: private daily photo sharing for small groups ("huddles"):
+  up to 4 people on the free plan, 10 when the keeper has HuddlePals Plus.
+  One photo per member per day (or, with Plus, a video of up to 6 seconds);
+  others' stay blurred until you post yours (the gate); the streak belongs
+  to the group; deposits are permanent.
 - **Build**: version 1.0, bundle id `com.huddlepals.ios`, iOS 17.0+,
   Swift 5 language mode, SwiftUI + SwiftData, **no third-party
   dependencies**. Built with Xcode 26.1.1.
@@ -104,8 +106,23 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   edited or deleted (`DepositError.alreadyDepositedToday`; the database has
   no update or delete policy on deposits). Compose asks "This is permanent —
   post it?".
-- **Camera only** for daily photos (`CameraPicker`); profile photos use
-  `PhotosPicker`. The Simulator has no camera, so Compose says so.
+- **Camera only** for daily photos (`CameraPicker`) and videos
+  (`VideoCaptureView`); profile photos use `PhotosPicker`. The Simulator has
+  no camera, so Compose says so (`-ui-testing-fake-camera` stands in for
+  both: a test photo, or a generated 2-second clip).
+- **Video drops** (Plus): one a day instead of a photo, never both. The
+  recorder (`VideoRecorder`) feeds AVAssetWriter straight from the camera:
+  720p H.264 at ~2 Mbps, AAC mono (silent if the microphone is off), no
+  metadata, cut at exactly 6.0 s by the frames' timestamps. It records into
+  `CaptureFiles` (tmp, complete file protection, swept at launch), the only
+  plaintext video that ever touches disk; `ClipPreparer` reads it into memory,
+  makes the poster from the first frame, and deletes the file. The poster,
+  then the clip, then the row go up; if Plus has ended meanwhile Storage or
+  RLS refuses it (`DepositError.videoNeedsPlus`), nothing is posted, and
+  Compose keeps the clip and offers a photo instead. Playback is from memory
+  (`InMemoryClipLoader`, an AVAssetResourceLoader delegate): the cache only
+  ever holds ciphertext. Muted and looping in the feed (tap to unmute, ambient
+  audio so music keeps playing), with sound in detail.
 - **Streak**: a day counts when every member it waits on posted or spent a
   skip token (2 each). A day waits only on members who joined before it, so
   joining never breaks a streak, and a new huddle's first countable day is
@@ -116,8 +133,11 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   after its start). A broken streak shows a countdown until then; if the
   missing members backfill in time, the recompute restores it.
 - **Limits**: captions ≤ 80, comments ≤ 500, names ≤ 40 (huddles 60), bios
-  ≤ 160, 3 profile photos, 8 members (enforced by the server). Lengths
-  count code points, as Postgres does (`TextLimits.swift`).
+  ≤ 160, 3 profile photos. Members per huddle 4 on the free plan and 10 with
+  Plus, huddles kept 3 and 10, huddles joined 25; before the free limits
+  start, 8 members (10 with Plus) and nothing else (`HuddleLimits.swift`;
+  all enforced by the server). Lengths count code points, as Postgres does
+  (`TextLimits.swift`).
 - **Downscaling** before upload: photos ≤ 1440 px, avatars ≤ 512 px, JPEG
   0.8. Storage only grows, so keep it.
 - **Former member**: deleting an account keeps its photos and comments
@@ -144,7 +164,10 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
 - **Photo key**: one per photo. The JPEG is AES-GCM sealed with it (that box
   is the Storage object, `application/octet-stream`); the photo key, sealed
   with the huddle key, is `deposits.wrapped_photo_key`. A report discloses
-  only that photo's key (`tools/decrypt_reported_photo`).
+  only that photo's key (`tools/decrypt_reported_photo`). A video has one
+  photo key for two objects (`PhotoCrypto.sealVideo`): its poster JPEG at
+  `storage_path` and its MP4 at `video_path`, each with its own nonce, so the
+  one disclosed key opens both.
 - **Invite codes** (`Support/InviteCode.swift`): 32 characters of
   `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, shown as eight groups of four. The
   first 6 are a lookup, the only part the server stores
@@ -256,7 +279,45 @@ codes, tokens and keys are never logged.
   those functions touch them.
 - **Edge functions**: `delete-account` and `send-push`. Each splits into
   `index.ts` (wiring), `handler.ts` (logic) and a client file (`apple.ts`,
-  `apns.ts`), so Node can test the logic.
+  `apns.ts`), so Node can test the logic. `verify-subscription` and
+  `app-store-notifications` (HuddlePals Plus) split the same way and share
+  `_shared/apple-jws.ts` (Apple's certificate chain, checked with WebCrypto
+  against the pinned Apple Root CA - G3) and `_shared/subscriptions.ts`.
+- **Plus and the free plan** (migration 013): Postgres enforces them, by
+  the server's clock. `user_entitlements` is written only by
+  `apply_entitlement` (service role, after Apple's signature checks out) and
+  one Apple subscription entitles one account. `huddle_join_rule` decides
+  joins from the keeper's plan; `create_huddle` caps huddles kept; posting a
+  video (and uploading a `.mp4`) takes Plus. None of the free limits apply
+  until `app_limits.free_limits_start` is set; Plus (10 members, videos)
+  works from the start.
+- **Plus in the app** (`PlusServiceProtocol`, `deps.plus`): the server's
+  word, from `my_entitlement()`, judged by the server's clock
+  (`PlanStatus.clockOffset`), cached per account for offline launches.
+  `LivePlusService` buys with StoreKit 2 (`appAccountToken` = the user's id),
+  sends every transaction to `verify-subscription` and finishes it only once
+  the server has it, listens to `Transaction.updates` from launch, and on
+  launch, sign-in and foreground sends any subscription of this account the
+  server hasn't recorded. A subscription naming another account, or none, is
+  sent only on Restore Purchases. `MockPlusService` buys by flipping
+  `MockPlanLedger`. `HuddlePalTests/StoreKit/HuddlePalsPlus.storekit` is a
+  local App Store for the tests (`SKTestSession`); selected as a scheme's
+  StoreKit configuration it sells locally signed transactions, which the
+  real server refuses, so it's no use against Supabase.
+- **Where the free plan shows** (only once the free limits are on, and
+  never with Plus): every gate opens `PaywallView` for its `PaywallContext`
+  (price, period, trial, renewal terms, Terms of Use / Terms / Privacy links,
+  Restore Purchases, as guideline 3.1.2 asks), which closes itself once Plus
+  is on. Archive days past the last 30 show who posted, locked, and never
+  load their media (`ArchiveGate`, which takes "today" as the latest of the
+  phone's day, the server's and the newest deposit's, so setting the clock
+  back opens nothing; the server doesn't hold these back). Compose shows
+  "Video · Plus"; Create Huddle says when 3 (or 10) are kept, from
+  `my_entitlement()` or the server's refusal; Huddle Settings asks
+  `huddle_join_status` and explains a full or paused invite instead of
+  showing a code that would fail. Profile's Plan section shows the plan,
+  Manage subscription (live) and Restore Purchases, and deleting the account
+  warns that Apple's billing goes on until it's cancelled.
 
 ## Backend setup and deploys
 
@@ -269,6 +330,7 @@ automatically):
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` (= `com.huddlepals.ios`), `APNS_PRIVATE_KEY` | function secrets | `send-push` |
 | `PUSH_WEBHOOK_SECRET` (e.g. `openssl rand -hex 32`) | function secrets | `send-push` checks the triggers' `x-push-secret` |
 | `push_function_url`, `push_webhook_secret` (same value) | Vault | the push triggers |
+| `APPSTORE_BUNDLE_ID` (= `com.huddlepals.ios`), `APPSTORE_PRODUCT_IDS` (the Plus product ids, comma-separated) | function secrets | `verify-subscription` and `app-store-notifications` (Apple's root certificate is in the code, so no Apple key is needed) |
 
 **Apple keys** ([developer.apple.com](https://developer.apple.com/account) →
 Certificates, Identifiers & Profiles):
@@ -295,6 +357,12 @@ supabase secrets set --project-ref <project-ref> APPLE_TEAM_ID=<TEAM_ID> APPLE_K
 supabase secrets set --project-ref <project-ref> APPLE_PRIVATE_KEY="$(cat /path/to/AuthKey_<SIWA_KEY_ID>.p8)" APNS_PRIVATE_KEY="$(cat /path/to/AuthKey_<APNS_KEY_ID>.p8)"
 ```
 
+HuddlePals Plus (the product ids as created in App Store Connect):
+
+```bash
+supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.annual
+```
+
 In the SQL editor (change one later with `vault.update_secret`):
 
 ```sql
@@ -317,8 +385,20 @@ select vault.create_secret('<webhook-secret>', 'push_webhook_secret');
    supabase functions deploy send-push --no-verify-jwt --project-ref <project-ref>
    ```
 
+   ```bash
+   supabase functions deploy verify-subscription --project-ref <project-ref>
+   ```
+
+   ```bash
+   supabase functions deploy app-store-notifications --no-verify-jwt --project-ref <project-ref>
+   ```
+
    `send-push` runs without JWT verification because the database sends no
-   user token; the shared secret is the check.
+   user token; the shared secret is the check. `app-store-notifications`
+   runs without it because Apple sends none; Apple's signature is the check.
+   Its URL, `https://<project-ref>.supabase.co/functions/v1/app-store-notifications`,
+   goes in App Store Connect as the App Store Server Notifications V2 URL,
+   for production and for the sandbox.
 
 ## Building and testing (this machine)
 
@@ -356,10 +436,14 @@ Commands run from the repo root.
 - **Covered**: engine rules, mock flows, store reconciliation, live
   services over stubbed HTTP (`StubURLProtocol`), encryption and invite
   joins against an in-process fake server, push coordination, accessibility
-  audits; schema, RLS, functions and triggers in PGlite; edge-function
+  audits; HuddlePals Plus through StoreKit's local test store
+  (`SKTestSession`: purchase, restore, renewal and refund while running,
+  failures) and every free-plan gate, video recording, sealing and
+  playback; schema, RLS, functions and triggers in PGlite; edge-function
   logic on Node.
 - **Not covered**: a real Supabase project's responses, Apple's servers and
-  sheets, APNs delivery, real `pg_net`/Vault (stubbed), and key sharing
+  sheets (the real purchase sheet, Manage subscription, sandbox renewals and
+  Server Notifications), a real camera and microphone, APNs delivery, real `pg_net`/Vault (stubbed), and key sharing
   between two real devices. Check those on devices: delete a test account
   (logs show `apple_revoked`; the app leaves Settings › Sign in with Apple;
   its photos show "Former member"), join with an invite while nobody else
@@ -377,11 +461,19 @@ Commands run from the repo root.
 
 The first mock launch seeds "The Crew" 🏔 (code
 `SeedDataService.crewInviteCode`) with You (keeper), Maya, Sam and Riley,
-plus "Sunday Dinners" 🍝; 30 days of history, a couple of misses and a
-skip, and a today where everyone but You has posted, so the app opens
-locked. Profile → DEBUG (mock only): force the gate shut, advance the mock
-day, regenerate the seed (behind the splash, `session.isReady = false`;
-keep that).
+plus "Sunday Dinners" 🍝; 45 days of history (past the free plan's 30-day
+archive window), a couple of misses and a skip, Maya's post yesterday as a
+2-second video (`PlaceholderVideoGenerator`), and a today where everyone but
+You has posted, so the app opens locked. The Crew has 4 members: full on the
+free plan. Who has Plus and whether the free limits are on live in
+`MockPlanLedger` (off by default, as on the server); the mock huddle service
+refuses what the server would. Profile → DEBUG (mock only): force the gate
+shut, turn the free plan's limits on, simulate Plus (or Plus that ends in a
+minute), simulate a subscription already linked to another account, advance
+the mock day, regenerate the seed (behind the splash, `session.isReady =
+false`; keep that). UI tests start with the free limits on
+(`-ui-testing-free-limits`) or with Plus (`-ui-testing-plus`); the rest of
+the launch switches are listed in `Support/UITestHooks.swift`.
 
 ## Design
 

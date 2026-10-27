@@ -127,10 +127,40 @@ enum PhotoCrypto {
         )
     }
 
+    // MARK: - Videos
+
+    /// A video ready to deposit: its poster (a JPEG) and its clip (an MP4),
+    /// each AES-GCM sealed with the same fresh photo key under its own random
+    /// nonce. One wrapped key opens both, so a report discloses one key for
+    /// the whole video, and an app build from before videos opens the poster
+    /// as a photo.
+    struct SealedVideo {
+        /// The Storage object at `storage_path`.
+        let posterCiphertext: Data
+        /// The Storage object at `video_path`.
+        let clipCiphertext: Data
+        /// `deposits.wrapped_photo_key`: the photo key sealed with the huddle key.
+        let wrappedPhotoKey: String
+    }
+
+    static func sealVideo(poster: Data, clip: Data, huddleKey: SymmetricKey) throws -> SealedVideo {
+        let photoKey = SymmetricKey(size: .bits256)
+        let wrapped = try AES.GCM.seal(rawBytes(of: photoKey), using: huddleKey, authenticating: photoKeyContext)
+        return SealedVideo(
+            posterCiphertext: try combined(AES.GCM.seal(poster, using: photoKey)),
+            clipCiphertext: try combined(AES.GCM.seal(clip, using: photoKey)),
+            wrappedPhotoKey: try combined(wrapped).base64EncodedString()
+        )
+    }
+
+    // MARK: - Opening
+
     static func unwrapPhotoKey(_ wrappedPhotoKey: String, huddleKey: SymmetricKey) throws -> SymmetricKey {
         try openKey(wrappedPhotoKey, using: huddleKey, authenticating: photoKeyContext)
     }
 
+    /// Opens a photo, or either half of a video: the same box under the
+    /// same key.
     static func openPhoto(_ ciphertext: Data, photoKey: SymmetricKey) throws -> Data {
         try AES.GCM.open(AES.GCM.SealedBox(combined: ciphertext), using: photoKey)
     }
@@ -140,8 +170,9 @@ enum PhotoCrypto {
     }
 
     /// `reports.photo_key`: the one key a report hands the operator. It opens
-    /// that photo's Storage object (tools/decrypt_reported_photo) and nothing
-    /// else — not the huddle key, not any other photo.
+    /// that photo's Storage object (tools/decrypt_reported_photo), or a
+    /// video's poster and clip, and nothing else — not the huddle key, not
+    /// any other deposit.
     static func disclosedPhotoKey(_ wrappedPhotoKey: String, huddleKey: SymmetricKey) throws -> String {
         rawBytes(of: try unwrapPhotoKey(wrappedPhotoKey, huddleKey: huddleKey)).base64EncodedString()
     }

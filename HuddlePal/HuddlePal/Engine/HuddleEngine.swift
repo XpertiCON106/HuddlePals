@@ -283,6 +283,119 @@ struct HuddleEngine {
         return yesterday
     }
 
+    // MARK: Archive window
+
+    /// Whether the archive opens a day: always with Plus; on the free plan,
+    /// `todayDayKey` and the 29 days before it. Later days open too: a member
+    /// east of you posts under a day key ahead of your today. Older days stay
+    /// in the archive, locked — nothing is ever deleted — and streaks always
+    /// count the whole history.
+    func isDayUnlockedInArchive(dayKey key: String, todayDayKey: String, isPremium: Bool) -> Bool {
+        if isPremium { return true }
+        guard let oldest = dayKey(byAdding: -(HuddleLimits.freeArchiveDays - 1), to: todayDayKey) else {
+            return false
+        }
+        return key >= oldest
+    }
+
+    /// The "today" the archive window counts back from: the latest of the
+    /// device's day, the server's (from its clock, when known), and the day
+    /// before the newest deposit (a member east of you can be a day ahead).
+    /// Setting the phone's clock back then opens no older day.
+    func archiveTodayKey(deviceTodayKey: String, serverTodayKey: String?, newestDepositDayKey: String?) -> String {
+        let candidates = [
+            deviceTodayKey,
+            serverTodayKey,
+            newestDepositDayKey.flatMap { dayKey(byAdding: -1, to: $0) },
+        ]
+        return candidates.compactMap { $0 }.max() ?? deviceTodayKey
+    }
+
+    // MARK: Huddle limits
+
+    /// Why a huddle refuses one more member. Each raw value is the error the
+    /// server raises for it (huddle_join_rule, migration 013).
+    enum JoinRefusal: String, CaseIterable, Sendable {
+        /// Before the free limits start, a keeper without Plus: 8 members,
+        /// as always.
+        case full = "huddle_full"
+        /// The keeper is on the free plan: 4 members.
+        case freeLimit = "join_blocked_free_limit"
+        /// The keeper is on the free plan and this isn't one of the 3
+        /// huddles they've kept longest.
+        case invitesPaused = "join_blocked_invites_paused"
+        /// The keeper has Plus: 10 members, the most a huddle can have.
+        case maxMembers = "join_blocked_max_members"
+        /// The joiner is already in 25 huddles.
+        case membershipLimit = "join_blocked_membership_limit"
+    }
+
+    /// How many members a huddle takes and why it refuses one more, if it
+    /// does: the server's huddle_join_rule. `keeperRank` is the huddle's
+    /// place (0 for the longest kept) among its keeper's huddles, nil when
+    /// it has no keeper.
+    static func joinRule(
+        memberCount: Int,
+        keeperIsPremium: Bool,
+        keeperRank: Int?,
+        limitsActive: Bool
+    ) -> (memberCap: Int, refusal: JoinRefusal?) {
+        // Plus takes 10 from the day it ships, before the free limits too.
+        if keeperRank != nil, keeperIsPremium {
+            let cap = HuddleLimits.plusMembers
+            return (cap, memberCount >= cap ? .maxMembers : nil)
+        }
+        guard limitsActive else {
+            let cap = HuddleLimits.legacyMembers
+            return (cap, memberCount >= cap ? .full : nil)
+        }
+        let cap = HuddleLimits.freeMembers
+        guard let keeperRank, keeperRank < HuddleLimits.freeHuddlesKept else { return (cap, .invitesPaused) }
+        return (cap, memberCount >= cap ? .freeLimit : nil)
+    }
+
+    /// Whether someone in `joinerHuddleCount` huddles may join this one, in
+    /// the server's order: their own limit first, then the huddle's rule.
+    static func joinRefusal(
+        memberCount: Int,
+        keeperIsPremium: Bool,
+        keeperRank: Int?,
+        joinerHuddleCount: Int,
+        limitsActive: Bool
+    ) -> JoinRefusal? {
+        if limitsActive, joinerHuddleCount >= HuddleLimits.huddlesJoined { return .membershipLimit }
+        return joinRule(
+            memberCount: memberCount, keeperIsPremium: keeperIsPremium,
+            keeperRank: keeperRank, limitsActive: limitsActive
+        ).refusal
+    }
+
+    /// A huddle's place in its keeper's queue: their huddles ordered by when
+    /// they became keeper (then by id, as the server breaks ties), so one
+    /// they inherit goes to the back. Nil when they don't keep it.
+    static func keeperRank(of huddleID: UUID, among kept: [(huddleID: UUID, keeperSince: Date)]) -> Int? {
+        kept.sorted {
+            $0.keeperSince != $1.keeperSince
+                ? $0.keeperSince < $1.keeperSince
+                : $0.huddleID.uuidString.lowercased() < $1.huddleID.uuidString.lowercased()
+        }
+        .firstIndex { $0.huddleID == huddleID }
+    }
+
+    /// Why an account can't create another huddle. Raw values are the
+    /// errors create_huddle raises.
+    enum CreateRefusal: String, CaseIterable, Sendable {
+        case freeLimit = "huddle_limit_reached_free"
+        case plusLimit = "huddle_limit_reached_premium"
+    }
+
+    /// create_huddle's cap: huddles kept, inherited ones included.
+    static func createRefusal(keptHuddles: Int, isPremium: Bool, limitsActive: Bool) -> CreateRefusal? {
+        guard limitsActive else { return nil }
+        if isPremium { return keptHuddles >= HuddleLimits.plusHuddlesKept ? .plusLimit : nil }
+        return keptHuddles >= HuddleLimits.freeHuddlesKept ? .freeLimit : nil
+    }
+
     // MARK: Captions
 
     /// Trims whitespace, enforces the 80-character cap, returns nil for

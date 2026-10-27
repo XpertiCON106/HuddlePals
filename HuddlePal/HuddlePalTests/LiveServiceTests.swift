@@ -348,6 +348,12 @@ final class LiveServiceTests: XCTestCase {
         let client = try await LiveStub.signedInClient(userID: me.id)
         let cases: [(String, HuddleServiceError)] = [
             ("already_member", .alreadyMember), ("huddle_full", .huddleFull), ("blocked", .cannotJoin),
+            // The free plan's and Plus's limits (migration 013): each code
+            // also contains "blocked", and still gets its own message.
+            ("join_blocked_free_limit", .huddleFullFree),
+            ("join_blocked_invites_paused", .invitesPaused),
+            ("join_blocked_max_members", .huddleAtMaximum),
+            ("join_blocked_membership_limit", .tooManyHuddles),
         ]
         for (raised, expected) in cases {
             StubURLProtocol.respond { _ in LiveStub.postgrestError(raised) }
@@ -357,6 +363,77 @@ final class LiveServiceTests: XCTestCase {
             } catch let error as HuddleServiceError {
                 XCTAssertEqual(error.errorDescription, expected.errorDescription, raised)
             }
+        }
+    }
+
+    // MARK: Whether a huddle takes new members (huddle_join_status, migration 013)
+
+    func testTheJoinStatusSaysWhyAHuddleIsClosedOrSaysNothing() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        let huddle = try store.apply(HuddleDTO(
+            id: UUID(), name: "Family", emoji: "🏔", inviteCode: "FAM123", notificationHour: 19, streakCount: 0
+        ))
+        func status(_ reply: StubURLProtocol.Reply) async -> HuddleJoinStatus? {
+            StubURLProtocol.reset()
+            StubURLProtocol.respond { _ in reply }
+            return await huddleService(client).joinStatus(for: huddle)
+        }
+        func row(_ accepting: Bool, _ refusal: String?, _ count: Int, _ cap: Int) -> StubURLProtocol.Reply {
+            .init(body: LiveStub.json([[
+                "accepting": accepting, "refusal": refusal.map { $0 as Any } ?? NSNull(), "member_count": count, "member_cap": cap,
+            ]]))
+        }
+
+        let open = await status(row(true, nil, 3, 4))
+        XCTAssertEqual(open, HuddleJoinStatus(refusal: nil, memberCount: 3, memberCap: 4))
+        let request = try XCTUnwrap(StubURLProtocol.requests.first)
+        XCTAssertTrue(request.url!.path.hasSuffix("/rest/v1/rpc/huddle_join_status"))
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: String])
+        XCTAssertEqual(body, ["p_huddle": huddle.id.uuidString])
+
+        let full = await status(row(false, "join_blocked_free_limit", 4, 4))
+        XCTAssertEqual(full, HuddleJoinStatus(refusal: .freeLimit, memberCount: 4, memberCap: 4))
+        let paused = await status(row(false, "join_blocked_invites_paused", 2, 4))
+        XCTAssertEqual(paused?.refusal, .invitesPaused)
+        let maximum = await status(row(false, "join_blocked_max_members", 10, 10))
+        XCTAssertEqual(maximum?.refusal, .maxMembers)
+        let legacy = await status(row(false, "huddle_full", 8, 8))
+        XCTAssertEqual(legacy?.refusal, .full)
+
+        let unknown = await status(row(false, "join_blocked_by_a_rule_from_later", 3, 4))
+        XCTAssertNil(unknown, "a refusal this build doesn't know: no status rather than \"open\"")
+        let notAMember = await status(.init(body: Data("[]".utf8)))
+        XCTAssertNil(notAMember, "the function answers members only")
+        let offline = await status(.init(error: URLError(.notConnectedToInternet)))
+        XCTAssertNil(offline, "the settings screen then shows the code as before")
+    }
+
+    // MARK: Creating (migration 013)
+
+    func testHuddleCapsFromCreateHuddleMapToTheirOwnMessages() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        let cases: [(String, HuddleServiceError)] = [
+            ("huddle_limit_reached_free", .huddleLimitFree), ("huddle_limit_reached_premium", .huddleLimitPlus),
+        ]
+        for (raised, expected) in cases {
+            StubURLProtocol.respond { _ in LiveStub.postgrestError(raised) }
+            do {
+                _ = try await huddleService(client).createHuddle(name: "One more", emoji: "🏔", keeper: me)
+                XCTFail("expected \(raised)")
+            } catch let error as HuddleServiceError {
+                XCTAssertEqual(error.errorDescription, expected.errorDescription, raised)
+            }
+        }
+    }
+
+    func testOtherCreateFailuresKeepTheirStatus() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        StubURLProtocol.respond { _ in LiveStub.postgrestError("permission denied", status: 403) }
+        do {
+            _ = try await huddleService(client).createHuddle(name: "One more", emoji: "🏔", keeper: me)
+            XCTFail("expected a refusal")
+        } catch SupabaseClient.ClientError.http(let status, _) {
+            XCTAssertEqual(status, 403, "so the message still says what happened")
         }
     }
 }

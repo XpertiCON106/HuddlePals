@@ -136,6 +136,11 @@ final class Membership {
     /// only from the next day. Nil for rows from before this existed —
     /// `Huddle.memberJoinDayKeys` falls back to `joinedAt`.
     var joinedDayKey: String?
+    /// When this member became the keeper (`memberships.keeper_since`); nil
+    /// for members. The free plan takes new members only into the 3 huddles
+    /// a keeper has kept longest (`HuddleEngine.joinRule`). Nil for keepers in
+    /// stores from before it existed: `keptSince` falls back to `joinedAt`.
+    var keeperSince: Date?
 
     init(
         id: UUID = UUID(),
@@ -144,7 +149,8 @@ final class Membership {
         role: MembershipRole = .member,
         skipTokensRemaining: Int = 2,
         joinedAt: Date = .now,
-        joinedDayKey: String? = nil
+        joinedDayKey: String? = nil,
+        keeperSince: Date? = nil
     ) {
         self.id = id
         self.user = user
@@ -153,10 +159,24 @@ final class Membership {
         self.skipTokensRemaining = skipTokensRemaining
         self.joinedAt = joinedAt
         self.joinedDayKey = joinedDayKey
+        self.keeperSince = keeperSince
+    }
+
+    /// When the keeper took this huddle on, for their queue of huddles kept
+    /// (the server backfilled keepers from before keeper_since the same way).
+    var keptSince: Date {
+        keeperSince ?? joinedAt
     }
 }
 
 // MARK: - Deposit
+
+/// What a deposit holds: one photo, or a video clip of up to 6 seconds
+/// (Plus) shown with its poster frame.
+enum DepositMediaType: String, Codable, CaseIterable {
+    case photo
+    case video
+}
 
 @Model
 final class Deposit {
@@ -165,7 +185,18 @@ final class Deposit {
     var author: User?
     /// Path relative to the app's Documents directory. The Documents
     /// container path changes between launches, so never store it absolute.
+    /// For a video, its poster frame: what tiles show, and what app builds
+    /// from before videos show as a photo.
     var localImagePath: String
+    /// `deposits.media_type`, as text with a default so stores from before
+    /// videos migrate as they are: every deposit in them is a photo. Read and
+    /// write it through `mediaType`.
+    var mediaTypeRaw: String = "photo"
+    /// A video's clip, Documents-relative like `localImagePath`: the poster's
+    /// path ending in .mp4. Nil for a photo.
+    var localVideoPath: String?
+    /// A video's length in milliseconds (6 000 at most); nil for a photo.
+    var durationMs: Int?
     var caption: String?
     /// Calendar day this deposit belongs to, "yyyy-MM-dd" in device timezone.
     var dayKey: String
@@ -191,7 +222,10 @@ final class Deposit {
         caption: String? = nil,
         dayKey: String,
         createdAt: Date = .now,
-        wrappedPhotoKey: String? = nil
+        wrappedPhotoKey: String? = nil,
+        mediaType: DepositMediaType = .photo,
+        localVideoPath: String? = nil,
+        durationMs: Int? = nil
     ) {
         self.id = id
         self.huddle = huddle
@@ -201,6 +235,21 @@ final class Deposit {
         self.dayKey = dayKey
         self.createdAt = createdAt
         self.wrappedPhotoKey = wrappedPhotoKey
+        self.mediaTypeRaw = mediaType.rawValue
+        self.localVideoPath = localVideoPath
+        self.durationMs = durationMs
+    }
+
+    /// A media type this build doesn't know reads as a photo: its poster is
+    /// a JPEG at `localImagePath` either way.
+    var mediaType: DepositMediaType {
+        get { DepositMediaType(rawValue: mediaTypeRaw) ?? .photo }
+        set { mediaTypeRaw = newValue.rawValue }
+    }
+
+    /// A clip to play: a video with its clip's path.
+    var isVideo: Bool {
+        mediaType == .video && localVideoPath != nil
     }
 
     /// Pure-value snapshot consumed by `HuddleEngine`. Nil when the deposit

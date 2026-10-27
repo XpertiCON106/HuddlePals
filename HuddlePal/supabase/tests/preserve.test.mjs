@@ -5,8 +5,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  freshDatabase, q, admin, serverToday, signUp, createHuddle, joinHuddle, deposit, storeObject,
-  PUBLIC_KEY, randomUUID,
+  freshDatabase, q, admin, serverToday, signUp, createHuddle, joinHuddle, deposit, videoDeposit, storeObject,
+  grantPlus, PUBLIC_KEY, randomUUID,
 } from './harness.mjs'
 
 /** Ben's photo in Ada's huddle, with a reaction, a comment, its file, and Ada's report. */
@@ -59,6 +59,31 @@ describe('removing a reported photo', () => {
     await admin(db, 'select remove_reported_photo($1, false)', [dep.id])
     assert.deepEqual(await admin(db, 'select 1 from deposits where id = $1', [dep.id]), [])
     assert.deepEqual(await admin(db, 'select 1 from preserved_photos'), [])
+  })
+
+  it('keeps a reported video as a video: its poster, its clip, and the one key that opens both', async () => {
+    const { db, A, h } = await world()
+    const B = (await admin(db, `select user_id from memberships where huddle_id = $1 and role = 'member'`, [h.id]))[0].user_id
+    await grantPlus(db, B)
+    const dep = await videoDeposit(db, B, h.id, await serverToday(db, -1))
+    await storeObject(db, dep.storage_path)
+    await storeObject(db, dep.video_path)
+    await q(db, A, 'insert into reports (reporter_id, deposit_id, photo_key) values ($1, $2, $3)', [A, dep.id, PUBLIC_KEY('V')])
+    const [{ remove_reported_photo: path }] = await admin(db, 'select remove_reported_photo($1)', [dep.id])
+
+    assert.equal(path, dep.storage_path, 'the poster, as for any photo')
+    const [kept] = await admin(db, 'select media_type, storage_path, video_path, photo_key from preserved_photos where deposit_id = $1', [dep.id])
+    assert.deepEqual(kept, { media_type: 'video', storage_path: dep.storage_path, video_path: dep.video_path, photo_key: PUBLIC_KEY('V') })
+    assert.equal(dep.video_path, dep.storage_path.replace(/\.jpg$/, '.mp4'), 'the clip sits next to the poster')
+    for (const name of [dep.storage_path, dep.video_path]) {
+      assert.equal((await admin(db, 'select 1 from storage.objects where name = $1', [name])).length, 1, `${name} stays`)
+    }
+  })
+
+  it('a photo is kept as a photo', async () => {
+    const { db, dep } = await world()
+    await admin(db, 'select remove_reported_photo($1)', [dep.id])
+    assert.deepEqual(await admin(db, 'select media_type, video_path from preserved_photos'), [{ media_type: 'photo', video_path: null }])
   })
 
   it('refuses a photo that does not exist and changes nothing', async () => {

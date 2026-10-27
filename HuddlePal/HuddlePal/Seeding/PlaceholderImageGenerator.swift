@@ -21,11 +21,17 @@ enum PlaceholderImageGenerator {
 
     /// Deterministic for a given seed, so regenerated seed data looks stable.
     static func jpegData(seed: Int, size: CGSize = CGSize(width: 600, height: 800)) -> Data {
+        image(seed: seed, size: size).jpegData(compressionQuality: 0.8) ?? Data()
+    }
+
+    /// The same picture as `jpegData`, undecoded: PlaceholderVideoGenerator
+    /// films it.
+    static func image(seed: Int, size: CGSize) -> UIImage {
         let (top, bottom) = gradients[abs(seed) % gradients.count]
         let symbolName = symbols[abs(seed / 7 + seed) % symbols.count]
 
         let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { context in
+        return renderer.image { context in
             let cgContext = context.cgContext
             let colors = [top.cgColor, bottom.cgColor] as CFArray
             if let gradient = CGGradient(
@@ -54,6 +60,5 @@ enum PlaceholderImageGenerator {
                 symbol.draw(at: origin)
             }
         }
-        return image.jpegData(compressionQuality: 0.8) ?? Data()
     }
 }

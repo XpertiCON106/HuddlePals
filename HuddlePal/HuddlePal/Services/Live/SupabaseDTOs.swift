@@ -32,6 +32,8 @@ struct MembershipDTO: Codable {
     var skipTokensRemaining: Int
     var joinedAt: Date?
     var joinedDayKey: String?
+    /// Null for members, and from servers before migration 013.
+    var keeperSince: Date?
 }
 
 struct DepositDTO: Codable {
@@ -48,6 +50,12 @@ struct DepositDTO: Codable {
     /// pre-encryption row can't fail decoding of the whole response.
     var wrappedPhotoKey: String?
     var encVersion: Int?
+    /// "photo" or "video"; optional, like the next two, so a server from
+    /// before migration 013 still decodes (every deposit a photo).
+    var mediaType: String?
+    /// A video's clip: its poster's `storagePath` ending in .mp4.
+    var videoPath: String?
+    var durationMs: Int?
 }
 
 struct ReactionDTO: Codable {

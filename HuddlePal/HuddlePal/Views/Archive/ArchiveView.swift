@@ -30,6 +30,7 @@ private struct ArchiveContent: View {
     @Bindable var viewModel: ArchiveViewModel
 
     @State private var showBackfillCompose = false
+    @State private var paywall: PaywallContext?
 
     var body: some View {
         ScrollView {
@@ -63,7 +64,11 @@ private struct ArchiveContent: View {
                         Section {
                             ForEach(month.days) { day in
                                 DayRow(day: day) { deposit in
-                                    router.huddlesPath.append(.depositDetail(deposit))
+                                    if day.isLocked {
+                                        paywall = .archive
+                                    } else {
+                                        router.huddlesPath.append(.depositDetail(deposit))
+                                    }
                                 }
                             }
                         } header: {
@@ -87,6 +92,13 @@ private struct ArchiveContent: View {
         .task { await viewModel.refresh() }
         .onChange(of: deps.dateProvider.dayOffset) {
             Task { await viewModel.refresh() }
+        }
+        // Plus bought, run out, or the free limits started: the window moves.
+        .onChange(of: deps.plus.status) {
+            Task { await viewModel.refresh() }
+        }
+        .sheet(item: $paywall) { context in
+            PaywallView(context: context)
         }
         .sheet(isPresented: $showBackfillCompose) {
             ComposeView(huddle: viewModel.huddle, targetDayKey: viewModel.backfillDayKey) { success in
@@ -136,9 +148,17 @@ private struct DayRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(day.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
+            HStack {
+                Text(day.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                if day.isLocked {
+                    Spacer()
+                    Label("\(day.deposits.count) posted", systemImage: "lock.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
@@ -147,14 +167,25 @@ private struct DayRow: View {
                             onTap(deposit)
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                // 146pt tile → 450px covers @3x displays.
-                                LocalDepositImage(deposit: deposit, maxPixelSize: 450)
-                                    .frame(width: 110, height: 146)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .strokeBorder(Theme.hairline, lineWidth: 1)
-                                    )
+                                Group {
+                                    if day.isLocked {
+                                        // Past the free 30 days: nothing loaded or decrypted.
+                                        LockedArchiveTile(author: deposit.author)
+                                    } else {
+                                        // 146pt tile → 450px covers @3x displays.
+                                        // A video shows its poster here; it plays in detail.
+                                        LocalDepositImage(deposit: deposit, maxPixelSize: 450)
+                                            .overlay(alignment: .topLeading) {
+                                                if deposit.isVideo { VideoBadge(durationMs: deposit.durationMs).padding(6) }
+                                            }
+                                    }
+                                }
+                                .frame(width: 110, height: 146)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                                )
                                 HStack(spacing: 5) {
                                     AvatarView(
                                         name: deposit.author?.displayName ?? "?",
@@ -169,9 +200,17 @@ private struct DayRow: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(Self.accessibilityLabel(for: deposit, locked: day.isLocked))
+                        .accessibilityHint(day.isLocked ? "Unlock your full huddle archive with HuddlePals Plus." : "")
                     }
                 }
             }
         }
+    }
+
+    private static func accessibilityLabel(for deposit: Deposit, locked: Bool) -> String {
+        let author = deposit.author?.displayName ?? "Former member"
+        if locked { return "Locked: \(author)'s post, past the free plan's 30 days" }
+        return deposit.isVideo ? "Video by \(author)" : "Photo by \(author)"
     }
 }

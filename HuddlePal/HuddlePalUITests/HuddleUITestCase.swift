@@ -10,7 +10,7 @@ class HuddleUITestCase: XCTestCase {
     /// the Terms journey start already agreed, so they don't spend a minute
     /// scrolling the document; if the version moves on, the Terms show and
     /// `launchToShelf` agrees as a person would.
-    static let termsVersion = "2026-10-25"
+    static let termsVersion = "2026-10-27"
 
     override func setUpWithError() throws {
         continueAfterFailure = false

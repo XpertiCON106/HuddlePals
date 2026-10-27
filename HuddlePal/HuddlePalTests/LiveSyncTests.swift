@@ -181,4 +181,81 @@ final class LiveSyncTests: XCTestCase {
         let missing = try store.missingUserIDs(in: [me.id, friend.id, stranger])
         XCTAssertEqual(missing, [stranger])
     }
+
+    // MARK: Video drops and keepers (migration 013)
+
+    func testAVideoRowDecodesAndKeepsItsClipNextToItsPoster() throws {
+        let depositID = UUID()
+        let name = "\(huddleID!)/\(depositID)"
+        let json = """
+        [{
+          "id": "\(depositID)", "huddle_id": "\(huddleID!)", "author_id": "\(friend.id)",
+          "storage_path": "\(name).jpg", "caption": null, "day_key": "\(today)",
+          "media_type": "video", "video_path": "\(name).mp4", "duration_ms": 5800,
+          "wrapped_photo_key": "\(String(repeating: "A", count: 80))", "enc_version": 1
+        }]
+        """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let rows = try decoder.decode([DepositDTO].self, from: Data(json.utf8))
+        let huddle = try XCTUnwrap(store.huddle(id: huddleID))
+        try store.applyDeposits(rows, reactions: [], comments: [], to: huddle)
+        try store.save()
+
+        let deposit = try XCTUnwrap(huddle.deposits.first)
+        XCTAssertEqual(deposit.mediaType, .video)
+        XCTAssertTrue(deposit.isVideo)
+        XCTAssertEqual(deposit.localImagePath, "Media/\(name).jpg", "the poster, where a photo would be")
+        XCTAssertEqual(deposit.localVideoPath, "Media/\(name).mp4")
+        XCTAssertEqual(deposit.durationMs, 5800)
+        XCTAssertNotNil(deposit.wrappedPhotoKey, "one key for poster and clip")
+    }
+
+    func testRowsFromBeforeVideosOrOfAnUnknownKindAreShownAsPhotos() throws {
+        let huddle = try XCTUnwrap(store.huddle(id: huddleID))
+        var oldServer = depositDTO(author: friend.id)
+        oldServer.mediaType = nil
+        var unknown = depositDTO(author: me.id, day: "2026-10-18")
+        unknown.mediaType = "hologram"
+        unknown.videoPath = "\(huddleID!)/x.mp4"
+        var clipless = depositDTO(author: friend.id, day: "2026-10-17")
+        clipless.mediaType = "video"
+        try store.applyDeposits([oldServer, unknown, clipless], reactions: [], comments: [], to: huddle)
+        try store.save()
+
+        XCTAssertEqual(huddle.deposits.count, 3)
+        XCTAssertTrue(huddle.deposits.allSatisfy { $0.mediaType == .photo && $0.localVideoPath == nil && !$0.isVideo })
+    }
+
+    func testAResyncUpdatesAnExistingRowsMedia() throws {
+        let huddle = try XCTUnwrap(store.huddle(id: huddleID))
+        var dto = depositDTO(author: friend.id)
+        try store.applyDeposits([dto], reactions: [], comments: [], to: huddle)
+        dto.mediaType = "video"
+        dto.videoPath = dto.storagePath.replacingOccurrences(of: ".jpg", with: ".mp4")
+        dto.durationMs = 3000
+        try store.applyDeposits([dto], reactions: [], comments: [], to: huddle)
+        XCTAssertTrue(try XCTUnwrap(huddle.deposits.first).isVideo)
+
+        try store.applyDeposit(depositDTO(dto.id, author: me.id), to: huddle, author: me)
+        XCTAssertFalse(try XCTUnwrap(huddle.deposits.first).isVideo, "the single-row upsert applies the media too")
+    }
+
+    func testKeeperSinceSyncsFromTheServer() throws {
+        let huddle = try XCTUnwrap(store.huddle(id: huddleID))
+        let since = Date(timeIntervalSince1970: 1_800_000_000)
+        let joined = since.addingTimeInterval(-86_400)
+        var dto = MembershipDTO(
+            id: UUID(), userId: friend.id, huddleId: huddleID,
+            role: "keeper", skipTokensRemaining: 2, joinedAt: joined, keeperSince: since
+        )
+        try store.applyMemberships([dto], to: huddle)
+        XCTAssertEqual(huddle.memberships.first?.keeperSince, since)
+        XCTAssertEqual(huddle.memberships.first?.keptSince, since)
+
+        dto.keeperSince = nil // a server from before migration 013
+        try store.applyMemberships([dto], to: huddle)
+        XCTAssertNil(huddle.memberships.first?.keeperSince)
+        XCTAssertEqual(huddle.memberships.first?.keptSince, joined, "falls back to the join, as the server backfilled")
+    }
 }

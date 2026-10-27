@@ -109,6 +109,11 @@ private final class CountingMediaService: MediaServiceProtocol {
         try await Task.sleep(for: .milliseconds(50))
         return try await inner.saveDepositPhoto(data, preferredName: preferredName, huddleID: huddleID)
     }
+    func saveDepositVideo(poster: Data, clip: Data, baseName: String, huddleID: UUID) async throws -> StoredDepositVideo {
+        depositUploads += 1
+        try await Task.sleep(for: .milliseconds(50))
+        return try await inner.saveDepositVideo(poster: poster, clip: clip, baseName: baseName, huddleID: huddleID)
+    }
     func loadDepositPhoto(at relativePath: String, huddleID: UUID, wrappedPhotoKey: String?) async -> Data? {
         await inner.loadDepositPhoto(at: relativePath, huddleID: huddleID, wrappedPhotoKey: wrappedPhotoKey)
     }

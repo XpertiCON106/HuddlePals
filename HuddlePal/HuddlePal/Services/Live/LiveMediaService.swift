@@ -1,10 +1,11 @@
 import Foundation
 
 /// Supabase Storage on top of the same local Documents cache the mock uses.
-/// Cache paths are "Media/<huddle_id>/<file>.jpg"; the storage object path is
-/// the same string without the "Media/" prefix, so the two stay 1:1. Huddle
-/// photos are end-to-end encrypted: Storage and the cache both hold the
-/// ciphertext, decrypted in memory only for display. Profile photos are not.
+/// Cache paths are "Media/<huddle_id>/<file>.jpg" (and ".mp4" for a video's
+/// clip); the storage object path is the same string without the "Media/"
+/// prefix, so the two stay 1:1. Huddle photos and videos are end-to-end
+/// encrypted: Storage and the cache both hold the ciphertext, decrypted in
+/// memory only for display or playback. Profile photos are not.
 final class LiveMediaService: MediaServiceProtocol {
     static let bucket = "deposits"
     private static let cachePrefix = "Media/"
@@ -62,6 +63,37 @@ final class LiveMediaService: MediaServiceProtocol {
         // instantly, decrypted with the key we just used.
         let path = try await localCache.saveImageData(sealed.ciphertext, preferredName: preferredName)
         return StoredDepositPhoto(path: path, wrappedPhotoKey: sealed.wrappedPhotoKey)
+    }
+
+    func saveDepositVideo(poster: Data, clip: Data, baseName: String, huddleID: UUID) async throws -> StoredDepositVideo {
+        guard clip.count <= HuddleLimits.maxVideoBytes else { throw DepositError.videoTooLarge }
+        guard let huddleKey = await keyring.huddleKeyForUpload(huddleID) else {
+            throw PhotoKeyError.huddleKeyUnavailable
+        }
+        let sealed = try PhotoCrypto.sealVideo(poster: poster, clip: clip, huddleKey: huddleKey)
+        guard sealed.posterCiphertext.count <= Self.maxUploadBytes, sealed.clipCiphertext.count <= Self.maxUploadBytes else {
+            throw DepositError.videoTooLarge
+        }
+        let posterName = "\(baseName).jpg"
+        let clipName = "\(baseName).mp4"
+        // The poster first: wherever the clip is, its poster is too, and
+        // that's what app builds from before videos show.
+        try await client.uploadObject(
+            bucket: Self.bucket, path: posterName, data: sealed.posterCiphertext, contentType: "application/octet-stream"
+        )
+        do {
+            try await client.uploadObject(
+                bucket: Self.bucket, path: clipName, data: sealed.clipCiphertext, contentType: "application/octet-stream"
+            )
+        } catch let SupabaseClient.ClientError.http(_, message) where message.contains("row-level security") {
+            // Storage takes a clip only from someone with Plus (migration 013).
+            throw DepositError.videoNeedsPlus
+        }
+        return StoredDepositVideo(
+            posterPath: try await localCache.saveImageData(sealed.posterCiphertext, preferredName: posterName),
+            videoPath: try await localCache.saveImageData(sealed.clipCiphertext, preferredName: clipName),
+            wrappedPhotoKey: sealed.wrappedPhotoKey
+        )
     }
 
     func loadDepositPhoto(at relativePath: String, huddleID: UUID, wrappedPhotoKey: String?) async -> Data? {

@@ -2,7 +2,7 @@
 
 > **New here? Read [OVERVIEW.md](OVERVIEW.md)** — the complete guide with diagrams. [DEVELOPMENT.md](DEVELOPMENT.md) is the developer reference; [DEPLOYMENT.md](DEPLOYMENT.md) is the go-live runbook.
 
-A private, daily photo-sharing app for small groups (2–8 people). One photo per person per day goes into a shared huddle. Today's photos from the others stay **blurred until you deposit your own** (the reciprocity gate). Streaks belong to the group, not the individual. Over time the huddle becomes a permanent collective archive — the opposite of Instagram: private, permanent, small, daily.
+A private, daily photo-sharing app for small groups: up to 4 people, or 10 when the huddle's keeper has HuddlePals Plus. One photo per person per day (or, with Plus, a video of up to 6 seconds) goes into a shared huddle. Today's photos from the others stay **blurred until you deposit your own** (the reciprocity gate). Streaks belong to the group, not the individual. Over time the huddle becomes a permanent collective archive — the opposite of Instagram: private, permanent, small, daily.
 
 Every service is a protocol with two implementations — a seeded offline **mock** and a **live** Supabase one — picked once at launch (live when a filled-in `Supabase.plist` is bundled). No view or view model knows which one is running.
 
@@ -14,7 +14,7 @@ Every service is a protocol with two implementations — a seeded offline **mock
 4. Tap **Add today's memory** → take a photo with the camera (deposits are camera-only; on the Simulator, which has no camera, Compose shows a "no camera" state — run on a device to deposit), confirm the permanence prompt → the lock springs open and today is revealed.
 5. ⌘U runs the test suite (engine rules, critical mock flows, live sync reconciliation, sign-in input, profile editor, photo encryption).
 
-**Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.
+**Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), turn the free plan's limits on, simulate HuddlePals Plus (or Plus that ends in a minute) and a subscription linked to another account, advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.
 
 ## File map
 
@@ -31,8 +31,10 @@ HuddlePal/
 │   │   └── SchemaModels.swift          SwiftData @Models: User, Huddle, Membership,
 │   │                                   Deposit, Reaction, Comment (+ MembershipRole)
 │   ├── Engine/
-│   │   └── HuddleEngine.swift           Pure logic: dayKey, gate, streaks, backfill,
-│   │                                   permanence, recovery window, captions
+│   │   ├── HuddleEngine.swift           Pure logic: dayKey, gate, streaks, backfill,
+│   │   │                               permanence, recovery window, captions, the
+│   │   │                               archive window, the plans' join and create rules
+│   │   └── HuddleLimits.swift           The free plan's and Plus's limits
 │   ├── Services/
 │   │   ├── AuthService.swift           AuthServiceProtocol + MockAuthService
 │   │   ├── HuddleService.swift          HuddleServiceProtocol + MockHuddleService + SkipLedger
@@ -40,39 +42,48 @@ HuddlePal/
 │   │   ├── MediaService.swift          MediaServiceProtocol + MockMediaService
 │   │   ├── ModerationService.swift     ModerationServiceProtocol + MockModerationService
 │   │   ├── PushTokenService.swift      PushTokenServiceProtocol + MockPushTokenService
+│   │   ├── PlusService.swift           PlusServiceProtocol + MockPlusService, PlanStatus
+│   │   ├── MockPlanLedger.swift        The offline world's Plus and free-limits switch
 │   │   ├── Live/                       SupabaseClient, SupabaseStore, DTOs, KeychainStore,
-│   │   │                               BackendConfig, Live*Service ×6, and E2EE photos:
+│   │   │                               BackendConfig, Live*Service ×7 (LivePlusService:
+│   │   │                               StoreKit 2 + verify-subscription), and E2EE photos:
 │   │   │                               PhotoCrypto, InviteCrypto, IdentityKeychain,
 │   │   │                               LivePhotoKeyring
 │   │   (notifications: Support/DailyReminders.swift — local reminders;
 │   │    Support/PushNotifications.swift — server pushes through APNs;
 │   │    Support/InviteCode.swift — the invite code format)
 │   ├── Seeding/
-│   │   ├── SeedDataService.swift       First-launch world: 4 users, 30 days, mixed participation
-│   │   └── PlaceholderImageGenerator.swift  Gradient + SF Symbol via UIGraphicsImageRenderer
+│   │   ├── SeedDataService.swift       First-launch world: 4 users, 45 days, mixed participation, one video
+│   │   ├── PlaceholderImageGenerator.swift  Gradient + SF Symbol via UIGraphicsImageRenderer
+│   │   └── PlaceholderVideoGenerator.swift  A placeholder photo zooming in, as an H.264 MP4
 │   ├── ViewModels/                     @Observable, one per screen; the only layer
 │   │   │                               allowed to call services
 │   │   ├── RootViewModel.swift         ├── OnboardingViewModel.swift
 │   │   ├── HuddleHomeViewModel.swift    ├── ComposeViewModel.swift
 │   │   ├── ArchiveViewModel.swift      ├── DepositDetailViewModel.swift
 │   │   ├── HuddleManagementViewModels.swift  (Create / Join / Settings)
+│   │   ├── PaywallViewModel.swift      ├── ArchiveGate.swift (the free plan's 30 days)
 │   │   └── ProfileViewModel.swift
 │   ├── Views/
 │   │   ├── RootView.swift              Splash → Onboarding → MainTabView router
 │   │   ├── Onboarding/OnboardingView.swift  Terms of Service gate (Agree required) + sign-in steps
 │   │   ├── Home/HuddleHomeView.swift    LOCKED grid / UNLOCKED feed + unlock reveal
-│   │   ├── Compose/ComposeView.swift   Camera capture + caption + permanence confirm
+│   │   ├── Compose/ComposeView.swift   Camera capture (photo, or video with Plus) + caption + permanence confirm
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
 │   │   ├── Detail/DepositDetailView.swift  Reactions + comments
 │   │   ├── HuddleManagement/            CreateHuddleView / JoinHuddleView / HuddleSettingsView
-│   │   └── Profile/ProfileView.swift   Draft editing + confirmed save,
+│   │   ├── Plus/PaywallView.swift      HuddlePals Plus: plans, renewal terms, Restore Purchases
+│   │   └── Profile/ProfileView.swift   Draft editing + confirmed save, the Plan section,
 │   │                                   sign out + DEBUG tools; TermsReaderView
 │   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,
 │   │                                   CaptionTextField (80-char enforcement),
-│   │                                   CodeEntryField, CameraPicker, TermsDocumentView
+│   │                                   CodeEntryField, CameraPicker, TermsDocumentView,
+│   │                                   VideoRecorder + VideoCaptureView (6-second clips),
+│   │                                   DepositVideoPlayer (plays decrypted clips from memory)
 │   ├── Support/                        Theme, Haptics, DateProviding (injectable clock),
 │   │                                   DailyReminders, ImageDownscaler, AppleSignInNonce,
+│   │                                   CaptureFiles + PreparedClip (a recording's short life on disk),
 │   │                                   TermsOfService (bundled text + TermsAcceptance)
 │   ├── Legal/TermsOfService.md         The Terms of Service shown in-app; host it at huddlepals.com/terms
 │   └── Assets.xcassets
@@ -83,7 +94,11 @@ HuddlePal/
     ├── AuthInputTests.swift            Session persistence, phone input, code length
     ├── ProfileConfirmationTests.swift  Profile editor's confirmed-draft rules
     ├── PhotoEncryptionTests.swift      E2EE: key wrap, photo seal/open, report disclosure
-    └── TermsAgreementTests.swift       Terms gate: first screen, Decline, re-ask per version
+    ├── TermsAgreementTests.swift       Terms gate: first screen, Decline, re-ask per version
+    ├── PlanRulesTests.swift            The free plan's and Plus's rules, the archive window
+    ├── PlusServiceTests.swift          StoreKit 2 via SKTestSession (StoreKit/HuddlePalsPlus.storekit)
+    ├── PlusGateTests.swift             The paywall and every gate's view model
+    └── VideoDropTests.swift            Video seal, recording, playback from memory, Compose
 ```
 
 Next to the app: `supabase/` (schema.sql, `scripts/reset_database.sql`, the
@@ -176,4 +191,5 @@ It builds with `Supabase.plist` excluded, so a test run can never reach the live
 - `AuthInputTests` covers sign-in plumbing: the Keychain session surviving a relaunch, phone numbers without +1, and code lengths from `Supabase.plist`.
 - `ProfileConfirmationTests` covers the profile editor's confirmed-draft and dirty-exit rules.
 - `PhotoEncryptionTests` covers the E2EE crypto: huddle-key wrap/unwrap, photo seal/open, wrong keys failing cleanly, a report's key opening only that photo, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
+- `PlanRulesTests`, `PlanLimitTests`, `PlusServiceTests` and `PlusGateTests` cover HuddlePals Plus and the free plan: the rules, the mock server's caps, StoreKit 2 through `SKTestSession` (purchase, restore, renewals and refunds while the app runs), and the paywall and gates. `VideoDropTests` covers video drops from recording to playback. `PlusJourneyTests` and `VideoJourneyTests` walk them in the UI.
 - `TermsAgreementTests` covers the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end, Decline returns to the first welcome card, nothing past the cards opens without Agree, and agreement persists per `TermsOfService.version` (which must match the Terms' "Last updated" date).

@@ -5,6 +5,8 @@
 import { type Alert, type ApnsConfig, type ApnsEnvironment, sendAlert } from "./apns.ts";
 
 export type PushKind = "deposit" | "comment" | "reaction" | "join";
+/** What the event's deposit is (public.push_media_type); null for a join. */
+export type MediaType = "photo" | "video";
 const KINDS: readonly string[] = ["deposit", "comment", "reaction", "join"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -30,6 +32,8 @@ export interface SendPushServices {
   providerToken(): Promise<string>;
   /** public.push_targets(kind, id). */
   targets(kind: PushKind, id: string): Promise<PushTarget[]>;
+  /** public.push_media_type(kind, id). */
+  mediaType(kind: PushKind, id: string): Promise<MediaType | null>;
   /** Deletes device tokens APNs reported as no longer valid. */
   removeTokens(tokens: string[]): Promise<void>;
   fetch: typeof fetch;
@@ -40,16 +44,17 @@ export interface SendPushServices {
 /**
  * The notification's words. Huddle names, display names and reaction emoji
  * aren't end-to-end encrypted, so they can be shown; captions and comment
- * text are never sent (they never reach this function), and photos are only
- * ever ciphertext on the server.
+ * text are never sent (they never reach this function), and photos and
+ * videos are only ever ciphertext on the server.
  */
-export function alertFor(kind: PushKind, target: PushTarget): Alert {
+export function alertFor(kind: PushKind, target: PushTarget, mediaType: MediaType | null = "photo"): Alert {
   const who = target.actor_name?.trim() || "Someone";
   const title = `${target.huddle_emoji} ${target.huddle_name}`.trim();
+  const what = mediaType === "video" ? "video" : "photo";
   const body = {
-    deposit: `${who} posted a photo.`,
-    comment: `${who} commented on your photo.`,
-    reaction: target.detail ? `${who} reacted ${target.detail} to your photo.` : `${who} reacted to your photo.`,
+    deposit: `${who} posted a ${what}.`,
+    comment: `${who} commented on your ${what}.`,
+    reaction: target.detail ? `${who} reacted ${target.detail} to your ${what}.` : `${who} reacted to your ${what}.`,
     join: `${who} joined the huddle.`,
   }[kind];
   return { title, body, huddleId: target.huddle_id };
@@ -90,9 +95,26 @@ export async function handleSendPush(req: Request, services: SendPushServices): 
   }
   if (targets.length === 0) return json({ sent: 0, failed: 0, removed: 0 }, 200);
 
+  // Before migration 013 (or if the lookup fails) every deposit is a photo.
+  let mediaType: MediaType | null = "photo";
+  if (kind !== "join") {
+    try {
+      mediaType = (await services.mediaType(kind as PushKind, id)) ?? "photo";
+    } catch (e) {
+      services.log("push_media_type_failed", e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const providerToken = await services.providerToken();
   const outcomes = await Promise.all(targets.map((target) =>
-    sendAlert(services.fetch, apns, providerToken, target.token, target.environment, alertFor(kind as PushKind, target))
+    sendAlert(
+      services.fetch,
+      apns,
+      providerToken,
+      target.token,
+      target.environment,
+      alertFor(kind as PushKind, target, mediaType),
+    )
   ));
 
   const invalid: string[] = [];
