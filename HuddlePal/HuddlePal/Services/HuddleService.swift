@@ -89,6 +89,17 @@ enum HuddleServiceError: LocalizedError {
     }
 }
 
+/// Whether a huddle takes new members right now, and if not why: the
+/// server's huddle_join_status. Settings explains a closed huddle instead of
+/// showing an invite code that would fail.
+struct HuddleJoinStatus: Equatable {
+    let refusal: HuddleEngine.JoinRefusal?
+    let memberCount: Int
+    let memberCap: Int
+
+    var accepting: Bool { refusal == nil }
+}
+
 /// Someone waiting for a huddle's key whose key code nobody on this device
 /// has confirmed yet: they joined with an old code, or their key changed.
 /// `code` is computed here from the public key the server lists for them.
@@ -116,6 +127,9 @@ protocol HuddleServiceProtocol: AnyObject {
     func inviteCode(for huddle: Huddle) async throws -> InviteCode?
     /// Keeper only: a new code; the old one stops working at once.
     func resetInviteCode(for huddle: Huddle, by user: User) async throws -> InviteCode
+    /// Whether the huddle takes new members, by its keeper's plan. nil when
+    /// it can't be known right now (offline, or a server from before Plus).
+    func joinStatus(for huddle: Huddle) async -> HuddleJoinStatus?
     func leaveHuddle(_ huddle: Huddle, user: User) async throws
     /// Skip-token usage per dayKey, consumed by streak math.
     func skipRecords(for huddle: Huddle) async throws -> [String: Set<UUID>]
@@ -324,20 +338,36 @@ final class MockHuddleService: HuddleServiceProtocol {
     func confirmKeyCheck(_ check: KeyCheck, in huddle: Huddle) async throws {}
     func ownKeyCode() async -> String? { nil }
 
+    func joinStatus(for huddle: Huddle) async -> HuddleJoinStatus? {
+        let (keeperIsPremium, keeperRank) = keeperPlan(of: huddle)
+        let rule = HuddleEngine.joinRule(
+            memberCount: huddle.memberships.count, keeperIsPremium: keeperIsPremium,
+            keeperRank: keeperRank, limitsActive: plans.freeLimitsActive
+        )
+        return HuddleJoinStatus(refusal: rule.refusal, memberCount: huddle.memberships.count, memberCap: rule.memberCap)
+    }
+
     /// The server's join rules (huddle_join_rule, then the joiner's
     /// 25-huddle limit), on the offline world: the keeper's plan decides.
     private func joinRefusal(for huddle: Huddle, joiner: User) -> HuddleEngine.JoinRefusal? {
+        let (keeperIsPremium, keeperRank) = keeperPlan(of: huddle)
+        return HuddleEngine.joinRefusal(
+            memberCount: huddle.memberships.count,
+            keeperIsPremium: keeperIsPremium,
+            keeperRank: keeperRank,
+            joinerHuddleCount: joiner.memberships.count,
+            limitsActive: plans.freeLimitsActive
+        )
+    }
+
+    /// Whether the huddle's keeper has Plus, and its place in their queue of
+    /// huddles kept (nil without a keeper).
+    private func keeperPlan(of huddle: Huddle) -> (isPremium: Bool, rank: Int?) {
         let keeper = huddle.memberships.first { $0.role == .keeper }?.user
         let kept = (keeper?.memberships ?? []).filter { $0.role == .keeper }.compactMap { membership in
             membership.huddle.map { (huddleID: $0.id, keeperSince: membership.keptSince) }
         }
-        return HuddleEngine.joinRefusal(
-            memberCount: huddle.memberships.count,
-            keeperIsPremium: plans.hasPlus(keeper?.id),
-            keeperRank: HuddleEngine.keeperRank(of: huddle.id, among: kept),
-            joinerHuddleCount: joiner.memberships.count,
-            limitsActive: plans.freeLimitsActive
-        )
+        return (plans.hasPlus(keeper?.id), HuddleEngine.keeperRank(of: huddle.id, among: kept))
     }
 
     /// Unique by lookup part, like `huddles.invite_code`.

@@ -62,6 +62,7 @@ HuddlePal/
 │   │   ├── HuddleHomeViewModel.swift    ├── ComposeViewModel.swift
 │   │   ├── ArchiveViewModel.swift      ├── DepositDetailViewModel.swift
 │   │   ├── HuddleManagementViewModels.swift  (Create / Join / Settings)
+│   │   ├── PaywallViewModel.swift      ├── ArchiveGate.swift (the free plan's 30 days)
 │   │   └── ProfileViewModel.swift
 │   ├── Views/
 │   │   ├── RootView.swift              Splash → Onboarding → MainTabView router
@@ -71,7 +72,8 @@ HuddlePal/
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
 │   │   ├── Detail/DepositDetailView.swift  Reactions + comments
 │   │   ├── HuddleManagement/            CreateHuddleView / JoinHuddleView / HuddleSettingsView
-│   │   └── Profile/ProfileView.swift   Draft editing + confirmed save,
+│   │   ├── Plus/PaywallView.swift      HuddlePals Plus: plans, renewal terms, Restore Purchases
+│   │   └── Profile/ProfileView.swift   Draft editing + confirmed save, the Plan section,
 │   │                                   sign out + DEBUG tools; TermsReaderView
 │   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,

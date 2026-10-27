@@ -71,6 +71,8 @@ private struct ProfileContent: View {
 
     @State private var showSignOutConfirmation = false
     @State private var showDeleteConfirmation = false
+    @State private var showManageSubscription = false
+    @State private var showPaywall = false
 
     var body: some View {
         List {
@@ -82,6 +84,7 @@ private struct ProfileContent: View {
             if let code = viewModel.keyCode {
                 keyCodeSection(code)
             }
+            plusSection
             accountSection
             #if DEBUG
             // Compile-time gated on top of the runtime backend check: the
@@ -176,9 +179,17 @@ private struct ProfileContent: View {
                     onCompleteExit(action)
                 }
             }
+            if viewModel.appleBillingContinues, viewModel.canManageSubscription {
+                Button("Manage subscription") { showManageSubscription = true }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your account, name, and profile photos are permanently removed and you're signed out. Photos you already deposited stay in your shared huddles as \"Former member\" — a huddle's archive is permanent. This can't be undone.")
+            Text("Your account, name, and profile photos are permanently removed and you're signed out. Photos and videos you already deposited stay in your shared huddles as \"Former member\" — a huddle's archive is permanent. This can't be undone."
+                 + (viewModel.appleBillingContinues ? "\n\n" + ProfileViewModel.billingContinuesWarning : ""))
+        }
+        .manageSubscriptionsSheet(isPresented: $showManageSubscription)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(context: .profile)
         }
         .confirmationDialog(
             "Apple couldn't confirm it's you",
@@ -452,6 +463,45 @@ private struct ProfileContent: View {
         }
     }
 
+    private var plusSection: some View {
+        Section {
+            HStack {
+                Label("HuddlePals Plus", systemImage: "sparkles")
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer()
+                Text(viewModel.plusSummary)
+                    .font(.system(size: 13))
+                    .foregroundStyle(viewModel.isPremium ? Theme.accent : Theme.textSecondary)
+            }
+            .listRowBackground(Theme.surface)
+
+            if viewModel.canManageSubscription {
+                Button("Manage subscription") { showManageSubscription = true }
+                    .listRowBackground(Theme.surface)
+            } else if !viewModel.isPremium {
+                Button("Get HuddlePals Plus") { showPaywall = true }
+                    .listRowBackground(Theme.surface)
+            }
+
+            Button("Restore Purchases") {
+                Task { await viewModel.restorePurchases() }
+            }
+            .disabled(viewModel.isRestoring)
+            .listRowBackground(Theme.surface)
+
+            if let message = viewModel.plusMessage {
+                Text(message)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.textSecondary)
+                    .listRowBackground(Theme.surface)
+            }
+        } header: {
+            Text("Plan")
+        } footer: {
+            Text("10 huddles of up to 10 people, video drops, and your whole archive. Everyone you invite joins free.")
+        }
+    }
+
     private var accountSection: some View {
         Section("Account") {
             Button {
@@ -463,7 +513,11 @@ private struct ProfileContent: View {
             .listRowBackground(Theme.surface)
 
             Button(role: .destructive) {
-                showDeleteConfirmation = true
+                Task {
+                    // Apple's billing goes on without the account: say so.
+                    await viewModel.prepareAccountDeletion()
+                    showDeleteConfirmation = true
+                }
             } label: {
                 Label("Delete account", systemImage: "trash")
             }

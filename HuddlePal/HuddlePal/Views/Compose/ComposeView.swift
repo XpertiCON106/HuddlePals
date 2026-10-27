@@ -111,6 +111,7 @@ private struct ComposeContent: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @State private var camera = CameraPicker.availability()
+    @State private var paywall: PaywallContext?
 
     var body: some View {
         Group {
@@ -126,19 +127,26 @@ private struct ComposeContent: View {
             // Back from Settings with camera access turned on.
             if phase == .active { camera = CameraPicker.availability() }
         }
+        .sheet(item: $paywall, onDismiss: {
+            // Bought Plus from the Video switch: straight to the video camera.
+            // (A clip kept because Plus had ended just posts now.)
+            if viewModel.canRecordVideo, viewModel.medium == .photo, viewModel.clip == nil {
+                viewModel.choose(.video)
+                if camera == .ready { showCamera = true }
+            }
+        }) { context in
+            PaywallView(context: context)
+        }
     }
 
     // MARK: Stage 1 — capture
 
     private var pickStage: some View {
         VStack(spacing: 18) {
-            if viewModel.canRecordVideo || viewModel.medium == .video {
-                mediumPicker
-                    .padding(.top, 12)
-            }
+            mediumPicker
+                .padding(.top, 12)
 
             photoArea
-                .padding(.top, viewModel.canRecordVideo || viewModel.medium == .video ? 0 : 12)
 
             CaptionTextField(text: $viewModel.caption)
                 .focused($captionFocused)
@@ -164,17 +172,23 @@ private struct ComposeContent: View {
         .padding(Theme.screenPadding)
     }
 
-    /// Photo or video (Plus): switching opens that camera.
+    /// Photo or video: switching opens that camera. Video is Plus; without
+    /// it the switch opens the paywall and stays on Photo.
     private var mediumPicker: some View {
         Picker("Today's deposit", selection: Binding(
             get: { viewModel.medium },
             set: { medium in
+                if medium == .video, !viewModel.canRecordVideo {
+                    paywall = .video
+                    return
+                }
                 viewModel.choose(medium)
                 if camera == .ready { showCamera = true }
             }
         )) {
             Label("Photo", systemImage: "camera.fill").tag(ComposeViewModel.Medium.photo)
-            Label("Video", systemImage: "video.fill").tag(ComposeViewModel.Medium.video)
+            Label(viewModel.canRecordVideo ? "Video" : "Video · Plus", systemImage: "video.fill")
+                .tag(ComposeViewModel.Medium.video)
         }
         .pickerStyle(.segmented)
         .disabled(viewModel.isSaving)
@@ -365,16 +379,28 @@ private struct ComposeContent: View {
             }
 
             if viewModel.videoNeedsPlus {
-                Button {
-                    viewModel.takePhotoInstead()
-                    if camera == .ready { showCamera = true }
-                } label: {
-                    Label("Take a photo instead", systemImage: "camera")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Theme.surfaceElevated, in: Capsule())
+                HStack(spacing: 10) {
+                    Button {
+                        viewModel.takePhotoInstead()
+                        if camera == .ready { showCamera = true }
+                    } label: {
+                        Label("Take a photo instead", systemImage: "camera")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Theme.surfaceElevated, in: Capsule())
+                    }
+                    Button {
+                        paywall = .video
+                    } label: {
+                        Label("Renew Plus", systemImage: "sparkles")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Theme.surfaceElevated, in: Capsule())
+                    }
                 }
             }
 

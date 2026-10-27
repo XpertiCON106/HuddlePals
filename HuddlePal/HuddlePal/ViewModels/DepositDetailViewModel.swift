@@ -22,6 +22,12 @@ final class DepositDetailViewModel {
         self.deposit = deposit
     }
 
+    /// Past the free plan's 30 days: the screen shows the lock and the way
+    /// to Plus, and loads nothing of the deposit (`ArchiveGate`).
+    var isLocked: Bool {
+        ArchiveGate.isLocked(deposit.dayKey, newestDayKey: deposit.huddle?.deposits.map(\.dayKey).max(), deps: deps)
+    }
+
     var sortedComments: [Comment] {
         let blocked = deps.session.blockedUserIDs
         return deposit.comments

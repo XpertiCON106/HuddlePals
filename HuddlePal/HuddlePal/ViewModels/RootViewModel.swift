@@ -31,6 +31,11 @@ final class RootViewModel {
         } catch {
             bootstrapError = error.localizedDescription
         }
+        // UI tests can start with the free limits on, or with Plus.
+        if let plans = deps.mockPlans {
+            if UITestHooks.freeLimits { plans.freeLimitsActive = true }
+            if UITestHooks.plus, let user = deps.session.currentUser { plans.setPlus(true, for: user.id) }
+        }
         deps.session.isReady = true
         // Bring the daily reminder schedule in line with launch state, and
         // register for activity notifications if they're allowed (never asks).

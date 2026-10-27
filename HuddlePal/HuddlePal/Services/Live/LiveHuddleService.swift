@@ -151,6 +151,22 @@ final class LiveHuddleService: HuddleServiceProtocol {
         }
     }
 
+    func joinStatus(for huddle: Huddle) async -> HuddleJoinStatus? {
+        struct StatusDTO: Decodable {
+            let accepting: Bool
+            let refusal: String?
+            let memberCount: Int
+            let memberCap: Int
+        }
+        guard let rows: [StatusDTO] = try? await client.rpc("huddle_join_status", params: [
+            "p_huddle": huddle.id.uuidString,
+        ]), let row = rows.first else { return nil }
+        let refusal = row.refusal.flatMap(HuddleEngine.JoinRefusal.init(rawValue:))
+        // A refusal this build doesn't know: no status rather than "open".
+        if !row.accepting, refusal == nil { return nil }
+        return HuddleJoinStatus(refusal: refusal, memberCount: row.memberCount, memberCap: row.memberCap)
+    }
+
     func leaveHuddle(_ huddle: Huddle, user: User) async throws {
         try await client.delete("memberships", query: [
             URLQueryItem(name: "huddle_id", value: "eq.\(huddle.id.uuidString)"),

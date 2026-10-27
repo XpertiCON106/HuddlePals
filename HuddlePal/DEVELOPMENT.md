@@ -298,6 +298,20 @@ codes, tokens and keys are never logged.
   local App Store for the tests (`SKTestSession`); selected as a scheme's
   StoreKit configuration it sells locally signed transactions, which the
   real server refuses, so it's no use against Supabase.
+- **Where the free plan shows** (only once the free limits are on, and
+  never with Plus): every gate opens `PaywallView` for its `PaywallContext`
+  (price, period, trial, renewal terms, Terms of Use / Terms / Privacy links,
+  Restore Purchases, as guideline 3.1.2 asks), which closes itself once Plus
+  is on. Archive days past the last 30 show who posted, locked, and never
+  load their media (`ArchiveGate`, which takes "today" as the latest of the
+  phone's day, the server's and the newest deposit's, so setting the clock
+  back opens nothing; the server doesn't hold these back). Compose shows
+  "Video · Plus"; Create Huddle says when 3 (or 10) are kept, from
+  `my_entitlement()` or the server's refusal; Huddle Settings asks
+  `huddle_join_status` and explains a full or paused invite instead of
+  showing a code that would fail. Profile's Plan section shows the plan,
+  Manage subscription (live) and Restore Purchases, and deleting the account
+  warns that Apple's billing goes on until it's cancelled.
 
 ## Backend setup and deploys
 
@@ -447,7 +461,9 @@ refuses what the server would. Profile → DEBUG (mock only): force the gate
 shut, turn the free plan's limits on, simulate Plus (or Plus that ends in a
 minute), simulate a subscription already linked to another account, advance
 the mock day, regenerate the seed (behind the splash, `session.isReady =
-false`; keep that).
+false`; keep that). UI tests start with the free limits on
+(`-ui-testing-free-limits`) or with Plus (`-ui-testing-plus`); the rest of
+the launch switches are listed in `Support/UITestHooks.swift`.
 
 ## Design
 

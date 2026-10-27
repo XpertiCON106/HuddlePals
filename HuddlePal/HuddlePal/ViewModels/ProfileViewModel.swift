@@ -221,6 +221,53 @@ final class ProfileViewModel {
         await deps.push.setEnabled(enabled)
     }
 
+    // MARK: HuddlePals Plus surface
+
+    var isPremium: Bool { deps.plus.isPremium }
+
+    var plusSummary: String {
+        guard deps.plus.isPremium else { return "Free plan" }
+        if let until = deps.plus.status?.premiumUntil, until != .distantFuture {
+            return "Current period ends \(until.formatted(date: .abbreviated, time: .omitted))"
+        }
+        return "On"
+    }
+
+    /// Apple's subscription settings: only for a real subscription.
+    var canManageSubscription: Bool { deps.isLive && deps.plus.isPremium }
+    private(set) var isRestoring = false
+    private(set) var plusMessage: String?
+
+    func restorePurchases() async {
+        guard !isRestoring else { return }
+        isRestoring = true
+        defer { isRestoring = false }
+        switch await deps.plus.restore() {
+        case .restored:
+            plusMessage = "HuddlePals Plus is on."
+            Haptics.success()
+        case .nothingToRestore:
+            plusMessage = "No HuddlePals Plus subscription was found for this Apple Account."
+        case .linkedToAnotherAccount:
+            plusMessage = PaywallViewModel.linkedElsewhere
+        case .cancelled:
+            plusMessage = nil
+        case .failed(let reason):
+            plusMessage = reason
+        }
+    }
+
+    /// Whether Apple will keep billing after the account is gone: deleting
+    /// it doesn't cancel the subscription. Checked before the dialog opens.
+    private(set) var appleBillingContinues = false
+
+    func prepareAccountDeletion() async {
+        appleBillingContinues = await deps.plus.appleSubscriptionWillRenew()
+    }
+
+    /// Store-wide wording, also checked by tests.
+    static let billingContinuesWarning = "Your HuddlePals Plus subscription is billed by Apple and keeps renewing after your account is deleted. To stop it, cancel it in Settings › your name › Subscriptions."
+
     #if DEBUG
     // DEBUG bindings surface
     var simulateNotPostedToday: Bool {

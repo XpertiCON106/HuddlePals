@@ -189,6 +189,37 @@ struct DepositCard: View {
     }
 }
 
+// MARK: - Archive tile past the free window
+
+/// A deposit from a day past the free plan's 30 days: its author's color
+/// under frosted glass, and a lock. Drawn from the author alone: the photo
+/// (or video) is never loaded, downloaded or decrypted, so there's nothing
+/// for a blur to reveal.
+struct LockedArchiveTile: View {
+    let author: User?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AvatarStyle.base(for: author?.avatarColorHex ?? "555555").opacity(0.45),
+                            Theme.surfaceElevated,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            Image(systemName: "lock.fill")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Theme.accent.opacity(0.6))
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Locked card
 
 /// Frosted card shown while the huddle is locked: author identity stays

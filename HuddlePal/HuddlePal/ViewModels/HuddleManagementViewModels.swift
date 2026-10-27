@@ -30,8 +30,22 @@ final class CreateHuddleViewModel {
 
     var canCreate: Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (1...TextLimit.huddleName).contains(trimmed.serverLength) && !isCreating
+        return (1...TextLimit.huddleName).contains(trimmed.serverLength) && !isCreating && limitReached == nil
     }
+
+    /// The account already keeps as many huddles as its plan allows (the
+    /// server would refuse one more): said before they type a name.
+    var limitReached: HuddleServiceError? {
+        if let refused { return refused }
+        guard let status = deps.plus.status, let limit = status.huddleLimit, status.keptHuddles >= limit else { return nil }
+        return limit >= HuddleLimits.plusHuddlesKept ? .huddleLimitPlus : .huddleLimitFree
+    }
+
+    /// The free plan's cap: Plus keeps up to 10.
+    var canGetPlus: Bool { limitReached == .huddleLimitFree }
+
+    /// The server's refusal, when the status here was out of date.
+    private var refused: HuddleServiceError?
 
     /// Shared via the share sheet: the link plus the code itself, for
     /// pasting where custom-scheme links don't open.
@@ -57,12 +71,23 @@ final class CreateHuddleViewModel {
             inviteCode = try? await deps.huddleService.inviteCode(for: huddle)
             createdHuddle = huddle
             Haptics.success()
+        } catch let error as HuddleServiceError where error == .huddleLimitFree || error == .huddleLimitPlus {
+            refused = error
+            await deps.plus.refresh()
+            return
         } catch {
             errorMessage = error.localizedDescription
             return
         }
+        // One more huddle kept, against the plan's cap.
+        await deps.plus.refresh()
         // The first huddle is when notifications start to matter.
         await deps.push.huddleJoined()
+    }
+
+    /// Back from the paywall: a fresh look at the cap.
+    func planChanged() {
+        refused = nil
     }
 }
 
@@ -144,10 +169,42 @@ final class HuddleSettingsViewModel {
     private(set) var isConfirmingKeyCheck = false
     /// Why sharing the key after a check failed.
     private(set) var keyCheckMessage: String?
+    /// Whether the huddle takes new members right now, by its keeper's plan.
+    private(set) var joinStatus: HuddleJoinStatus?
 
     init(deps: AppDependencies, huddle: Huddle) {
         self.deps = deps
         self.huddle = huddle
+    }
+
+    func loadJoinStatus() async {
+        joinStatus = await deps.huddleService.joinStatus(for: huddle)
+    }
+
+    /// Why nobody can join right now, in place of an invite code that would
+    /// fail; nil while the huddle takes new members (or it isn't known).
+    var invitesClosedMessage: String? {
+        switch joinStatus?.refusal {
+        case nil, .membershipLimit:
+            return nil
+        case .full:
+            return HuddleServiceError.huddleFull.errorDescription
+        case .maxMembers:
+            return HuddleServiceError.huddleAtMaximum.errorDescription
+        case .freeLimit:
+            return isKeeper
+                ? "This huddle is full on the free plan: \(HuddleLimits.freeMembers) people. It takes new members again when someone leaves, or with HuddlePals Plus for up to \(HuddleLimits.plusMembers)."
+                : "This huddle is full on the free plan: \(HuddleLimits.freeMembers) people. It takes new members again when someone leaves, or when its keeper gets HuddlePals Plus."
+        case .invitesPaused:
+            return isKeeper
+                ? "On the free plan only the \(HuddleLimits.freeHuddlesKept) huddles you've kept longest take new members, so invites to this one are paused. Leave one of those, or get HuddlePals Plus to reopen them."
+                : "Invites are paused: on the free plan only a keeper's \(HuddleLimits.freeHuddlesKept) longest-kept huddles take new members. Its keeper can reopen them with HuddlePals Plus."
+        }
+    }
+
+    /// The keeper can reopen a huddle the free plan has closed.
+    var canReopenWithPlus: Bool {
+        isKeeper && !deps.plus.isPremium && (joinStatus?.refusal == .freeLimit || joinStatus?.refusal == .invitesPaused)
     }
 
     func loadKeyChecks() async {
@@ -250,6 +307,8 @@ final class HuddleSettingsViewModel {
         do {
             try await deps.huddleService.leaveHuddle(huddle, user: user)
             didLeave = true
+            // One huddle fewer kept (or joined), against the plan's caps.
+            await deps.plus.refresh()
         } catch {
             errorMessage = error.localizedDescription
         }
