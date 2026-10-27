@@ -77,6 +77,6 @@ final class SeedWorldTests: XCTestCase {
         let clip = try await PlaceholderVideoGenerator.clip(seed: 42, duration: 1)
         XCTAssertEqual(clip.durationMs, 1000)
         XCTAssertLessThan(clip.mp4.count, HuddleLimits.maxVideoBytes)
-        XCTAssertEqual(clip.poster, PlaceholderImageGenerator.jpegData(seed: 42, size: CGSize(width: 360, height: 480)))
+        XCTAssertEqual(clip.poster, PlaceholderImageGenerator.jpegData(seed: 42, size: CGSize(width: 360, height: 640)), "9:16, like a recording")
     }
 }

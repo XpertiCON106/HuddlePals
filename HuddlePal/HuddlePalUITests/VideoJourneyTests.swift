@@ -46,11 +46,19 @@ final class VideoJourneyTests: HuddleUITestCase {
         sleep(1)
         snapshot("compose video preview")
 
+        // A 9:16 recording, as a phone makes: the buttons stay on screen.
         let next = waitFor(app.buttons["Continue"])
         waitUntilEnabled(next)
+        XCTAssertTrue(next.isHittable, "Continue on screen")
+        XCTAssertLessThanOrEqual(next.frame.maxY, app.frame.maxY)
         next.tap()
         waitFor(app.staticTexts["This is permanent"])
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Post'")).firstMatch.tap()
+        let post = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Post'")).firstMatch
+        waitFor(post)
+        snapshot("compose video confirm")
+        XCTAssertTrue(post.isHittable, "Post on screen")
+        XCTAssertLessThanOrEqual(post.frame.maxY, app.frame.maxY)
+        post.tap()
 
         let mine = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Video by You'")).firstMatch
         waitFor(mine, timeout: 25, "the posted video is in today's feed")

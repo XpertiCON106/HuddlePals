@@ -202,9 +202,7 @@ private struct ComposeContent: View {
                 .aspectRatio(3 / 4, contentMode: .fit)
 
             if let clip = viewModel.clip {
-                ClipPreview(clip: clip)
-                    .aspectRatio(3 / 4, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                Self.framed { ClipPreview(clip: clip) }
                     .overlay(alignment: .bottomTrailing) {
                         Button {
                             showCamera = true
@@ -219,12 +217,12 @@ private struct ComposeContent: View {
                         .padding(12)
                     }
             } else if let image = viewModel.previewImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .aspectRatio(3 / 4, contentMode: .fit)
-                    .accessibilityLabel("Your photo")
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                Self.framed {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .accessibilityLabel("Your photo")
+                }
                     .overlay(alignment: .bottomTrailing) {
                         Button {
                             showCamera = true
@@ -324,14 +322,23 @@ private struct ComposeContent: View {
         }
     }
 
+    /// A 3:4 card the picture fills. Only the frame takes part in layout, so
+    /// a picture of another shape (a video is 9:16) can't make the card
+    /// taller and push the buttons off the screen, and on a small phone the
+    /// card shrinks to make room for them.
+    private static func framed<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        Color.clear
+            .aspectRatio(3 / 4, contentMode: .fit)
+            .overlay { content() }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+    }
+
     // MARK: Stage 2 — the permanence gate
 
     private var confirmStage: some View {
         VStack(spacing: 18) {
             if let clip = viewModel.clip {
-                ClipPreview(clip: clip)
-                    .aspectRatio(3 / 4, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                Self.framed { ClipPreview(clip: clip) }
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
                             .strokeBorder(Theme.hairline, lineWidth: 1)
@@ -339,12 +346,12 @@ private struct ComposeContent: View {
                     .padding(.top, 12)
                     .transition(.scale(scale: 0.97).combined(with: .opacity))
             } else if let image = viewModel.previewImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .aspectRatio(3 / 4, contentMode: .fit)
-                    .accessibilityLabel("Your photo")
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+                Self.framed {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .accessibilityLabel("Your photo")
+                }
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
                             .strokeBorder(Theme.hairline, lineWidth: 1)

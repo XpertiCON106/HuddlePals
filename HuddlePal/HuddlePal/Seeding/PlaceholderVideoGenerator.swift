@@ -4,7 +4,9 @@ import UIKit
 /// Deterministic placeholder video clips for the seed world: a placeholder
 /// photo (`PlaceholderImageGenerator`) slowly zooming in, as a silent H.264
 /// MP4. The first frame is the photo itself, so its JPEG is the poster. No
-/// bundled assets, and it runs on the Simulator, which has no camera.
+/// bundled assets, and it runs on the Simulator, which has no camera. Tall
+/// (9:16) like the camera's portrait recordings, so screens are laid out for
+/// the shape real videos have.
 enum PlaceholderVideoGenerator {
     struct Clip {
         /// The MP4 file's bytes.
@@ -20,7 +22,7 @@ enum PlaceholderVideoGenerator {
 
     static func clip(
         seed: Int,
-        size: CGSize = CGSize(width: 360, height: 480),
+        size: CGSize = CGSize(width: 360, height: 640),
         duration: TimeInterval = 2,
         framesPerSecond: Int32 = 15
     ) async throws -> Clip {

@@ -270,27 +270,34 @@ struct ClipPreview: View {
     @State private var clipPlayer: LoopingClipPlayer?
 
     var body: some View {
-        ZStack {
-            Image(uiImage: clip.posterImage)
-                .resizable()
-                .scaledToFill()
-            if let clipPlayer {
-                ClipPlayerView(player: clipPlayer.player)
+        // Exactly the frame it's given: a video is taller (9:16) than the
+        // frames it's shown in, and the poster filling one must not stretch
+        // it and push what's below off the screen.
+        Color.clear
+            .overlay {
+                Image(uiImage: clip.posterImage)
+                    .resizable()
+                    .scaledToFill()
             }
-        }
-        .overlay(alignment: .topLeading) {
-            VideoBadge(durationMs: clip.durationMs)
-                .padding(10)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Your video, \(DepositVideoPlayer.seconds(clip.durationMs)) seconds")
-        .task(id: clip.id) {
-            let player = LoopingClipPlayer(clip: clip.clip)
-            player.isMuted = true
-            PlaybackAudio.muted()
-            clipPlayer = player
-            player.play()
-        }
-        .onDisappear { clipPlayer?.pause() }
+            .overlay {
+                if let clipPlayer {
+                    ClipPlayerView(player: clipPlayer.player)
+                }
+            }
+            .clipped()
+            .overlay(alignment: .topLeading) {
+                VideoBadge(durationMs: clip.durationMs)
+                    .padding(10)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Your video, \(DepositVideoPlayer.seconds(clip.durationMs)) seconds")
+            .task(id: clip.id) {
+                let player = LoopingClipPlayer(clip: clip.clip)
+                player.isMuted = true
+                PlaybackAudio.muted()
+                clipPlayer = player
+                player.play()
+            }
+            .onDisappear { clipPlayer?.pause() }
     }
 }

@@ -376,13 +376,21 @@ final class LivePlusServiceTests: XCTestCase {
         plus.start()
         _ = await plus.purchase(try await product(PlusCatalog.monthly, in: plus))
         let bought = try transactionPayload(server.verifyRequests.first)
-        let before = try await verifyRequests(atLeast: 1).count
+        let boughtID = try XCTUnwrap(bought["transactionId"] as? String)
 
         try store.forceRenewalOfSubscription(productIdentifier: PlusCatalog.monthly)
-        let renewal = try transactionPayload(try await verifyRequests(atLeast: before + 1).last)
+        // StoreKit may hand the purchase to the listener again too: wait for
+        // the request that carries a new transaction.
+        var renewalRequest: [String: Any]?
+        for _ in 0..<50 {
+            renewalRequest = server.verifyRequests.last { (try? transactionPayload($0))?["transactionId"] as? String != boughtID }
+            if renewalRequest != nil { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        let renewal = try transactionPayload(try XCTUnwrap(renewalRequest, "the renewal never reached the server"))
         XCTAssertEqual(renewal["originalTransactionId"] as? String, bought["originalTransactionId"] as? String, "the same subscription")
-        XCTAssertNotEqual(renewal["transactionId"] as? String, bought["transactionId"] as? String, "a new transaction")
-        XCTAssertEqual(server.verifyRequests.last?["restore"] as? Bool, false)
+        XCTAssertNotEqual(renewal["transactionId"] as? String, boughtID, "a new transaction")
+        XCTAssertEqual(renewalRequest?["restore"] as? Bool, false)
         let unfinished = try await unfinishedCountSettled()
         XCTAssertEqual(unfinished, 0, "finished once the server has it")
     }
