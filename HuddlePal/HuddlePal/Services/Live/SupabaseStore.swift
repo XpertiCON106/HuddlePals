@@ -100,6 +100,7 @@ final class SupabaseStore {
                 existing.role = MembershipRole(rawValue: dto.role) ?? .member
                 existing.skipTokensRemaining = dto.skipTokensRemaining
                 existing.joinedDayKey = dto.joinedDayKey
+                existing.keeperSince = dto.keeperSince
             } else {
                 let membership = Membership(
                     id: dto.id,
@@ -108,7 +109,8 @@ final class SupabaseStore {
                     role: MembershipRole(rawValue: dto.role) ?? .member,
                     skipTokensRemaining: dto.skipTokensRemaining,
                     joinedAt: dto.joinedAt ?? .now,
-                    joinedDayKey: dto.joinedDayKey
+                    joinedDayKey: dto.joinedDayKey,
+                    keeperSince: dto.keeperSince
                 )
                 context.insert(membership)
             }
@@ -144,6 +146,7 @@ final class SupabaseStore {
                 existing.caption = dto.caption
                 existing.dayKey = dto.dayKey
                 existing.wrappedPhotoKey = Self.wrappedPhotoKey(of: dto)
+                Self.applyMedia(of: dto, to: existing)
                 if existing.author?.id != author?.id { existing.author = author }
             } else {
                 let deposit = Deposit(
@@ -156,6 +159,7 @@ final class SupabaseStore {
                     createdAt: dto.createdAt ?? .now,
                     wrappedPhotoKey: Self.wrappedPhotoKey(of: dto)
                 )
+                Self.applyMedia(of: dto, to: deposit)
                 context.insert(deposit)
                 depositsByID[dto.id] = deposit
             }
@@ -228,6 +232,7 @@ final class SupabaseStore {
             existing.caption = dto.caption
             existing.dayKey = dto.dayKey
             existing.wrappedPhotoKey = Self.wrappedPhotoKey(of: dto)
+            Self.applyMedia(of: dto, to: existing)
             return existing
         }
         let deposit = Deposit(
@@ -240,8 +245,24 @@ final class SupabaseStore {
             createdAt: dto.createdAt ?? .now,
             wrappedPhotoKey: Self.wrappedPhotoKey(of: dto)
         )
+        Self.applyMedia(of: dto, to: deposit)
         context.insert(deposit)
         return deposit
+    }
+
+    /// A video's clip and length. A video row without a clip path, or a media
+    /// type this build doesn't know, stays a photo: its poster is a JPEG at
+    /// the storage path either way.
+    private static func applyMedia(of dto: DepositDTO, to deposit: Deposit) {
+        if dto.mediaType == DepositMediaType.video.rawValue, let videoPath = dto.videoPath {
+            deposit.mediaType = .video
+            deposit.localVideoPath = LiveMediaService.cachePath(forStoragePath: videoPath)
+            deposit.durationMs = dto.durationMs
+        } else {
+            deposit.mediaType = .photo
+            deposit.localVideoPath = nil
+            deposit.durationMs = nil
+        }
     }
 
     func insertReactionLocally(_ dto: ReactionDTO, deposit: Deposit, user: User) {

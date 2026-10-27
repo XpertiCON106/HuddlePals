@@ -69,11 +69,17 @@ final class LiveHuddleService: HuddleServiceProtocol {
     }
 
     func createHuddle(name: String, emoji: String, keeper: User) async throws -> Huddle {
-        let rows: [HuddleDTO] = try await client.rpc("create_huddle", params: [
-            "p_name": name.trimmingCharacters(in: .whitespacesAndNewlines),
-            "p_emoji": emoji,
-            "p_day_key": todayKey,
-        ])
+        let rows: [HuddleDTO]
+        do {
+            rows = try await client.rpc("create_huddle", params: [
+                "p_name": name.trimmingCharacters(in: .whitespacesAndNewlines),
+                "p_emoji": emoji,
+                "p_day_key": todayKey,
+            ])
+        } catch let SupabaseClient.ClientError.http(status, message) {
+            if let refusal = HuddleServiceError(serverCreateMessage: message) { throw refusal }
+            throw SupabaseClient.ClientError.http(status: status, message: message)
+        }
         guard let dto = rows.first else {
             throw SupabaseClient.ClientError.http(status: 500, message: "create_huddle returned nothing")
         }
@@ -122,7 +128,9 @@ final class LiveHuddleService: HuddleServiceProtocol {
             // Map the RPC's raised exceptions onto the app's error space.
             if message.contains("invite_code_not_found") { throw HuddleServiceError.inviteCodeNotFound }
             if message.contains("already_member") { throw HuddleServiceError.alreadyMember }
-            if message.contains("huddle_full") { throw HuddleServiceError.huddleFull }
+            // The limits first: their codes contain "blocked" too (see
+            // HuddleServiceError.init(serverJoinMessage:)).
+            if let refusal = HuddleServiceError(serverJoinMessage: message) { throw refusal }
             if message.contains("blocked") { throw HuddleServiceError.cannotJoin }
             if message.contains("too_many_attempts") { throw HuddleServiceError.tooManyAttempts }
             throw SupabaseClient.ClientError.http(status: 0, message: message)

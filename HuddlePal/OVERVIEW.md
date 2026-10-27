@@ -166,7 +166,8 @@ The decision happens once, at launch, in `HuddlePalApp.init`: if a `HuddlePal/Hu
 | Streak | `HuddleEngine.computeStreak` on-device | `recompute_streak` RPC — server is the single source of truth so all phones agree |
 | Skips | In-memory `SkipLedger`, seeded | `skips` table + `spend_skip_token` RPC |
 | Notifications | Per-user local reminders (`ReminderCoordinator`); push permission and registration run, but nothing sends | Same reminders, plus activity pushes: `device_tokens` + database triggers → `send-push` edge function → APNs |
-| Seeding / DEBUG | 30 days of history; debug tools visible | Disabled / hidden |
+| Plans (free / Plus) | In-memory `MockPlanLedger`; the mock huddle service applies the same caps | `user_entitlements` + `huddle_join_rule` / `create_huddle` (migration 013), enforced by Postgres |
+| Seeding / DEBUG | 45 days of history and a video; debug tools visible | Disabled / hidden |
 
 ## 6. Data model
 
@@ -399,8 +400,8 @@ No red badges, no infinite scroll, no engagement tricks.
 First launch (mock mode) builds a complete demo world ([Seeding/SeedDataService.swift](HuddlePal/Seeding/SeedDataService.swift)):
 
 - Two huddles: **"The Crew" 🏔** (code `CREW42` — You as keeper, Maya, Sam, Riley) and **"Sunday Dinners" 🍝** (code `PASTA7` — You + Maya), so the multi-huddle shelf is alive from the first second. Members have bios, profile photos, and vibrant identity colors.
-- 30 days of history with deliberate texture: misses at day −24 (Riley) and −7 (Maya) that reset the streak, a skip-token save at day −14 (Sam, who therefore has 1 token left), reactions and comments on yesterday. Net seeded streak: **6**.
-- ~100 placeholder photos generated on-device (gradient + SF Symbol via `UIGraphicsImageRenderer`) — no bundled assets, no network.
+- 45 days of history with deliberate texture: misses at day −24 (Riley) and −7 (Maya) that reset the streak, a skip-token save at day −14 (Sam, who therefore has 1 token left), reactions and comments on yesterday. Net seeded streak: **6**. Days −30 and older are past the free plan's 30-day archive window.
+- ~200 placeholder photos generated on-device (gradient + SF Symbol via `UIGraphicsImageRenderer`) — no bundled assets, no network — and one video: Maya's post yesterday, a 2-second clip of a placeholder photo zooming in (`PlaceholderVideoGenerator`, H.264 through `AVAssetWriter`), with that photo as its poster.
 - Today: Maya, Sam, and Riley have posted; **you haven't** — so the app opens straight into the LOCKED state and the core mechanic is visible within the first second.
 
 Profile → DEBUG (mock only): **simulate "I haven't posted today"** (forces the gate shut), **advance mock day by 1** (shifts the injected clock — the streak math runs for real), **regenerate seed data** (full teardown + rebuild behind the splash screen). Sign out and walk the whole auth flow with code `123456`; a fresh sign-up gets an empty account that can join `CREW42`.

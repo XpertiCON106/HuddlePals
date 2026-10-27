@@ -2,16 +2,19 @@ import Foundation
 import SwiftData
 
 /// First-launch seeding: two huddles (so the multi-huddle shelf has life),
-/// four users with bios and profile photos, ~30 days of history with varied
-/// participation, and a "today" where everyone except the current user has
-/// deposited — so the app opens straight into the LOCKED state.
+/// four users with bios and profile photos, 45 days of history with varied
+/// participation (past the free plan's 30-day archive window, so its locked
+/// days show), one video drop, and a "today" where everyone except the
+/// current user has deposited — so the app opens straight into the LOCKED
+/// state.
 @MainActor
 final class SeedDataService {
     static let currentUserName = "You"
     /// The seeded huddles' invite codes (lookup part first, as live stores it).
     static let crewInviteCode = "CREW427KQ9MWXH4TBR2VNC8JPZ3DFYGS"
     static let dinnersInviteCode = "PASTA7M4QX8RZ2VKHT7WNB3CJP9DGFYS"
-    private static let seededKey = "huddlepal.mock.didSeed.v2"
+    /// v3: 45 days and a video. An older store is wiped and rebuilt.
+    private static let seededKey = "huddlepal.mock.didSeed.v3"
 
     private let context: ModelContext
     private let engine: HuddleEngine
@@ -62,12 +65,18 @@ final class SeedDataService {
     // MARK: - Seed plan
 
     /// "The Crew" day offsets where a member skipped or missed. Everything
-    /// else in -30...(-1) is a perfect day. The last break is at -7, so the
-    /// seeded streak is 6 going into today.
+    /// else in -45...(-1) is a perfect day. The last break is at -7, so the
+    /// seeded streak is 6 going into today. Days -30 and older are past the
+    /// free plan's archive window.
     private struct SeedPlan {
-        static let historyDays = -30...(-1)
+        static let historyDays = -45...(-1)
+        /// The Crew's members joined the day before its history starts.
+        static let crewJoinedDaysAgo = 47
         static let missedDays: [Int: String] = [-24: "Riley", -7: "Maya"] // streak breaks
         static let skippedDays: [Int: String] = [-14: "Sam"] // token spent, streak survives
+        /// Maya's post yesterday is a video (Plus), so playback and the
+        /// video badge have something to show.
+        static let videoDeposit = (offset: -1, author: "Maya")
         static let dinnerHistoryDays = -8...(-1) // second huddle: all perfect
     }
 
@@ -122,16 +131,21 @@ final class SeedDataService {
         ]
         var imageSeed = 0
 
-        // ── Huddle 1: The Crew (all four, 30 days, textured history) ──
+        // ── Huddle 1: The Crew (all four, 45 days, textured history) ──
+        // Four members: on the free plan it's full, a ready-made case for
+        // the member cap.
         let crew = Huddle(name: "The Crew", emoji: "🏔", inviteCode: Self.crewInviteCode)
         context.insert(crew)
+        let crewJoined = now.addingTimeInterval(TimeInterval(-SeedPlan.crewJoinedDaysAgo * 86_400))
         for (index, user) in allUsers.enumerated() {
+            let joinedAt = crewJoined.addingTimeInterval(TimeInterval(index * 600))
             context.insert(Membership(
                 user: user,
                 huddle: crew,
                 role: user === you ? .keeper : .member,
                 skipTokensRemaining: user.displayName == "Sam" ? 1 : 2, // Sam spent one
-                joinedAt: now.addingTimeInterval(TimeInterval(-32 * 86_400 + index * 600))
+                joinedAt: joinedAt,
+                keeperSince: user === you ? joinedAt : nil
             ))
         }
 
@@ -149,7 +163,8 @@ final class SeedDataService {
                     huddle: crew, author: user, dayKey: key,
                     createdAt: dayStart.addingTimeInterval(TimeInterval(9 * 3600 + userIndex * 4200 + offset * 60)),
                     imageSeed: imageSeed,
-                    caption: captions[(imageSeed + userIndex) % captions.count]
+                    caption: captions[(imageSeed + userIndex) % captions.count],
+                    asVideo: offset == SeedPlan.videoDeposit.offset && user.displayName == SeedPlan.videoDeposit.author
                 )
             }
         }
@@ -167,7 +182,8 @@ final class SeedDataService {
         // ── Huddle 2: Sunday Dinners (You + Maya — multi-huddle demo) ──
         let dinners = Huddle(name: "Sunday Dinners", emoji: "🍝", inviteCode: Self.dinnersInviteCode)
         context.insert(dinners)
-        context.insert(Membership(user: you, huddle: dinners, role: .keeper, joinedAt: now.addingTimeInterval(-10 * 86_400)))
+        let dinnersJoined = now.addingTimeInterval(-10 * 86_400)
+        context.insert(Membership(user: you, huddle: dinners, role: .keeper, joinedAt: dinnersJoined, keeperSince: dinnersJoined))
         context.insert(Membership(user: maya, huddle: dinners, joinedAt: now.addingTimeInterval(-10 * 86_400 + 300)))
 
         for offset in SeedPlan.dinnerHistoryDays {
@@ -228,13 +244,30 @@ final class SeedDataService {
         dayKey: String,
         createdAt: Date,
         imageSeed: Int,
-        caption: String?
+        caption: String?,
+        asVideo: Bool = false
     ) async throws {
+        let name = "\(huddle.id.uuidString)/seed-\(dayKey)-\(author.id.uuidString.prefix(8))"
+        // A video as the app stores one: its poster where a photo would be,
+        // the clip next to it. If this Simulator can't encode one, a photo.
+        if asVideo, let clip = try? await PlaceholderVideoGenerator.clip(seed: imageSeed) {
+            let poster = try await media.saveImageData(clip.poster, preferredName: "\(name).jpg")
+            let video = try await media.saveImageData(clip.mp4, preferredName: "\(name).mp4")
+            context.insert(Deposit(
+                huddle: huddle,
+                author: author,
+                localImagePath: poster,
+                caption: HuddleEngine.sanitizedCaption(caption),
+                dayKey: dayKey,
+                createdAt: createdAt,
+                mediaType: .video,
+                localVideoPath: video,
+                durationMs: clip.durationMs
+            ))
+            return
+        }
         let data = PlaceholderImageGenerator.jpegData(seed: imageSeed)
-        let path = try await media.saveImageData(
-            data,
-            preferredName: "\(huddle.id.uuidString)/seed-\(dayKey)-\(author.id.uuidString.prefix(8)).jpg"
-        )
+        let path = try await media.saveImageData(data, preferredName: "\(name).jpg")
         context.insert(Deposit(
             huddle: huddle,
             author: author,

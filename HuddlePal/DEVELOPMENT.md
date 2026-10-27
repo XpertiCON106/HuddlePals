@@ -406,11 +406,15 @@ Commands run from the repo root.
 
 The first mock launch seeds "The Crew" 🏔 (code
 `SeedDataService.crewInviteCode`) with You (keeper), Maya, Sam and Riley,
-plus "Sunday Dinners" 🍝; 30 days of history, a couple of misses and a
-skip, and a today where everyone but You has posted, so the app opens
-locked. Profile → DEBUG (mock only): force the gate shut, advance the mock
-day, regenerate the seed (behind the splash, `session.isReady = false`;
-keep that).
+plus "Sunday Dinners" 🍝; 45 days of history (past the free plan's 30-day
+archive window), a couple of misses and a skip, Maya's post yesterday as a
+2-second video (`PlaceholderVideoGenerator`), and a today where everyone but
+You has posted, so the app opens locked. The Crew has 4 members: full on the
+free plan. Who has Plus and whether the free limits are on live in
+`MockPlanLedger` (off by default, as on the server); the mock huddle service
+refuses what the server would. Profile → DEBUG (mock only): force the gate
+shut, advance the mock day, regenerate the seed (behind the splash,
+`session.isReady = false`; keep that).
 
 ## Design
 

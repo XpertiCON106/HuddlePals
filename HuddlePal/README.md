@@ -31,8 +31,10 @@ HuddlePal/
 │   │   └── SchemaModels.swift          SwiftData @Models: User, Huddle, Membership,
 │   │                                   Deposit, Reaction, Comment (+ MembershipRole)
 │   ├── Engine/
-│   │   └── HuddleEngine.swift           Pure logic: dayKey, gate, streaks, backfill,
-│   │                                   permanence, recovery window, captions
+│   │   ├── HuddleEngine.swift           Pure logic: dayKey, gate, streaks, backfill,
+│   │   │                               permanence, recovery window, captions, the
+│   │   │                               archive window, the plans' join and create rules
+│   │   └── HuddleLimits.swift           The free plan's and Plus's limits
 │   ├── Services/
 │   │   ├── AuthService.swift           AuthServiceProtocol + MockAuthService
 │   │   ├── HuddleService.swift          HuddleServiceProtocol + MockHuddleService + SkipLedger
@@ -48,8 +50,9 @@ HuddlePal/
 │   │    Support/PushNotifications.swift — server pushes through APNs;
 │   │    Support/InviteCode.swift — the invite code format)
 │   ├── Seeding/
-│   │   ├── SeedDataService.swift       First-launch world: 4 users, 30 days, mixed participation
-│   │   └── PlaceholderImageGenerator.swift  Gradient + SF Symbol via UIGraphicsImageRenderer
+│   │   ├── SeedDataService.swift       First-launch world: 4 users, 45 days, mixed participation, one video
+│   │   ├── PlaceholderImageGenerator.swift  Gradient + SF Symbol via UIGraphicsImageRenderer
+│   │   └── PlaceholderVideoGenerator.swift  A placeholder photo zooming in, as an H.264 MP4
 │   ├── ViewModels/                     @Observable, one per screen; the only layer
 │   │   │                               allowed to call services
 │   │   ├── RootViewModel.swift         ├── OnboardingViewModel.swift

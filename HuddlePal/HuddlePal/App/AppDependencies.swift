@@ -81,6 +81,9 @@ final class AppDependencies {
     let depositService: any DepositServiceProtocol
     let mediaService: any MediaServiceProtocol
     let moderationService: any ModerationServiceProtocol
+    /// Mock only: who has Plus and whether the free limits are on in the
+    /// offline world (live, the server knows). Nil in live mode.
+    let mockPlans: MockPlanLedger?
     let seeder: SeedDataService
     /// Per-user daily upload reminders (local notifications, backend-agnostic).
     let reminders: ReminderCoordinator
@@ -104,6 +107,7 @@ final class AppDependencies {
         depositService: any DepositServiceProtocol,
         mediaService: any MediaServiceProtocol,
         moderationService: any ModerationServiceProtocol,
+        mockPlans: MockPlanLedger? = nil,
         seeder: SeedDataService,
         reminders: ReminderCoordinator,
         push: PushCoordinator? = nil
@@ -123,6 +127,7 @@ final class AppDependencies {
         self.depositService = depositService
         self.mediaService = mediaService
         self.moderationService = moderationService
+        self.mockPlans = mockPlans
         self.seeder = seeder
         self.reminders = reminders
         self.push = push ?? PushCoordinator(
@@ -164,6 +169,7 @@ final class AppDependencies {
         let engine = HuddleEngine()
         let dateProvider = AppDateProvider()
         let skipLedger = SkipLedger()
+        let plans = MockPlanLedger()
         let media = MockMediaService()
         let session = AppSession()
 
@@ -177,11 +183,12 @@ final class AppDependencies {
             auth: MockAuthService(context: context),
             appleReauth: MockAppleReauthenticator(),
             huddleService: MockHuddleService(
-                context: context, engine: engine, skipLedger: skipLedger, dateProvider: dateProvider
+                context: context, engine: engine, skipLedger: skipLedger, dateProvider: dateProvider, plans: plans
             ),
             depositService: MockDepositService(context: context, engine: engine),
             mediaService: media,
             moderationService: MockModerationService(session: session),
+            mockPlans: plans,
             seeder: SeedDataService(
                 context: context,
                 engine: engine,
@@ -267,6 +274,12 @@ final class AppDependencies {
         } catch {
             // A schema mismatch from an old dev build is the only realistic
             // cause; fall back to a fresh in-memory store rather than crash.
+            // Said out loud in DEBUG: a model change that doesn't migrate
+            // would otherwise just look like an empty app (StoreMigrationTests
+            // opens a store written before the last change).
+            #if DEBUG
+            print("[ModelContainer] couldn't open the store, using memory instead: \(error)")
+            #endif
             return try! ModelContainer(
                 for: schema,
                 configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
