@@ -37,5 +37,6 @@ final class RootViewModel {
         await deps.reminders.refresh()
         await deps.push.refresh()
         await deps.termsRecorder?.refresh()
+        await deps.plus.refresh()
     }
 }

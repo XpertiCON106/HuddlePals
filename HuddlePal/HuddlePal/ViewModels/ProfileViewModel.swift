@@ -229,6 +229,39 @@ final class ProfileViewModel {
     }
 
     var mockDayOffset: Int { deps.dateProvider.dayOffset }
+
+    // The offline world's plans (MockPlanLedger): Plus for the signed-in
+    // account, the free plan's limits, and an Apple subscription already
+    // linked to someone else.
+    var simulatePlus: Bool {
+        get { deps.plus.isPremium }
+        set {
+            guard let userID = deps.session.currentUser?.id else { return }
+            deps.mockPlans?.setPlus(newValue, for: userID)
+        }
+    }
+
+    /// Plus that runs out a minute from now, to watch the perks end.
+    func plusExpiresInAMinute() {
+        guard let userID = deps.session.currentUser?.id else { return }
+        deps.mockPlans?.setPlus(until: .now.addingTimeInterval(60), for: userID)
+    }
+
+    /// When the simulated Plus ends; nil without it, or with no end.
+    var simulatedPlusUntil: Date? {
+        guard let until = deps.plus.status?.premiumUntil, until != .distantFuture, deps.plus.isPremium else { return nil }
+        return until
+    }
+
+    var simulateFreeLimits: Bool {
+        get { deps.mockPlans?.freeLimitsActive ?? false }
+        set { deps.mockPlans?.freeLimitsActive = newValue }
+    }
+
+    var simulatePurchasesLinkedElsewhere: Bool {
+        get { deps.mockPlans?.purchasesLinkedElsewhere ?? false }
+        set { deps.mockPlans?.purchasesLinkedElsewhere = newValue }
+    }
     #endif
 
     /// Live builds hide the DEBUG tooling — those knobs only make sense

@@ -14,7 +14,7 @@ Every service is a protocol with two implementations — a seeded offline **mock
 4. Tap **Add today's memory** → take a photo with the camera (deposits are camera-only; on the Simulator, which has no camera, Compose shows a "no camera" state — run on a device to deposit), confirm the permanence prompt → the lock springs open and today is revealed.
 5. ⌘U runs the test suite (engine rules, critical mock flows, live sync reconciliation, sign-in input, profile editor, photo encryption).
 
-**Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.
+**Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), turn the free plan's limits on, simulate HuddlePals Plus (or Plus that ends in a minute) and a subscription linked to another account, advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.
 
 ## File map
 
@@ -42,8 +42,11 @@ HuddlePal/
 │   │   ├── MediaService.swift          MediaServiceProtocol + MockMediaService
 │   │   ├── ModerationService.swift     ModerationServiceProtocol + MockModerationService
 │   │   ├── PushTokenService.swift      PushTokenServiceProtocol + MockPushTokenService
+│   │   ├── PlusService.swift           PlusServiceProtocol + MockPlusService, PlanStatus
+│   │   ├── MockPlanLedger.swift        The offline world's Plus and free-limits switch
 │   │   ├── Live/                       SupabaseClient, SupabaseStore, DTOs, KeychainStore,
-│   │   │                               BackendConfig, Live*Service ×6, and E2EE photos:
+│   │   │                               BackendConfig, Live*Service ×7 (LivePlusService:
+│   │   │                               StoreKit 2 + verify-subscription), and E2EE photos:
 │   │   │                               PhotoCrypto, InviteCrypto, IdentityKeychain,
 │   │   │                               LivePhotoKeyring
 │   │   (notifications: Support/DailyReminders.swift — local reminders;

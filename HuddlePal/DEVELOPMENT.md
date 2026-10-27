@@ -267,6 +267,19 @@ codes, tokens and keys are never logged.
   joins from the keeper's plan; `create_huddle` caps huddles kept; posting a
   video (and uploading a `.mp4`) takes Plus. None of the free limits apply
   until `app_limits.free_limits_start` is set.
+- **Plus in the app** (`PlusServiceProtocol`, `deps.plus`): the server's
+  word, from `my_entitlement()`, judged by the server's clock
+  (`PlanStatus.clockOffset`), cached per account for offline launches.
+  `LivePlusService` buys with StoreKit 2 (`appAccountToken` = the user's id),
+  sends every transaction to `verify-subscription` and finishes it only once
+  the server has it, listens to `Transaction.updates` from launch, and on
+  launch, sign-in and foreground sends any subscription of this account the
+  server hasn't recorded. A subscription naming another account, or none, is
+  sent only on Restore Purchases. `MockPlusService` buys by flipping
+  `MockPlanLedger`. `HuddlePalTests/StoreKit/HuddlePalsPlus.storekit` is a
+  local App Store for the tests (`SKTestSession`); selected as a scheme's
+  StoreKit configuration it sells locally signed transactions, which the
+  real server refuses, so it's no use against Supabase.
 
 ## Backend setup and deploys
 
@@ -413,8 +426,10 @@ You has posted, so the app opens locked. The Crew has 4 members: full on the
 free plan. Who has Plus and whether the free limits are on live in
 `MockPlanLedger` (off by default, as on the server); the mock huddle service
 refuses what the server would. Profile → DEBUG (mock only): force the gate
-shut, advance the mock day, regenerate the seed (behind the splash,
-`session.isReady = false`; keep that).
+shut, turn the free plan's limits on, simulate Plus (or Plus that ends in a
+minute), simulate a subscription already linked to another account, advance
+the mock day, regenerate the seed (behind the splash, `session.isReady =
+false`; keep that).
 
 ## Design
 

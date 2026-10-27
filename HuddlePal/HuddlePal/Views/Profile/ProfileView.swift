@@ -485,6 +485,49 @@ private struct ProfileContent: View {
             }
             .listRowBackground(Theme.surface)
 
+            Toggle(isOn: $viewModel.simulateFreeLimits) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Free plan limits")
+                    Text("3 huddles kept, 4 members, invites paused past the first 3, the 30-day archive. Off: the old rules, as the server ships.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .listRowBackground(Theme.surface)
+
+            Toggle(isOn: $viewModel.simulatePlus) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Simulate: HuddlePals Plus")
+                    if let until = viewModel.simulatedPlusUntil {
+                        Text("Ends \(until, format: .dateTime.hour().minute().second())")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textSecondary)
+                    } else {
+                        Text("10 huddles of up to 10, video drops, the whole archive.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+            }
+            .listRowBackground(Theme.surface)
+
+            Button {
+                viewModel.plusExpiresInAMinute()
+            } label: {
+                Label("Plus that ends in a minute", systemImage: "timer")
+            }
+            .listRowBackground(Theme.surface)
+
+            Toggle(isOn: $viewModel.simulatePurchasesLinkedElsewhere) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Simulate: subscription linked elsewhere")
+                    Text("Buying or restoring Plus finds it already linked to another account.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .listRowBackground(Theme.surface)
+
             Button {
                 Task { await viewModel.advanceMockDay() }
             } label: {

@@ -166,7 +166,7 @@ The decision happens once, at launch, in `HuddlePalApp.init`: if a `HuddlePal/Hu
 | Streak | `HuddleEngine.computeStreak` on-device | `recompute_streak` RPC — server is the single source of truth so all phones agree |
 | Skips | In-memory `SkipLedger`, seeded | `skips` table + `spend_skip_token` RPC |
 | Notifications | Per-user local reminders (`ReminderCoordinator`); push permission and registration run, but nothing sends | Same reminders, plus activity pushes: `device_tokens` + database triggers → `send-push` edge function → APNs |
-| Plans (free / Plus) | In-memory `MockPlanLedger`; the mock huddle service applies the same caps | `user_entitlements` + `huddle_join_rule` / `create_huddle` (migration 013), enforced by Postgres |
+| Plans (free / Plus) | In-memory `MockPlanLedger`; `MockPlusService` buys by flipping it, and the mock huddle service applies the same caps | `LivePlusService`: StoreKit 2 purchases checked by `verify-subscription`, status from `my_entitlement()`; `user_entitlements` + `huddle_join_rule` / `create_huddle` (migration 013), enforced by Postgres |
 | Seeding / DEBUG | 45 days of history and a video; debug tools visible | Disabled / hidden |
 
 ## 6. Data model
@@ -404,7 +404,7 @@ First launch (mock mode) builds a complete demo world ([Seeding/SeedDataService.
 - ~200 placeholder photos generated on-device (gradient + SF Symbol via `UIGraphicsImageRenderer`) — no bundled assets, no network — and one video: Maya's post yesterday, a 2-second clip of a placeholder photo zooming in (`PlaceholderVideoGenerator`, H.264 through `AVAssetWriter`), with that photo as its poster.
 - Today: Maya, Sam, and Riley have posted; **you haven't** — so the app opens straight into the LOCKED state and the core mechanic is visible within the first second.
 
-Profile → DEBUG (mock only): **simulate "I haven't posted today"** (forces the gate shut), **advance mock day by 1** (shifts the injected clock — the streak math runs for real), **regenerate seed data** (full teardown + rebuild behind the splash screen). Sign out and walk the whole auth flow with code `123456`; a fresh sign-up gets an empty account that can join `CREW42`.
+Profile → DEBUG (mock only): **simulate "I haven't posted today"** (forces the gate shut), **free plan limits** (on: the App Store build's caps; off: the old rules), **simulate HuddlePals Plus**, **Plus that ends in a minute**, **simulate a subscription linked elsewhere** (buying or restoring finds it on another account), **advance mock day by 1** (shifts the injected clock — the streak math runs for real), **regenerate seed data** (full teardown + rebuild behind the splash screen). Sign out and walk the whole auth flow with code `123456`; a fresh sign-up gets an empty account that can join `CREW42`.
 
 ## 13. Testing & verification
 

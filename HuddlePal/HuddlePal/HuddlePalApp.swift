@@ -25,6 +25,9 @@ struct HuddlePalApp: App {
         // Before launch finishes, so a tap that launched the app is delivered.
         UNUserNotificationCenter.current().delegate = deps.push.centerDelegate
         AppDelegate.push = deps.push
+        // At launch, as StoreKit asks: renewals and purchases finished
+        // elsewhere (Ask to Buy, another device) arrive from now on.
+        deps.plus.start()
     }
 
     var body: some Scene {
@@ -42,23 +45,25 @@ struct HuddlePalApp: App {
                     // Re-evaluate reminders on foreground: an upload made on
                     // another device (or earlier today) should silence the
                     // remaining nudges. Push picks up a permission changed
-                    // in iOS Settings.
+                    // in iOS Settings. Plus may have renewed or run out.
                     if phase == .active {
                         Task {
                             await dependencies.reminders.refresh()
                             await dependencies.push.refresh()
                             await dependencies.termsRecorder?.refresh()
+                            await dependencies.plus.refresh()
                         }
                     }
                 }
                 .onChange(of: dependencies.session.currentUser?.id) { _, userID in
                     // Signed in (or switched account): register this device
-                    // for the account's notifications, and record (or ask
-                    // for) its agreement to the Terms.
+                    // for the account's notifications, record (or ask for)
+                    // its agreement to the Terms, and learn its plan.
                     if userID != nil {
                         Task {
                             await dependencies.push.refresh()
                             await dependencies.termsRecorder?.refresh()
+                            await dependencies.plus.refresh()
                         }
                     }
                 }

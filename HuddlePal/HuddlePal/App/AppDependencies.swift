@@ -81,6 +81,9 @@ final class AppDependencies {
     let depositService: any DepositServiceProtocol
     let mediaService: any MediaServiceProtocol
     let moderationService: any ModerationServiceProtocol
+    /// HuddlePals Plus for the signed-in account: the server's view of it,
+    /// and buying or restoring it through the App Store.
+    let plus: any PlusServiceProtocol
     /// Mock only: who has Plus and whether the free limits are on in the
     /// offline world (live, the server knows). Nil in live mode.
     let mockPlans: MockPlanLedger?
@@ -107,6 +110,7 @@ final class AppDependencies {
         depositService: any DepositServiceProtocol,
         mediaService: any MediaServiceProtocol,
         moderationService: any ModerationServiceProtocol,
+        plus: (any PlusServiceProtocol)? = nil,
         mockPlans: MockPlanLedger? = nil,
         seeder: SeedDataService,
         reminders: ReminderCoordinator,
@@ -127,6 +131,7 @@ final class AppDependencies {
         self.depositService = depositService
         self.mediaService = mediaService
         self.moderationService = moderationService
+        self.plus = plus ?? MockPlusService(plans: mockPlans ?? MockPlanLedger(), session: session)
         self.mockPlans = mockPlans
         self.seeder = seeder
         self.reminders = reminders
@@ -144,6 +149,7 @@ final class AppDependencies {
         session.pendingInviteCode = nil
         session.pendingHuddleID = nil
         session.blockedUserIDs = []
+        plus.reset()
         // In the same main-actor turn as clearing the session: the next
         // render swaps the main UI for onboarding, so no mounted screen
         // reads a model after it's deleted.
@@ -188,6 +194,7 @@ final class AppDependencies {
             depositService: MockDepositService(context: context, engine: engine),
             mediaService: media,
             moderationService: MockModerationService(session: session),
+            plus: MockPlusService(plans: plans, session: session),
             mockPlans: plans,
             seeder: SeedDataService(
                 context: context,
@@ -242,6 +249,7 @@ final class AppDependencies {
             depositService: LiveDepositService(client: client, store: store, keyring: keyring),
             mediaService: media,
             moderationService: LiveModerationService(client: client, session: session, keyring: keyring),
+            plus: LivePlusService(client: client, session: session),
             // Constructed but never invoked in live mode (RootViewModel
             // gates seeding on isLive).
             seeder: SeedDataService(
