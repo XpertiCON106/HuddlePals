@@ -233,6 +233,42 @@ final class InviteKeyTests: XCTestCase {
         assertServerNeverSaw(code)
     }
 
+    /// A report discloses one key: it opens the reported video's poster and
+    /// clip as Storage holds them, and nothing else in the huddle.
+    func testReportingAVideoDisclosesTheOneKeyThatOpensItsPosterAndClip() async throws {
+        let code = try installInvite()
+        let (client, keyring, _) = try await signIn(ben.id, token: "ben")
+        let server = server!
+        StubURLProtocol.respond { request in
+            request.url!.path.hasSuffix("/rest/v1/reports") ? .init(body: Data("[]".utf8)) : server.handle(request)
+        }
+        let huddle = try await huddleService(client, keyring).joinHuddle(inviteCode: code.compact, user: ben)
+        let clip = try await ClipPreparer.placeholder(seed: 14)
+        let base = "\(huddleID.uuidString.lowercased())/\(UUID().uuidString.lowercased())"
+        let stored = try await LiveMediaService(client: client, keyring: keyring)
+            .saveDepositVideo(poster: clip.poster, clip: clip.clip, baseName: base, huddleID: huddleID)
+        cachedPaths += [stored.posterPath, stored.videoPath]
+        let deposit = try await LiveDepositService(client: client, store: store, keyring: keyring).createDeposit(
+            in: huddle, author: ben, localImagePath: stored.posterPath, wrappedPhotoKey: stored.wrappedPhotoKey,
+            caption: nil, dayKey: "2026-10-22",
+            video: DepositVideo(localVideoPath: stored.videoPath, durationMs: clip.durationMs)
+        )
+        let photo = try storeAdasPhoto()
+
+        session.currentUser = ben
+        try await LiveModerationService(client: client, session: session, keyring: keyring).report(deposit: deposit, reason: "Test")
+
+        let report = try XCTUnwrap(StubURLProtocol.requests.last { $0.url!.path.hasSuffix("/rest/v1/reports") })
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(report.httpBody)) as? [String: Any])
+        XCTAssertEqual(body["deposit_id"] as? String, deposit.id.uuidString)
+        let disclosed = try XCTUnwrap(body["photo_key"] as? String)
+        let photoKey = SymmetricKey(data: try XCTUnwrap(Data(base64Encoded: disclosed)))
+        XCTAssertEqual(try PhotoCrypto.openPhoto(try XCTUnwrap(server.object(at: "\(base).jpg")), photoKey: photoKey), clip.poster)
+        XCTAssertEqual(try PhotoCrypto.openPhoto(try XCTUnwrap(server.object(at: "\(base).mp4")), photoKey: photoKey), clip.clip)
+        XCTAssertThrowsError(try PhotoCrypto.openPhoto(photo.sealed.ciphertext, photoKey: photoKey), "Ada's photo stays closed")
+        assertServerNeverSaw(code)
+    }
+
     func testAVideoAfterPlusEndedIsRefusedAndNothingIsPosted() async throws {
         let code = try installInvite()
         let (client, keyring, _) = try await signIn(ben.id, token: "ben")

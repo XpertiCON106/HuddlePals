@@ -117,6 +117,25 @@ final class VideoDropTests: XCTestCase {
         withExtendedLifetime(loader) {}
     }
 
+    /// AVFoundation asks for ranges (2 bytes first, then pieces, sometimes
+    /// "to the end"), and may come back for the rest of one it was partly sent.
+    func testTheLoaderServesExactlyTheBytesAskedFor() {
+        func range(at current: Int64, from requested: Int64? = nil, length: Int = 0, toEnd: Bool = false) -> Range<Int>? {
+            InMemoryClipLoader.byteRange(
+                currentOffset: current, requestedOffset: requested ?? current, requestedLength: length,
+                toEnd: toEnd, clipLength: 1000
+            )
+        }
+        XCTAssertEqual(range(at: 0, length: 2), 0..<2, "the first probe")
+        XCTAssertEqual(range(at: 100, length: 50), 100..<150)
+        XCTAssertEqual(range(at: 120, from: 100, length: 50), 120..<150, "the rest of a request already partly answered")
+        XCTAssertEqual(range(at: 900, length: 500), 900..<1000, "cut off at the end")
+        XCTAssertEqual(range(at: 400, toEnd: true), 400..<1000)
+        XCTAssertEqual(range(at: 1000, length: 10), 1000..<1000, "at the very end: nothing, not an error")
+        XCTAssertNil(range(at: 1001, length: 10), "past the end")
+        XCTAssertNil(range(at: -1, length: 10))
+    }
+
     func testDecryptedClipsStayInMemoryUntilSignOut() {
         let cache = DecryptedClipCache()
         cache.store(Data([1, 2, 3]), for: "a")

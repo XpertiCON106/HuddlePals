@@ -167,6 +167,7 @@ final class LivePlusServiceTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        try? await store.setSimulatedError(nil, forAPI: .purchase)
         store.clearTransactions()
         StubURLProtocol.reset()
         KeychainStore.delete(key: LiveStub.sessionKey)
@@ -355,6 +356,75 @@ final class LivePlusServiceTests: XCTestCase {
         _ = await plus.purchase(try await product(PlusCatalog.monthly, in: plus))
         let after = await plus.appleSubscriptionWillRenew()
         XCTAssertTrue(after, "deleting the account wouldn't stop it")
+    }
+
+    // MARK: While the app runs (Transaction.updates)
+
+    /// What the listener started at launch has sent, once `count` requests
+    /// have arrived (or 5 seconds have passed).
+    private func verifyRequests(atLeast count: Int) async throws -> [[String: Any]] {
+        for _ in 0..<50 where server.verifyRequests.count < count {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        let requests = server.verifyRequests
+        XCTAssertGreaterThanOrEqual(requests.count, count, "nothing more reached the server")
+        return requests
+    }
+
+    /// Transactions not yet finished, once none are left (or 5 seconds have
+    /// passed): the app finishes one after the server's reply comes back.
+    private func unfinishedCountSettled() async throws -> Int {
+        var count = await unfinishedCount()
+        for _ in 0..<50 where count > 0 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            count = await unfinishedCount()
+        }
+        return count
+    }
+
+    private func transactionPayload(_ request: [String: Any]?) throws -> [String: Any] {
+        try XCTUnwrap(FakePlusServer.payload(of: try XCTUnwrap(request?["transaction"] as? String)))
+    }
+
+    func testARenewalWhileTheAppRunsReachesTheServerAndIsFinished() async throws {
+        let plus = try await service()
+        plus.start()
+        _ = await plus.purchase(try await product(PlusCatalog.monthly, in: plus))
+        let bought = try transactionPayload(server.verifyRequests.first)
+        let before = try await verifyRequests(atLeast: 1).count
+
+        try store.forceRenewalOfSubscription(productIdentifier: PlusCatalog.monthly)
+        let renewal = try transactionPayload(try await verifyRequests(atLeast: before + 1).last)
+        XCTAssertEqual(renewal["originalTransactionId"] as? String, bought["originalTransactionId"] as? String, "the same subscription")
+        XCTAssertNotEqual(renewal["transactionId"] as? String, bought["transactionId"] as? String, "a new transaction")
+        XCTAssertEqual(server.verifyRequests.last?["restore"] as? Bool, false)
+        let unfinished = try await unfinishedCountSettled()
+        XCTAssertEqual(unfinished, 0, "finished once the server has it")
+    }
+
+    /// Apple's notification normally tells the server first; the app sends
+    /// what it sees too, so a refund ends Plus even if that one is late.
+    func testARefundWhileTheAppRunsReachesTheServer() async throws {
+        let plus = try await service()
+        plus.start()
+        _ = await plus.purchase(try await product(PlusCatalog.monthly, in: plus))
+        let before = try await verifyRequests(atLeast: 1).count
+        let bought = try XCTUnwrap(store.allTransactions().last { $0.productIdentifier == PlusCatalog.monthly })
+
+        try store.refundTransaction(identifier: bought.identifier)
+        let refunded = try transactionPayload(try await verifyRequests(atLeast: before + 1).last)
+        XCTAssertNotNil(refunded["revocationDate"], "the refunded transaction, revoked")
+    }
+
+    func testAPurchaseThatFailsChangesNothing() async throws {
+        let plus = try await service()
+        try await store.setSimulatedError(.generic(.networkError(URLError(.notConnectedToInternet))), forAPI: .purchase)
+        let outcome = await plus.purchase(try await product(PlusCatalog.monthly, in: plus))
+        guard case .failed = outcome else { return XCTFail("expected a failure, got \(outcome)") }
+        XCTAssertFalse(plus.isPremium)
+        XCTAssertTrue(server.verifyRequests.isEmpty, "nothing bought, nothing sent")
+        let unfinished = await unfinishedCount()
+        XCTAssertEqual(unfinished, 0)
     }
 }
 

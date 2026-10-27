@@ -94,7 +94,11 @@ HuddlePal/
     ├── AuthInputTests.swift            Session persistence, phone input, code length
     ├── ProfileConfirmationTests.swift  Profile editor's confirmed-draft rules
     ├── PhotoEncryptionTests.swift      E2EE: key wrap, photo seal/open, report disclosure
-    └── TermsAgreementTests.swift       Terms gate: first screen, Decline, re-ask per version
+    ├── TermsAgreementTests.swift       Terms gate: first screen, Decline, re-ask per version
+    ├── PlanRulesTests.swift            The free plan's and Plus's rules, the archive window
+    ├── PlusServiceTests.swift          StoreKit 2 via SKTestSession (StoreKit/HuddlePalsPlus.storekit)
+    ├── PlusGateTests.swift             The paywall and every gate's view model
+    └── VideoDropTests.swift            Video seal, recording, playback from memory, Compose
 ```
 
 Next to the app: `supabase/` (schema.sql, `scripts/reset_database.sql`, the
@@ -187,4 +191,5 @@ It builds with `Supabase.plist` excluded, so a test run can never reach the live
 - `AuthInputTests` covers sign-in plumbing: the Keychain session surviving a relaunch, phone numbers without +1, and code lengths from `Supabase.plist`.
 - `ProfileConfirmationTests` covers the profile editor's confirmed-draft and dirty-exit rules.
 - `PhotoEncryptionTests` covers the E2EE crypto: huddle-key wrap/unwrap, photo seal/open, wrong keys failing cleanly, a report's key opening only that photo, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
+- `PlanRulesTests`, `PlanLimitTests`, `PlusServiceTests` and `PlusGateTests` cover HuddlePals Plus and the free plan: the rules, the mock server's caps, StoreKit 2 through `SKTestSession` (purchase, restore, renewals and refunds while the app runs), and the paywall and gates. `VideoDropTests` covers video drops from recording to playback. `PlusJourneyTests` and `VideoJourneyTests` walk them in the UI.
 - `TermsAgreementTests` covers the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end, Decline returns to the first welcome card, nothing past the cards opens without Agree, and agreement persists per `TermsOfService.version` (which must match the Terms' "Last updated" date).

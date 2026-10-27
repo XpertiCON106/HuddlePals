@@ -417,7 +417,10 @@ Run everything with ⌘U (or `xcodebuild test`, see DEVELOPMENT.md):
 - [`HuddlePalTests/AuthInputTests.swift`](HuddlePalTests/AuthInputTests.swift) — the Keychain session round-trips (including one saved by the earlier build), US/Canada phone numbers without +1, as-you-type phone formatting, and code lengths read from `Supabase.plist`.
 - [`HuddlePalTests/ProfileConfirmationTests.swift`](HuddlePalTests/ProfileConfirmationTests.swift) — the profile editor's confirmed-draft rules: nothing persists before **Save Changes**, failures keep the draft, dirty exits are blocked and never replayed.
 - [`HuddlePalTests/PhotoEncryptionTests.swift`](HuddlePalTests/PhotoEncryptionTests.swift) — the E2EE crypto: huddle-key wrap/unwrap (and refusal for another identity, huddle, or member), photo seal/open, wrong keys and tampered files failing cleanly, a report's key opening only its own photo, wire formats matching the DB checks, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
-- [`HuddlePalTests/TermsAgreementTests.swift`](HuddlePalTests/TermsAgreementTests.swift) — the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end (again after each Decline), Decline returns to the first welcome card, "Get started" re-asks until Agree, an interrupted sign-up resumes at the profile, agreement survives a relaunch and is re-asked for a new version, and the bundled text has all 15 sections, no placeholders, and a "Last updated" date matching `TermsOfService.version`.
+- [`HuddlePalTests/TermsAgreementTests.swift`](HuddlePalTests/TermsAgreementTests.swift) — the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end (again after each Decline), Decline returns to the first welcome card, "Get started" re-asks until Agree, an interrupted sign-up resumes at the profile, agreement survives a relaunch and is re-asked for a new version, and the bundled text has all 17 sections, no placeholders, and a "Last updated" date matching `TermsOfService.version`.
+- HuddlePals Plus and the free plan: [`PlanRulesTests`](HuddlePalTests/PlanRulesTests.swift) (the archive window's edges and the clock set back, the join and create rule tables, Plus at 10 before the limits start, error codes and what builds from before Plus show), [`PlanLimitTests`](HuddlePalTests/PlanLimitTests.swift) (the mock server's caps, keeper succession, the 25-huddle limit), [`PlusServiceTests`](HuddlePalTests/PlusServiceTests.swift) (StoreKit 2 through `SKTestSession` against a stubbed server: products, purchase naming the account, a purchase the server didn't confirm, Ask to Buy, restore, a renewal or refund while the app runs, a failed purchase, the server's clock and the offline cache), and [`PlusGateTests`](HuddlePalTests/PlusGateTests.swift) (the paywall's wording, each gate's view model, the deletion warning).
+- Video drops: [`VideoDropTests`](HuddlePalTests/VideoDropTests.swift) (one key for poster and clip, the recording's short life on disk, the writer's settings and 6-second cut, playback from memory and the loader's byte ranges, Compose with and without Plus), the live upload and a video report in [`InviteKeyTests`](HuddlePalTests/InviteKeyTests.swift), and [`StoreMigrationTests`](HuddlePalTests/StoreMigrationTests.swift) (a store from before videos opens with every row as a photo).
+- UI tests (`HuddlePalUITests`), on the mock world: the journeys, unhappy paths and accessibility audits, and for Plus [`PlusJourneyTests`](HuddlePalUITests/PlusJourneyTests.swift) (the paywall's contents and buying, a locked day that buying opens, Video · Plus, the 4th huddle, a full and a paused invite, the deletion warning) and [`VideoJourneyTests`](HuddlePalUITests/VideoJourneyTests.swift) (recording, posting and the looping feed).
 - What tests can't cover: the live wire formats against the real Supabase project — exercise those by hand (DEPLOYMENT.md lists the spots).
 
 ## 14. File map
@@ -459,9 +462,14 @@ HuddlePal/
 │   │                          DailyReminders, ImageDownscaler, TermsOfService
 │   ├── Legal/TermsOfService.md  The Terms of Service shown in-app (host the same text publicly)
 │   └── Assets.xcassets        App icon + ink accent color
-└── HuddlePalTests/                HuddleEngineTests, CriticalFlowTests, LiveSyncTests,
-                               AuthInputTests, ProfileConfirmationTests,
-                               PhotoEncryptionTests, TermsAgreementTests
+├── HuddlePalTests/                HuddleEngineTests, CriticalFlowTests, LiveSyncTests,
+│                              AuthInputTests, ProfileConfirmationTests,
+│                              PhotoEncryptionTests, TermsAgreementTests, PlanRulesTests,
+│                              PlanLimitTests, PlusServiceTests, PlusGateTests,
+│                              VideoDropTests, StoreMigrationTests, … (StoreKit/
+│                              HuddlePalsPlus.storekit for SKTestSession)
+└── HuddlePalUITests/              Journeys, unhappy paths, accessibility audits,
+                               PlusJourneyTests, VideoJourneyTests
 ```
 
 ## 15. Project configuration

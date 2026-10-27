@@ -35,18 +35,31 @@ final class InMemoryClipLoader: NSObject, AVAssetResourceLoaderDelegate, @unchec
             information.isByteRangeAccessSupported = true
         }
         if let request = loadingRequest.dataRequest {
-            let start = Int(request.currentOffset)
-            guard start >= 0, start <= data.count else {
+            guard let range = Self.byteRange(
+                currentOffset: request.currentOffset, requestedOffset: request.requestedOffset,
+                requestedLength: request.requestedLength, toEnd: request.requestsAllDataToEndOfResource,
+                clipLength: data.count
+            ) else {
                 loadingRequest.finishLoading(with: URLError(.badServerResponse))
                 return true
             }
-            let wanted = request.requestsAllDataToEndOfResource
-                ? data.count - start
-                : min(request.requestedLength - Int(request.currentOffset - request.requestedOffset), data.count - start)
-            request.respond(with: data.subdata(in: start..<(start + max(wanted, 0))))
+            request.respond(with: data.subdata(in: range))
         }
         loadingRequest.finishLoading()
         return true
+    }
+
+    /// The bytes a data request still wants, from where it has got to, cut
+    /// off at the clip's end; nil when that's outside the clip.
+    static func byteRange(
+        currentOffset: Int64, requestedOffset: Int64, requestedLength: Int, toEnd: Bool, clipLength: Int
+    ) -> Range<Int>? {
+        let start = Int(currentOffset)
+        guard start >= 0, start <= clipLength else { return nil }
+        let wanted = toEnd
+            ? clipLength - start
+            : min(requestedLength - Int(currentOffset - requestedOffset), clipLength - start)
+        return start..<(start + max(wanted, 0))
     }
 }
 

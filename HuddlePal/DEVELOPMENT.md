@@ -436,10 +436,14 @@ Commands run from the repo root.
 - **Covered**: engine rules, mock flows, store reconciliation, live
   services over stubbed HTTP (`StubURLProtocol`), encryption and invite
   joins against an in-process fake server, push coordination, accessibility
-  audits; schema, RLS, functions and triggers in PGlite; edge-function
+  audits; HuddlePals Plus through StoreKit's local test store
+  (`SKTestSession`: purchase, restore, renewal and refund while running,
+  failures) and every free-plan gate, video recording, sealing and
+  playback; schema, RLS, functions and triggers in PGlite; edge-function
   logic on Node.
 - **Not covered**: a real Supabase project's responses, Apple's servers and
-  sheets, APNs delivery, real `pg_net`/Vault (stubbed), and key sharing
+  sheets (the real purchase sheet, Manage subscription, sandbox renewals and
+  Server Notifications), a real camera and microphone, APNs delivery, real `pg_net`/Vault (stubbed), and key sharing
   between two real devices. Check those on devices: delete a test account
   (logs show `apple_revoked`; the app leaves Settings › Sign in with Apple;
   its photos show "Former member"), join with an invite while nobody else

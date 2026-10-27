@@ -40,18 +40,30 @@ final class PlusJourneyTests: HuddleUITestCase {
     }
 
     /// A day past the free plan's 30 days shows who posted, locked, and opens
-    /// the paywall.
-    func testADayPastTheFreeWindowIsLockedAndLeadsToPlus() {
+    /// the paywall; buying Plus opens every day there and then.
+    func testADayPastTheFreeWindowIsLockedAndPlusOpensIt() {
         launchToShelf(arguments: ["-ui-testing-free-limits"])
         openHuddle("The Crew")
         waitFor(app.buttons["Archive"]).tap()
         waitFor(app.navigationBars["Archive"])
-        let locked = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Locked:'")).firstMatch
+        let lockedTiles = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Locked:'"))
+        let locked = lockedTiles.firstMatch
         scrollTo(locked, maxSwipes: 30)
         snapshot("archive locked days")
+        let lockedFrame = locked.frame
         locked.tap()
         waitFor(paywallHeadline("Unlock your full huddle archive with HuddlePals Plus"))
         snapshot("archive paywall")
+
+        let terms = app.staticTexts["renewalTerms"]
+        app.buttons["Try it free for 1 week"].tap()
+        waitUntilGone(terms, timeout: 10)
+        let opened = expectation(for: NSPredicate(format: "count == 0"), evaluatedWith: lockedTiles)
+        wait(for: [opened], timeout: 10)
+        // The same tile, where it was, now opens.
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: lockedFrame.midX, dy: lockedFrame.midY)).tap()
+        waitFor(app.buttons["Send comment"], timeout: 10, "the day opens in full")
+        XCTAssertFalse(app.buttons["Unlock your full archive"].exists)
     }
 
     /// Free: Video opens the paywall; after buying, the video camera.
@@ -83,6 +95,61 @@ final class PlusJourneyTests: HuddleUITestCase {
         snapshot("create limit")
         app.buttons["Get HuddlePals Plus"].tap()
         waitFor(paywallHeadline("Keep up to 10 huddles with HuddlePals Plus"))
+    }
+
+    /// Two huddles made with Plus, then Plus ends: the 4th one kept is past
+    /// the free plan's first 3, so its invites are paused, and its settings
+    /// say so to its keeper with the way back.
+    func testAHuddlePastTheFirst3PausesItsInvitesWhenPlusEnds() {
+        launchToShelf(arguments: ["-ui-testing-free-limits", "-ui-testing-plus"])
+        for name in ["Third", "Fourth"] {
+            openAddMenu("Create a Huddle")
+            let field = waitFor(app.textFields["Huddle name"])
+            field.tap()
+            field.typeText(name)
+            waitFor(app.buttons["Create huddle"]).tap()
+            waitFor(app.buttons["Back to my huddles"], timeout: 15).tap()
+        }
+
+        openTab("Profile")
+        let plus = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: HuddlePals Plus'")).firstMatch
+        scrollTo(plus, maxSwipes: 25)
+        plus.switches.firstMatch.tap()
+        XCTAssertEqual(plus.switches.firstMatch.value as? String, "0", "Plus has ended")
+
+        openTab("Huddles")
+        openHuddle("Fourth")
+        waitFor(app.buttons["Huddle settings"]).tap()
+        let paused = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'invites to this one are paused'")).firstMatch
+        scrollTo(paused)
+        XCTAssertTrue(paused.exists, "the keeper is told why")
+        XCTAssertFalse(app.staticTexts["inviteCode"].exists, "no code that would fail")
+        snapshot("invites paused")
+        app.buttons["Get HuddlePals Plus"].tap()
+        waitFor(paywallHeadline("Reopen invites with HuddlePals Plus"))
+    }
+
+    /// Deleting the account doesn't end Apple's billing: with Plus, the
+    /// confirmation says so (App Review 5.1.1(v)).
+    func testDeletingTheAccountWithPlusWarnsThatAppleKeepsBilling() {
+        launchToShelf(arguments: ["-ui-testing-plus"])
+        openTab("Profile")
+        let delete = app.buttons["Delete account"]
+        scrollTo(delete, maxSwipes: 25)
+        delete.tap()
+        let warning = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'keeps renewing after your account is deleted'")).firstMatch
+        waitFor(warning, timeout: 10, "the billing warning")
+        XCTAssertTrue(warning.label.contains("Settings › your name › Subscriptions"), warning.label)
+        snapshot("delete with plus")
+        // Close it without deleting. iOS 26 shows it as a popover with no
+        // Cancel button: tap outside it, below.
+        if app.buttons["Cancel"].exists {
+            app.buttons["Cancel"].tap()
+        } else {
+            app.otherElements["PopoverDismissRegion"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).tap()
+        }
+        waitUntilGone(warning)
+        XCTAssertTrue(app.buttons["Delete account"].exists, "still signed in")
     }
 
     /// The Crew is 4 people: full on the free plan, so its settings explain
