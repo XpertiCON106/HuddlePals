@@ -44,6 +44,11 @@ struct HuddlePalApp: App {
                 .onOpenURL { url in
                     handleDeepLink(url)
                 }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    // A universal link (huddlepals.com/join#…), if it isn't
+                    // handed to onOpenURL.
+                    if let url = activity.webpageURL { handleDeepLink(url) }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     // Re-evaluate reminders on foreground: an upload made on
                     // another device (or earlier today) should silence the
@@ -77,8 +82,8 @@ struct HuddlePalApp: App {
         }
     }
 
-    /// huddlepal://join/<CODE> — the shareable invite link. Routes to the Join
-    /// screen with the code prefilled (or parks it until sign-in finishes).
+    /// An invite link (`InviteLink`): routes to the Join screen with the code
+    /// prefilled (or parks it until sign-in finishes).
     private func handleDeepLink(_ url: URL) {
         guard let code = InviteLink.code(from: url) else { return }
         if dependencies.session.currentUser != nil {

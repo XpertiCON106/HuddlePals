@@ -283,7 +283,7 @@ final class CriticalFlowTests: XCTestCase {
         let shown = try XCTUnwrap(settings.inviteCode)
         XCTAssertEqual(shown.compact, SeedDataService.crewInviteCode)
         XCTAssertEqual(settings.inviteShareURL, InviteLink.url(for: shown))
-        XCTAssertTrue(settings.inviteShareMessage.contains(shown.displayed), "the code travels with the link")
+        XCTAssertEqual(settings.inviteShareURL?.fragment, shown.compact, "the code travels in the link")
 
         await settings.resetInvite()
         XCTAssertNotEqual(settings.inviteCode, shown)

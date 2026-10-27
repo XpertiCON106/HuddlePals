@@ -62,7 +62,7 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   and appearance settings, Terms acceptance, the services, the seeder,
   `reminders` and `push`.
 - **`AppSession`**: `currentUser`, `blockedUserIDs`, `pendingInviteCode`
-  (from a `huddlepal://join/…` link), `pendingHuddleID` (from a tapped
+  (from an invite link, `InviteLink`), `pendingHuddleID` (from a tapped
   notification), `needsProfileSetup`, `isReady`, and `photoKeysVersion`
   (the one field a service writes: the keyring bumps it so locked photos
   retry).
@@ -102,6 +102,14 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   `en_US_POSIX`), so string order is date order. 23:59 belongs to its day.
 - **Gate**: today is unlocked once you've posted in that huddle today. Only
   today is gated. Locked photos are never even loaded.
+- **Invite links**: `https://huddlepals.com/join#<code>` (`InviteLink`), a
+  universal link (Associated Domains, `applinks:huddlepals.com`) that opens
+  Join with the code; without the app, the website's join page shows the
+  code and how to get it. The code is the fragment, which browsers and link
+  previews never send, so the invite's secret stays off every server.
+  `InviteShareButton` hands Messages its own preview (a card with the
+  huddle's emoji and name, `LPLinkMetadata`) and other apps a line with the
+  link. `huddlepal://join/<code>` links from before still open.
 - **Once and permanent**: one photo per member per huddle per day, never
   edited or deleted (`DepositError.alreadyDepositedToday`; the database has
   no update or delete policy on deposits). Compose asks "This is permanent —

@@ -1,14 +1,35 @@
 import Foundation
+import LinkPresentation
+import UIKit
 import XCTest
 
 @testable import HuddlePal
 
-/// QA-16: huddlepal://join/<code> links, signed in or not.
+/// Invite links, https://huddlepals.com/join#<code> (and huddlepal://join/<code>
+/// from before), signed in or not, and how they're shared.
 @MainActor
 final class InviteLinkTests: XCTestCase {
+    func testTheLinkIsAWebLinkWithTheCodeWhereNoServerSeesIt() throws {
+        let code = InviteCode.generate()
+        let url = InviteLink.url(for: code)
+        XCTAssertEqual(url.absoluteString, "https://huddlepals.com/join#\(code.compact)")
+        XCTAssertEqual(url.fragment, code.compact, "a fragment: browsers and link previews never send it")
+        XCTAssertFalse(url.path.contains(code.compact))
+        XCTAssertEqual(InviteLink.code(from: url), code.compact)
+        XCTAssertEqual(InviteLink.code(from: URL(string: "https://HuddlePals.com/join/#\(code.displayed.lowercased())")!), code.compact)
+        for other in [
+            "https://huddlepals.com/join/\(code.compact)",   // in the path: would reach the server
+            "https://huddlepals.com/join",
+            "https://huddlepals.com/support#\(code.compact)",
+            "https://example.com/join#\(code.compact)",
+            "http://huddlepals.com/join#\(code.compact)",
+        ] {
+            XCTAssertNil(InviteLink.code(from: URL(string: other)!), other)
+        }
+    }
+
     func testOnlyWellFormedJoinLinksCarryACode() {
         let code = InviteCode.generate()
-        XCTAssertEqual(InviteLink.code(from: InviteLink.url(for: code)), code.compact)
         XCTAssertEqual(InviteLink.code(from: URL(string: "huddlepal://join/\(code.displayed.lowercased())")!), code.compact)
         // Old codes still open Join, which explains they're out of date.
         XCTAssertEqual(InviteLink.code(from: URL(string: "huddlepal://join/crew42")!), "CREW42")
@@ -25,6 +46,27 @@ final class InviteLinkTests: XCTestCase {
         ] {
             XCTAssertNil(InviteLink.code(from: URL(string: bad)!), bad)
         }
+    }
+
+    func testSharingGivesMessagesAPreviewAndOtherAppsALine() throws {
+        let url = InviteLink.url(for: InviteCode.generate())
+        let card = try XCTUnwrap(InviteCard.image(name: "The Crew", emoji: "🏔"))
+        XCTAssertEqual(card.size, InviteCard.size)
+        XCTAssertEqual(card.scale, 3)
+
+        let item = InviteActivityItem(url: url, huddleName: "The Crew", card: card)
+        let sheet = UIActivityViewController(activityItems: [item], applicationActivities: nil)
+        let metadata = try XCTUnwrap(item.activityViewControllerLinkMetadata(sheet))
+        XCTAssertEqual(metadata.title, "Join “The Crew” on HuddlePals")
+        XCTAssertEqual(metadata.url, url)
+        XCTAssertNotNil(metadata.imageProvider, "the card")
+        XCTAssertEqual(item.activityViewController(sheet, itemForActivityType: .message) as? URL, url, "just the link, as a preview")
+        XCTAssertEqual(item.activityViewController(sheet, itemForActivityType: .copyToPasteboard) as? URL, url)
+        XCTAssertEqual(
+            item.activityViewController(sheet, itemForActivityType: .mail) as? String,
+            "Join our huddle “The Crew” on HuddlePals: \(url.absoluteString)"
+        )
+        XCTAssertEqual(item.activityViewController(sheet, subjectForActivityType: .mail), "Join “The Crew” on HuddlePals")
     }
 
     func testALinkOpenedWhileSignedOutOpensJoinAfterSignIn() {

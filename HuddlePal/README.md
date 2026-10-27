@@ -160,7 +160,7 @@ Key decisions:
 | `PushTokenServiceProtocol` | Remembers the token in memory (nothing sends) | `device_tokens` upsert / delete; database triggers call the `send-push` edge function, which sends through APNs |
 | _(reminders)_ | Per-user local `UNUserNotificationCenter` reminders in `Support/DailyReminders.swift` (not a backend service) | Same |
 
-Still marked with `// TODO: BACKEND — …`: `CreateHuddleViewModel.shareURL` (`huddlepal://join/{code}` → universal link) and orphaned Storage cleanup in `LiveMediaService`. The remaining TODOs in the mock services are notes on what their live twins do.
+Still marked with `// TODO: BACKEND — …`: orphaned Storage cleanup in `LiveMediaService`. The remaining TODOs in the mock services are notes on what their live twins do.
 
 ## Business rules (as implemented)
 

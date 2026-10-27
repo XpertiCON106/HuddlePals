@@ -392,6 +392,32 @@ for review as `remove_reported_photo` keeps one.
    it, and Storage → `deposits` has no folder named after the huddle's id.
    A reported photo in it would still be in `preserved_photos`.
 
+## Phase 7 — Invite links that open the app
+
+Invites are now `https://huddlepals.com/join#<code>` links. Messages shows
+them as a card with the huddle's emoji and name, and they open HuddlePals
+straight to Join. That needs two things outside the app:
+
+1. **The website** serves `/.well-known/apple-app-site-association` (JSON,
+   no redirect) naming the app, and a `/join` page for people without the
+   app (the Grok instructions have both, word for word). Check it:
+
+   ```bash
+   curl -sI https://huddlepals.com/.well-known/apple-app-site-association
+   ```
+
+   It should answer `200` with `content-type: application/json`.
+2. **Associated Domains** on the App ID: the app's entitlements now list
+   `applinks:huddlepals.com`. With automatic signing, Xcode adds the
+   capability to the App ID on the next archive (Signing & Capabilities
+   then shows Associated Domains with no error).
+
+Then, on a phone with the new build: share an invite into Messages (a card,
+not a bare link), and tap it on another phone with HuddlePals installed
+(Join opens with the code). Apple caches the association file, so a phone
+can take up to a day to pick up a change to it; deleting and reinstalling
+the app makes it check again.
+
 ---
 
 > Already ran an earlier `schema.sql`? There are no upgrade migrations —

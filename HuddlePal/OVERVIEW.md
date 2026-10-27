@@ -114,7 +114,7 @@ flowchart TD
 | **Compose** (sheet) | Two stages: capture (camera-only — the camera opens immediately, no library import; a photo, or with Plus a video of up to 6 seconds; caption with live counter) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. On the free plan the picker shows "Video · Plus", which opens the paywall; it opens on Video again after a video, while you have Plus. |
 | **Archive** | Full history: month headers → day rows → horizontal photo strips. Today appears only once unlocked. Pull-to-refresh. Backfill banner when eligible. On the free plan, days past the last 30 show who posted and how many, locked, without loading anything; tapping one opens the paywall. |
 | **Deposit Detail** | Framed photo, caption, author, date, 5-emoji reaction row (tap toggles yours), comment thread + input bar. |
-| **Create Huddle** | Name + emoji picker → the new invite code → ShareLink with a working `huddlepal://join/{code}` deep link and the code in the message (the app registers the scheme and prefills Join). Then the notification permission prompt, the first time. Once you keep 3 huddles on the free plan (10 with Plus), it says so instead, with the way to Plus. |
+| **Create Huddle** | Name + emoji picker → the new invite code → Share invite link: `https://huddlepals.com/join#{code}`, which Messages shows as a card with the huddle's emoji and name, opens Join in the app with the code (a universal link; old `huddlepal://join/{code}` links still work), or the website's join page without it. Then the notification permission prompt, the first time. Once you keep 3 huddles on the free plan (10 with Plus), it says so instead, with the way to Plus. |
 | **Join Huddle** | Code entry (paste, type, or arrive by link; dashes and case don't matter) with error states (not found / old code / already member / huddle full / can't join). |
 | **HuddlePals+** (sheet) | The paywall, from any place the free plan holds something back (a locked archive day, Video, a 4th huddle, a closed invite) or from Profile: what Plus adds, monthly and yearly plans with price, period and trial, the renewal terms, Terms of Use / Terms / Privacy links, and Restore Purchases. Closes itself once Plus is on. |
 | **Huddle Settings** | Members with roles + skip tokens, streak detail, the huddle's preferred reminder hour (stored only — notification delivery is the per-user reminder in Profile), invite code with copy and share (or, when the huddle is full or its invites are paused on the keeper's free plan, why — and Get HuddlePals+ for the keeper), **New invite code** for the keeper (confirmed), leave huddle (destructive, confirmed), and for the keeper **Delete huddle** (confirmed: everyone is removed and every photo and video in it is deleted, for everyone). |
@@ -434,7 +434,7 @@ HuddlePal/
 ├── DEPLOYMENT.md              Go-live runbook: Supabase setup, TestFlight, smoke test
 ├── HuddlePal.xcodeproj            Xcode 16 project (synchronized folders, two targets)
 ├── PRIVACY.md                 Privacy policy text (host it publicly)
-├── Config/Info.plist          Partial Info.plist: camera usage string + huddlepal:// scheme
+├── Config/Info.plist          Partial Info.plist: camera usage string + huddlepal:// scheme (old invite links)
 ├── supabase/
 │   ├── schema.sql             Tables + RLS + storage policies + 7 RPCs (run once)
 │   ├── scripts/reset_database.sql  Destructive: wipes an older DB so schema.sql can run fresh

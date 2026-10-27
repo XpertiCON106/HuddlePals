@@ -47,15 +47,9 @@ final class CreateHuddleViewModel {
     /// The server's refusal, when the status here was out of date.
     private var refused: HuddleServiceError?
 
-    /// Shared via the share sheet: the link plus the code itself, for
-    /// pasting where custom-scheme links don't open.
-    /// TODO: BACKEND — a universal link would open in any app.
+    /// Shared via the share sheet (`InviteShareButton`).
     var shareURL: URL? {
         inviteCode.map(InviteLink.url(for:))
-    }
-
-    var shareMessage: String {
-        InviteShare.message(huddleName: createdHuddle?.name ?? "", code: inviteCode)
     }
 
     init(deps: AppDependencies) {
@@ -92,11 +86,15 @@ final class CreateHuddleViewModel {
 }
 
 /// The words that go with a shared invite.
+/// What an invite says: the title of its link preview, and the line apps
+/// without previews get with the link.
 enum InviteShare {
-    static func message(huddleName: String, code: InviteCode?) -> String {
-        var text = "Join our huddle \"\(huddleName)\" on HuddlePals."
-        if let code { text += " Invite code: \(code.displayed)" }
-        return text
+    static func title(huddleName: String) -> String {
+        "Join “\(huddleName)” on HuddlePals"
+    }
+
+    static func message(huddleName: String, url: URL) -> String {
+        "Join our huddle “\(huddleName)” on HuddlePals: \(url.absoluteString)"
     }
 }
 
@@ -119,11 +117,11 @@ final class JoinHuddleViewModel {
 
     init(deps: AppDependencies) {
         self.deps = deps
-        // A huddlepal://join/<code> link may have arrived before this screen.
+        // An invite link may have arrived before this screen.
         usePendingInvite()
     }
 
-    /// Takes the code of a huddlepal://join/<code> link, once. Also called
+    /// Takes the code of an invite link, once. Also called
     /// when a link arrives while this screen is already open.
     func usePendingInvite() {
         guard let pending = deps.session.pendingInviteCode else { return }
@@ -235,10 +233,6 @@ final class HuddleSettingsViewModel {
 
     var inviteShareURL: URL? {
         inviteCode.map(InviteLink.url(for:))
-    }
-
-    var inviteShareMessage: String {
-        InviteShare.message(huddleName: huddle.name, code: inviteCode)
     }
 
     /// Loads the code to show; a huddle still on an old code gets a new one.

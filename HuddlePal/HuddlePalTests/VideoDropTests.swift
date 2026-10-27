@@ -117,6 +117,28 @@ final class VideoDropTests: XCTestCase {
         withExtendedLifetime(loader) {}
     }
 
+    /// A clip loops; when something else stops it (the camera giving the
+    /// audio back after a recording, a call) it starts again, and only a
+    /// pause of its own keeps it paused.
+    func testAClipLoopsAndKeepsPlayingUntilItsPaused() async throws {
+        let generated = try await PlaceholderVideoGenerator.clip(seed: 5, duration: 1)
+        let looping = LoopingClipPlayer(clip: generated.mp4)
+        looping.isMuted = true
+        looping.play()
+        func wait(_ seconds: Double) async throws { try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
+        try await wait(2.5)
+        XCTAssertGreaterThanOrEqual(looping.loopCount, 1, "it starts over")
+        XCTAssertEqual(looping.player.timeControlStatus, .playing)
+
+        looping.player.pause() // as an audio session handover does
+        try await wait(1.2)
+        XCTAssertEqual(looping.player.timeControlStatus, .playing, "back by itself")
+
+        looping.pause()
+        try await wait(1.2)
+        XCTAssertEqual(looping.player.timeControlStatus, .paused, "a pause of its own holds")
+    }
+
     /// AVFoundation asks for ranges (2 bytes first, then pieces, sometimes
     /// "to the end"), and may come back for the rest of one it was partly sent.
     func testTheLoaderServesExactlyTheBytesAskedFor() {

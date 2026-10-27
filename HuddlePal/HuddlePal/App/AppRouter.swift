@@ -18,18 +18,31 @@ enum Route: Hashable {
     case userProfile(User)
 }
 
-/// The shareable invite link, huddlepal://join/<CODE>.
+/// The shareable invite link, https://huddlepals.com/join#<CODE>: a
+/// universal link (Associated Domains) that opens Join in the app, or the
+/// website's join page without it. The code is the fragment, which browsers
+/// and link previews never send, so the invite's secret stays off every
+/// server. Links from before, huddlepal://join/<CODE>, still open.
 enum InviteLink {
+    static let host = "huddlepals.com"
+
     static func url(for code: InviteCode) -> URL {
-        URL(string: "huddlepal://join/\(code.compact)")!
+        URL(string: "https://\(host)/join#\(code.compact)")!
     }
 
     /// The code a link carries, uppercased, for the Join screen: a whole
     /// `InviteCode` (dashes and case don't matter), or an old 6-character
     /// code, which Join then explains is out of date. nil otherwise.
     static func code(from url: URL) -> String? {
-        guard url.scheme == "huddlepal", url.host == "join" else { return nil }
-        let text = url.lastPathComponent
+        let text: String
+        if url.scheme == "https", url.host?.lowercased() == host, ["/join", "/join/"].contains(url.path),
+           let fragment = url.fragment {
+            text = fragment
+        } else if url.scheme == "huddlepal", url.host == "join" {
+            text = url.lastPathComponent
+        } else {
+            return nil
+        }
         if let code = InviteCode(text) { return code.compact }
         return InviteCode.isLegacy(text) ? InviteCode.normalized(text) : nil
     }

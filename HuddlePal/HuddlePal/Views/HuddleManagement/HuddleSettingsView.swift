@@ -241,7 +241,7 @@ private struct SettingsContent: View {
                     .buttonStyle(.bordered)
                     Spacer()
                     if let url = viewModel.inviteShareURL {
-                        ShareLink(item: url, message: Text(viewModel.inviteShareMessage)) {
+                        InviteShareButton(url: url, huddleName: viewModel.huddle.name, emoji: viewModel.huddle.emoji) {
                             Label("Share", systemImage: "square.and.arrow.up")
                                 .font(.system(size: 13, weight: .semibold))
                         }

@@ -88,16 +88,35 @@ final class DecryptedClipCache: @unchecked Sendable {
     }
 }
 
-/// One clip, looping, from memory.
+/// One clip, looping, from memory. It keeps playing until it's paused here:
+/// AVPlayer also stops on its own when something else takes the audio
+/// session (the camera shutting down after a recording, a call) or the app
+/// goes to the background, and it then starts again by itself.
 @MainActor
 final class LoopingClipPlayer {
     let player = AVQueuePlayer()
     private let loader: InMemoryClipLoader
     private let looper: AVPlayerLooper
+    private var wantsToPlay = false
+    private var statusObservation: NSKeyValueObservation?
+    private var observers: [NSObjectProtocol] = []
 
     init(clip: Data) {
         loader = InMemoryClipLoader(data: clip)
         looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(asset: loader.makeAsset()))
+        statusObservation = player.observe(\.timeControlStatus) { [weak self] player, _ in
+            guard player.timeControlStatus == .paused else { return }
+            Task { @MainActor in self?.resumeSoon() }
+        }
+        for name in [AVAudioSession.interruptionNotification, UIApplication.didBecomeActiveNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.resumeSoon() }
+            })
+        }
+    }
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
     }
 
     var isMuted: Bool {
@@ -105,8 +124,32 @@ final class LoopingClipPlayer {
         set { player.isMuted = newValue }
     }
 
-    func play() { player.play() }
-    func pause() { player.pause() }
+    func play() {
+        wantsToPlay = true
+        player.play()
+    }
+
+    func pause() {
+        wantsToPlay = false
+        player.pause()
+    }
+
+    /// Times the clip has started over.
+    var loopCount: Int { looper.loopCount }
+
+    /// A moment later, so whatever stopped it (the camera's audio session,
+    /// a notification sound) has finished; then only if it's still meant
+    /// to play and can.
+    private func resumeSoon() {
+        guard wantsToPlay else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard let self, self.wantsToPlay, self.player.timeControlStatus == .paused,
+                  self.looper.status != .failed, UIApplication.shared.applicationState != .background
+            else { return }
+            self.player.play()
+        }
+    }
 }
 
 /// Who gets the sound. Muted clips play alongside whatever else is playing

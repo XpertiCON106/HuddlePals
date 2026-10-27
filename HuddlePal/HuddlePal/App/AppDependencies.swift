@@ -13,7 +13,7 @@ final class AppSession {
     /// Ids the current user has blocked — their photos/comments are hidden
     /// from the blocker's feed, archive, and detail views.
     var blockedUserIDs: Set<UUID> = []
-    /// Invite code arriving via a huddlepal://join/<code> link, consumed by the
+    /// Invite code arriving via an invite link (`InviteLink`), consumed by the
     /// Join screen.
     var pendingInviteCode: String?
     /// The huddle a tapped push notification is about, opened by the shelf
