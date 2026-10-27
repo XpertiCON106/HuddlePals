@@ -232,7 +232,7 @@ TestFlight build → checks on a device → website → App Review → release.
    | Reference name | Product ID | Duration |
    |---|---|---|
    | HuddlePals Plus Monthly | `com.huddlepals.ios.plus.monthly` | 1 month |
-   | HuddlePals Plus Yearly | `com.huddlepals.ios.plus.annual` | 1 year |
+   | HuddlePals Plus Yearly | `com.huddlepals.ios.plus.yearly` | 1 year |
 
    The IDs must match exactly: the app (`PlusCatalog`) and the
    `APPSTORE_PRODUCT_IDS` secret use them. For each, set your price (the
@@ -287,7 +287,7 @@ TestFlight build → checks on a device → website → App Review → release.
 3. **Secrets** (DEVELOPMENT.md → "Backend setup and deploys"):
 
    ```bash
-   supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.annual
+   supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.yearly
    ```
 
 4. **Functions**, from `HuddlePal/`, after 013 (`send-push` now asks the

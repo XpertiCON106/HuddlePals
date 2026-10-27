@@ -27,7 +27,7 @@ const NOW = Date.now()
 const USER = '6f9619ff-8b86-d011-b42d-00c04fc964ff'
 const BUNDLE = 'com.huddlepals.ios'
 const MONTHLY = 'com.huddlepals.ios.plus.monthly'
-const ANNUAL = 'com.huddlepals.ios.plus.annual'
+const ANNUAL = 'com.huddlepals.ios.plus.yearly'
 const bytes = (base64) => new Uint8Array(Buffer.from(base64, 'base64'))
 
 /** A StoreKit 2 transaction payload (JWSTransactionDecodedPayload) for a Plus purchase. */

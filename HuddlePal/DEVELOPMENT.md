@@ -356,7 +356,7 @@ supabase secrets set --project-ref <project-ref> APPLE_PRIVATE_KEY="$(cat /path/
 HuddlePals Plus (the product ids as created in App Store Connect):
 
 ```bash
-supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.annual
+supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.yearly
 ```
 
 In the SQL editor (change one later with `vault.update_secret`):

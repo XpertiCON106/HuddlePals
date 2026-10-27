@@ -107,7 +107,7 @@ extension PlusServiceProtocol {
 /// The App Store's catalog, and the offline world's prices for it.
 enum PlusCatalog {
     static let monthly = "com.huddlepals.ios.plus.monthly"
-    static let annual = "com.huddlepals.ios.plus.annual"
+    static let annual = "com.huddlepals.ios.plus.yearly"
     static let productIDs = [monthly, annual]
 }
 

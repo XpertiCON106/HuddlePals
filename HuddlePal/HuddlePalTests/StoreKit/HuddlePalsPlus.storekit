@@ -76,7 +76,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.huddlepals.ios.plus.annual",
+          "productID" : "com.huddlepals.ios.plus.yearly",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Plus Annual",
           "subscriptionGroupID" : "21500001",
