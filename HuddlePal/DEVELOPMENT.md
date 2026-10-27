@@ -256,7 +256,17 @@ codes, tokens and keys are never logged.
   those functions touch them.
 - **Edge functions**: `delete-account` and `send-push`. Each splits into
   `index.ts` (wiring), `handler.ts` (logic) and a client file (`apple.ts`,
-  `apns.ts`), so Node can test the logic.
+  `apns.ts`), so Node can test the logic. `verify-subscription` and
+  `app-store-notifications` (HuddlePals Plus) split the same way and share
+  `_shared/apple-jws.ts` (Apple's certificate chain, checked with WebCrypto
+  against the pinned Apple Root CA - G3) and `_shared/subscriptions.ts`.
+- **Plus and the free plan** (migration 013): Postgres enforces them, by
+  the server's clock. `user_entitlements` is written only by
+  `apply_entitlement` (service role, after Apple's signature checks out) and
+  one Apple subscription entitles one account. `huddle_join_rule` decides
+  joins from the keeper's plan; `create_huddle` caps huddles kept; posting a
+  video (and uploading a `.mp4`) takes Plus. None of the free limits apply
+  until `app_limits.free_limits_start` is set.
 
 ## Backend setup and deploys
 
@@ -269,6 +279,7 @@ automatically):
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` (= `com.huddlepals.ios`), `APNS_PRIVATE_KEY` | function secrets | `send-push` |
 | `PUSH_WEBHOOK_SECRET` (e.g. `openssl rand -hex 32`) | function secrets | `send-push` checks the triggers' `x-push-secret` |
 | `push_function_url`, `push_webhook_secret` (same value) | Vault | the push triggers |
+| `APPSTORE_BUNDLE_ID` (= `com.huddlepals.ios`), `APPSTORE_PRODUCT_IDS` (the Plus product ids, comma-separated) | function secrets | `verify-subscription` and `app-store-notifications` (Apple's root certificate is in the code, so no Apple key is needed) |
 
 **Apple keys** ([developer.apple.com](https://developer.apple.com/account) →
 Certificates, Identifiers & Profiles):
@@ -295,6 +306,12 @@ supabase secrets set --project-ref <project-ref> APPLE_TEAM_ID=<TEAM_ID> APPLE_K
 supabase secrets set --project-ref <project-ref> APPLE_PRIVATE_KEY="$(cat /path/to/AuthKey_<SIWA_KEY_ID>.p8)" APNS_PRIVATE_KEY="$(cat /path/to/AuthKey_<APNS_KEY_ID>.p8)"
 ```
 
+HuddlePals Plus (the product ids as created in App Store Connect):
+
+```bash
+supabase secrets set --project-ref <project-ref> APPSTORE_BUNDLE_ID=com.huddlepals.ios APPSTORE_PRODUCT_IDS=com.huddlepals.ios.plus.monthly,com.huddlepals.ios.plus.annual
+```
+
 In the SQL editor (change one later with `vault.update_secret`):
 
 ```sql
@@ -317,8 +334,20 @@ select vault.create_secret('<webhook-secret>', 'push_webhook_secret');
    supabase functions deploy send-push --no-verify-jwt --project-ref <project-ref>
    ```
 
+   ```bash
+   supabase functions deploy verify-subscription --project-ref <project-ref>
+   ```
+
+   ```bash
+   supabase functions deploy app-store-notifications --no-verify-jwt --project-ref <project-ref>
+   ```
+
    `send-push` runs without JWT verification because the database sends no
-   user token; the shared secret is the check.
+   user token; the shared secret is the check. `app-store-notifications`
+   runs without it because Apple sends none; Apple's signature is the check.
+   Its URL, `https://<project-ref>.supabase.co/functions/v1/app-store-notifications`,
+   goes in App Store Connect as the App Store Server Notifications V2 URL,
+   for production and for the sandbox.
 
 ## Building and testing (this machine)
 

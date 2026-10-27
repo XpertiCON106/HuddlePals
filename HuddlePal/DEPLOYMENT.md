@@ -97,6 +97,10 @@ seeded **mock** world. No code changes to switch.
      file it returns under Storage → `deposits`.
    - Yearly: `select * from expired_preserved_photos();` lists what's past
      its keep-until date. Delete each file in Storage, then its row.
+   - Videos work the same way, with two files under the one key: the poster
+     at `storage_path` (`<file>.jpg`, what these return) and the clip at
+     `video_path` (the same name ending in `.mp4`). Review the clip, and when
+     deleting, delete both.
 
 ## Phase 2 — Point the app at it (~5 minutes)
 

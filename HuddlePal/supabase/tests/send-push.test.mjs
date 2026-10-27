@@ -136,13 +136,22 @@ describe('what a notification says', () => {
     assert.equal(alertFor('join', target({ actor_name: 'Sam' })).body, 'Sam joined the huddle.')
     assert.equal(alertFor('deposit', target({ actor_name: null })).body, 'Someone posted a photo.', 'an account deleted since')
   })
+
+  it('says video for a video', () => {
+    assert.equal(alertFor('deposit', target(), 'video').body, 'Maya posted a video.')
+    assert.equal(alertFor('comment', target(), 'video').body, 'Maya commented on your video.')
+    assert.equal(alertFor('reaction', target({ detail: '🔥' }), 'video').body, 'Maya reacted 🔥 to your video.')
+    assert.equal(alertFor('reaction', target(), 'video').body, 'Maya reacted to your video.')
+    assert.equal(alertFor('deposit', target(), null).body, 'Maya posted a photo.')
+  })
 })
 
 describe('send-push handler', () => {
-  async function setUp({ targets = [target()], apnsAnswer, withApns = true, webhookSecret = SECRET, failTargets } = {}) {
+  async function setUp({ targets = [target()], apnsAnswer, withApns = true, webhookSecret = SECRET, failTargets, mediaType = 'photo' } = {}) {
     const { config } = await apnsConfig()
     const apns = fakeApns(apnsAnswer)
     const asked = []
+    const askedMedia = []
     const removed = []
     const logs = []
     const services = {
@@ -154,11 +163,16 @@ describe('send-push handler', () => {
         if (failTargets) throw failTargets
         return targets
       },
+      mediaType: async (kind, id) => {
+        askedMedia.push([kind, id])
+        if (mediaType instanceof Error) throw mediaType
+        return mediaType
+      },
       removeTokens: async (tokens) => { removed.push(...tokens) },
       fetch: apns.fetch,
       log: (event, detail) => logs.push(detail ? `${event} ${detail}` : event),
     }
-    return { services, apns, asked, removed, logs }
+    return { services, apns, asked, askedMedia, removed, logs }
   }
 
   const request = (body = { kind: 'deposit', id: EVENT }, { secret = SECRET, method = 'POST' } = {}) =>
@@ -246,5 +260,24 @@ describe('send-push handler', () => {
     const { services, asked } = await setUp()
     assert.equal((await handleSendPush(request(undefined, { method: 'GET' }), services)).status, 405)
     assert.deepEqual(asked, [])
+  })
+
+  it('says video when the deposit is one, asking once per event', async () => {
+    const targets = [target(), target({ user_id: 'u2', token: 'b'.repeat(64) })]
+    const { services, apns, askedMedia } = await setUp({ targets, mediaType: 'video' })
+    await handleSendPush(request({ kind: 'comment', id: EVENT }), services)
+    assert.deepEqual(askedMedia, [['comment', EVENT]])
+    assert.ok(apns.calls.every((c) => c.body.aps.alert.body === 'Maya commented on your video.'))
+  })
+
+  it('a failed media lookup still notifies, as a photo; a join never asks', async () => {
+    const failing = await setUp({ mediaType: new Error('push_media_type does not exist') })
+    assert.equal((await handleSendPush(request(), failing.services)).status, 200)
+    assert.equal(failing.apns.calls[0].body.aps.alert.body, 'Maya posted a photo.')
+    assert.deepEqual(failing.logs.filter((l) => l.startsWith('push_media_type_failed')), ['push_media_type_failed push_media_type does not exist'])
+    const join = await setUp({ targets: [target({ actor_name: 'Sam' })] })
+    await handleSendPush(request({ kind: 'join', id: EVENT }), join.services)
+    assert.deepEqual(join.askedMedia, [])
+    assert.equal(join.apns.calls[0].body.aps.alert.body, 'Sam joined the huddle.')
   })
 })

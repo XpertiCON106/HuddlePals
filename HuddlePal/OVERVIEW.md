@@ -308,7 +308,7 @@ Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤8 people
 
 Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sql](supabase/schema.sql)) run once in the Supabase SQL editor. Three pillars:
 
-**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `preserved_photos`, `join_attempts`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
+**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `preserved_photos`, `join_attempts`, `user_entitlements`, `app_store_notifications`, `app_limits`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
 
 **Row Level Security** — privacy *is* the product, so the database enforces it even against a malicious client (the anon key ships in the binary by design; RLS is the boundary):
 
@@ -317,7 +317,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | profiles | yourself + anyone sharing a huddle with you | only your own row |
 | huddles | huddles you belong to | keeper updates settings; create/join via RPC only |
 | memberships | co-members | delete your own (leave); insert via RPC only |
-| deposits | your huddles' | only your own, only into your huddles, only within the 48h window |
+| deposits | your huddles' | only your own, only into your huddles, only within the 48h window; a video only with Plus |
 | reactions / comments | wherever you can see the deposit | your own |
 | reports / blocks | your own | your own |
 | user_keys | your own + co-members' public keys | only your own row |
@@ -326,7 +326,9 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | device_tokens | your own | your own |
 | terms_acceptances | your own | insert your own (the server stamps `recorded_at`); no updates or deletes |
 | preserved_photos | nobody (no policies, no privileges) | the operator only, through `remove_reported_photo` |
-| storage objects | bucket `deposits`: huddle photos (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites); `avatars/<your id>/…` only |
+| user_entitlements | nobody; your own plan through `my_entitlement()` | the edge functions only, through `apply_entitlement`, once Apple's signature checks out |
+| app_store_notifications, app_limits | nobody (no policies, no privileges) | the edge functions / the operator |
+| storage objects | bucket `deposits`: huddle photos and video clips (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites; a `.mp4` clip only with Plus); `avatars/<your id>/…` only |
 
 Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, `can_see_deposit`) are `SECURITY DEFINER` — the standard way to avoid the memberships-policy-reads-memberships RLS recursion trap.
 
@@ -334,9 +336,12 @@ Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, 
 
 | Function | Purpose |
 |---|---|
-| `create_huddle(name, emoji, day_key)` | Huddle + keeper membership + unique invite code in one transaction |
+| `create_huddle(name, emoji, day_key)` | Huddle + keeper membership + unique invite code in one transaction; once the free limits are on, 3 huddles kept on the free plan, 10 with Plus |
 | `join_huddle(code, day_key)` | Old secret-less codes only (old app builds), until the huddle gets a new-format invite |
-| `redeem_huddle_invite(lookup, proof, day_key)` | Checks the code's proof (10 misses/hour), the 8-member cap and blocks, inserts membership, returns the huddle key sealed for the code |
+| `redeem_huddle_invite(lookup, proof, day_key)` | Checks the code's proof (10 misses/hour), `huddle_join_rule`, the 25-huddle limit and blocks, inserts membership, returns the huddle key sealed for the code |
+| `huddle_join_rule(huddle)` / `huddle_join_status(huddle)` | How many members a huddle takes, from its keeper's plan (8 before the free limits start; then 4 on the free plan, and only in the keeper's 3 longest-kept huddles; 10 with Plus), and why it refuses one more. The status is for members, so the app can explain a paused invite |
+| `my_entitlement()` | The caller's plan: Plus or not and until when, the server's clock, the free limits' start, huddles kept against the cap |
+| `apply_entitlement(…)` | Service role only: records what Apple signed about one subscription, keeping it with one account and ignoring anything signed earlier than what it has |
 | `huddle_invite(huddle)` | For members: the lookup, the secret sealed with the huddle key, and whether the huddle is still on an old code |
 | `create_huddle_invite` / `reset_huddle_invite` | Issue the first new-format invite (any member holding the key) / replace it (keeper); both retire the previous code |
 | `save_own_huddle_key(huddle, wrapped key…)` | A member who joined with an invite stores their own copy; never over a working one |

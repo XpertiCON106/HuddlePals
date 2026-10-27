@@ -4,9 +4,11 @@
 -- with {{ .Token }}, Apple client id, optional Twilio for SMS), and
 -- Storage → create PRIVATE bucket named "deposits" (5 MB limit; allowed MIME
 -- types image/jpeg for avatars + application/octet-stream for the
--- end-to-end encrypted huddle photos). Push notifications also need the
--- send-push edge function and two Vault secrets (DEVELOPMENT.md, "Backend
--- setup and deploys"); this file enables pg_net for them.
+-- end-to-end encrypted huddle photos and video clips). Push notifications
+-- also need the send-push edge function and two Vault secrets
+-- (DEVELOPMENT.md, "Backend setup and deploys"); this file enables pg_net for
+-- them. HuddlePals Plus needs the verify-subscription and
+-- app-store-notifications edge functions.
 
 -- pgcrypto provides gen_random_bytes() for crypto-strength invite codes.
 create extension if not exists pgcrypto;
@@ -50,6 +52,11 @@ create table public.memberships (
   -- The member's local calendar day at join ("yyyy-MM-dd", like deposits'
   -- day_key). Streaks wait on a member only from the day AFTER this one.
   joined_day_key text check (joined_day_key is null or joined_day_key ~ '^\d{4}-\d{2}-\d{2}$'),
+  -- When this member became the keeper (null for members). The free plan
+  -- takes new members only into the 3 huddles its keeper has kept longest,
+  -- so a huddle someone inherits joins the back of that queue instead of
+  -- pushing their own out (huddle_join_rule).
+  keeper_since timestamptz,
   unique (user_id, huddle_id)
 );
 
@@ -72,8 +79,22 @@ create table public.deposits (
   caption text check (caption is null or char_length(caption) <= 80),
   day_key text not null check (day_key ~ '^\d{4}-\d{2}-\d{2}$'),
   created_at timestamptz not null default now(),
-  -- Once-and-permanent: one deposit per member per huddle per day; a second
-  -- insert fails atomically on this constraint.
+  -- A video deposit is two Storage objects sealed with the same photo key:
+  -- its poster, a JPEG at storage_path as for any photo (so app builds from
+  -- before videos show it as a photo), and the clip, an MP4 at video_path,
+  -- the same path ending in .mp4. Posting one takes Plus (deposits_insert);
+  -- it stays once Plus ends.
+  media_type text not null default 'photo' constraint deposits_media_type_check check (media_type in ('photo', 'video')),
+  duration_ms int constraint deposits_duration_ms_check check (duration_ms between 1 and 6100),
+  video_path text,
+  constraint deposits_video_check check (
+    (media_type = 'video') = (video_path is not null)
+    and (duration_ms is null or media_type = 'video')
+    and (video_path is null or video_path = regexp_replace(storage_path, '\.jpg$', '.mp4', 'i'))
+  ),
+  -- Once-and-permanent: one deposit per member per huddle per day (a photo
+  -- or a video, never both); a second insert fails atomically on this
+  -- constraint.
   unique (huddle_id, author_id, day_key)
 );
 
@@ -176,6 +197,220 @@ language sql stable set search_path = public as $$
      and not exists (select 1 from required r where r.user_id not in (select u from covered where u is not null));
 $$;
 
+-- ============================================ plans: free and HuddlePals Plus
+-- On the free plan an account keeps up to 3 huddles, and a huddle whose
+-- keeper is on it takes up to 4 members. Plus (an App Store subscription,
+-- checked by the verify-subscription and app-store-notifications edge
+-- functions) keeps up to 10 huddles of up to 10 members and can post video
+-- clips. When a subscription ends nobody is removed and nothing is deleted:
+-- only new joins and new huddles are held back. The limits apply only once
+-- the operator sets app_limits.free_limits_start.
+
+create table public.app_limits (
+  -- One row.
+  id boolean primary key default true check (id),
+  -- When the free plan's limits start. Null (as shipped) or a time still to
+  -- come keeps the old rules for everyone: 8 members, no cap on huddles.
+  -- Set it to the Plus launch plus a grace period; set it back to null to
+  -- undo. Operator only (SQL editor).
+  free_limits_start timestamptz
+);
+insert into public.app_limits (id) values (true) on conflict (id) do nothing;
+alter table public.app_limits enable row level security;
+revoke all on public.app_limits from anon, authenticated;
+
+create or replace function public.free_limits_active()
+returns boolean
+language sql stable security definer set search_path = public as
+$$ select coalesce((select free_limits_start <= now() from app_limits), false); $$;
+
+-- What Apple says about each subscription, written only by the edge
+-- functions (service role) after checking Apple's signature. One Apple
+-- subscription entitles one HuddlePals account. Goes with the account.
+create table public.user_entitlements (
+  -- The subscription's first transaction: the same across renewals, plan
+  -- changes and resubscribing.
+  original_transaction_id text primary key check (char_length(original_transaction_id) between 1 and 64),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  product_id text not null,
+  -- The newest transaction applied (each renewal is a new one).
+  transaction_id text not null,
+  -- App Review and TestFlight buy in the sandbox, so both count.
+  environment text not null check (environment in ('Production', 'Sandbox')),
+  purchased_at timestamptz,
+  expires_at timestamptz not null,
+  -- Billing grace period: Plus continues while Apple retries a failed renewal.
+  grace_period_expires_at timestamptz,
+  -- A refund or revocation ends Plus at once.
+  revoked_at timestamptz,
+  will_auto_renew boolean,
+  -- Apple's signedDate of the newest transaction and renewal info applied.
+  -- Anything Apple signed earlier (a retried or late notification, a
+  -- transaction the app had cached) changes nothing.
+  transaction_signed_at timestamptz not null,
+  renewal_signed_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+create index user_entitlements_user on public.user_entitlements (user_id);
+alter table public.user_entitlements enable row level security;
+revoke all on public.user_entitlements from anon, authenticated;
+
+-- App Store Server Notifications received, kept 90 days: which arrived and
+-- when, nothing more. What they said is applied to user_entitlements.
+create table public.app_store_notifications (
+  notification_uuid uuid primary key,
+  notification_type text not null,
+  subtype text,
+  original_transaction_id text,
+  signed_at timestamptz not null,
+  received_at timestamptz not null default now()
+);
+alter table public.app_store_notifications enable row level security;
+revoke all on public.app_store_notifications from anon, authenticated;
+
+-- Whether an account has Plus right now, by the server's clock. For
+-- SECURITY DEFINER code only (the join and create rules): the app reads its
+-- own status through my_entitlement() and policies use caller_is_premium(),
+-- so nobody can look up anyone else's.
+create or replace function public.is_user_premium(p_user uuid)
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from user_entitlements e
+    where e.user_id = p_user
+      and e.revoked_at is null
+      -- greatest() skips nulls, and a grace date left from an earlier
+      -- period never cuts a renewal short.
+      and greatest(e.expires_at, e.grace_period_expires_at) > now()
+  );
+$$;
+revoke execute on function public.is_user_premium(uuid) from public, anon, authenticated;
+grant execute on function public.is_user_premium(uuid) to service_role;
+
+create or replace function public.caller_is_premium()
+returns boolean
+language sql stable security definer set search_path = public as
+$$ select is_user_premium(auth.uid()); $$;
+
+-- Records what Apple says about one subscription. Service role only: the
+-- edge functions call it once Apple's signature checks out. The account
+-- that first presents a subscription keeps it while that account exists:
+-- p_user is that caller (verify-subscription), or null for a notification,
+-- which updates a subscription some account already holds, or gives it to
+-- the account its appAccountToken names (the app sets the user's id there
+-- at purchase). A token naming another account that still exists makes the
+-- subscription theirs. Returns 'applied', 'stale' (Apple has since signed
+-- newer information), 'in_use' (another account holds it) or 'unbound'.
+create or replace function public.apply_entitlement(
+  p_user uuid,
+  p_original_transaction_id text,
+  p_transaction_id text,
+  p_product_id text,
+  p_environment text,
+  p_purchased_at timestamptz,
+  p_expires_at timestamptz,
+  p_revoked_at timestamptz,
+  p_transaction_signed_at timestamptz,
+  p_app_account_token uuid,
+  p_grace_period_expires_at timestamptz default null,
+  p_will_auto_renew boolean default null,
+  p_renewal_signed_at timestamptz default null
+)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row user_entitlements%rowtype;
+  v_owner uuid;
+  v_applied boolean := false;
+begin
+  -- One subscription at a time: two accounts restoring it at once, or a
+  -- notification racing the app.
+  perform pg_advisory_xact_lock(hashtextextended('entitlement:' || p_original_transaction_id, 0));
+  select * into v_row from user_entitlements where original_transaction_id = p_original_transaction_id;
+  if found then
+    if p_user is not null and p_user <> v_row.user_id then
+      return 'in_use';
+    end if;
+    if p_transaction_signed_at > v_row.transaction_signed_at then
+      update user_entitlements
+         set transaction_id = p_transaction_id, product_id = p_product_id, environment = p_environment,
+             purchased_at = p_purchased_at, expires_at = p_expires_at, revoked_at = p_revoked_at,
+             transaction_signed_at = p_transaction_signed_at, updated_at = now()
+       where original_transaction_id = p_original_transaction_id;
+      v_applied := true;
+    end if;
+    if p_renewal_signed_at > coalesce(v_row.renewal_signed_at, '-infinity') then
+      update user_entitlements
+         set grace_period_expires_at = p_grace_period_expires_at, will_auto_renew = p_will_auto_renew,
+             renewal_signed_at = p_renewal_signed_at, updated_at = now()
+       where original_transaction_id = p_original_transaction_id;
+      v_applied := true;
+    end if;
+    return case when v_applied then 'applied' else 'stale' end;
+  end if;
+
+  if p_user is not null and p_app_account_token is not null and p_app_account_token <> p_user
+     and exists (select 1 from auth.users where id = p_app_account_token) then
+    return 'in_use';
+  end if;
+  v_owner := coalesce(p_user, p_app_account_token);
+  if v_owner is null or not exists (select 1 from auth.users where id = v_owner) then
+    return 'unbound';
+  end if;
+  insert into user_entitlements (original_transaction_id, user_id, product_id, transaction_id, environment,
+                                 purchased_at, expires_at, revoked_at, transaction_signed_at,
+                                 grace_period_expires_at, will_auto_renew, renewal_signed_at)
+    values (p_original_transaction_id, v_owner, p_product_id, p_transaction_id, p_environment,
+            p_purchased_at, p_expires_at, p_revoked_at, p_transaction_signed_at,
+            p_grace_period_expires_at, p_will_auto_renew, p_renewal_signed_at);
+  return 'applied';
+end $$;
+revoke execute on function public.apply_entitlement(uuid, text, text, text, text, timestamptz, timestamptz,
+  timestamptz, timestamptz, uuid, timestamptz, boolean, timestamptz) from public, anon, authenticated;
+grant execute on function public.apply_entitlement(uuid, text, text, text, text, timestamptz, timestamptz,
+  timestamptz, timestamptz, uuid, timestamptz, boolean, timestamptz) to service_role;
+
+-- Notes that a notification arrived (false if it already had) and forgets
+-- those older than 90 days. Service role only: app-store-notifications.
+create or replace function public.record_app_store_notification(
+  p_uuid uuid, p_type text, p_subtype text, p_original_transaction_id text, p_signed_at timestamptz
+)
+returns boolean
+language plpgsql set search_path = public as $$
+begin
+  delete from app_store_notifications where received_at < now() - interval '90 days';
+  insert into app_store_notifications (notification_uuid, notification_type, subtype, original_transaction_id, signed_at)
+    values (p_uuid, p_type, p_subtype, p_original_transaction_id, p_signed_at)
+    on conflict (notification_uuid) do nothing;
+  return found;
+end $$;
+revoke execute on function public.record_app_store_notification(uuid, text, text, text, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.record_app_store_notification(uuid, text, text, text, timestamptz) to service_role;
+
+-- The caller's own plan, for the app: whether Plus is on and until when, the
+-- server's clock (the app's "today" for the archive, whatever the phone's
+-- clock says), when the free limits start, and how many huddles they keep
+-- against which cap (null while the limits are off).
+create or replace function public.my_entitlement()
+returns table (
+  is_premium boolean, premium_until timestamptz, server_now timestamptz,
+  free_limits_start timestamptz, kept_huddles int, huddle_limit int
+)
+language sql stable security definer set search_path = public as $$
+  select
+    is_user_premium(auth.uid()),
+    (select max(greatest(e.expires_at, e.grace_period_expires_at)) from user_entitlements e
+      where e.user_id = auth.uid() and e.revoked_at is null),
+    now(),
+    (select l.free_limits_start from app_limits l),
+    (select count(*)::int from memberships m where m.user_id = auth.uid() and m.role = 'keeper'),
+    case when not free_limits_active() then null
+         when is_user_premium(auth.uid()) then 10
+         else 3 end
+  where auth.uid() is not null;
+$$;
+
 -- ============================================================== RLS
 
 alter table public.profiles    enable row level security;
@@ -219,6 +454,7 @@ create policy memberships_delete on public.memberships for delete
 -- deposits: members read; you write only your own, only into your huddles,
 -- and only for today-or-yesterday (the 48h backfill window, UTC-anchored —
 -- generous by up to a day for non-UTC users, never blocks a legal deposit).
+-- A video takes Plus at the moment it's posted.
 create policy deposits_select on public.deposits for select
   using (is_huddle_member(huddle_id));
 create policy deposits_insert on public.deposits for insert
@@ -227,6 +463,7 @@ create policy deposits_insert on public.deposits for insert
     and is_huddle_member(huddle_id)
     and day_key >= to_char(now() - interval '2 days', 'YYYY-MM-DD')
     and day_key <= to_char(now() + interval '1 day',  'YYYY-MM-DD')
+    and (media_type = 'photo' or caller_is_premium())
   );
 -- Once-and-permanent: deliberately NO update and NO delete policies on
 -- deposits. Even a hacked client cannot edit, replace, or remove a photo
@@ -255,16 +492,29 @@ create policy skips_select on public.skips for select
 
 -- Creates a huddle plus its keeper membership atomically, with a unique
 -- server-generated invite code (ambiguous glyphs excluded). `p_day_key` is
--- the caller's local today, stored as the keeper's join day.
+-- the caller's local today, stored as the keeper's join day. Once the free
+-- limits are on, an account keeps up to 3 huddles on the free plan and 10
+-- with Plus, inherited ones included. Locking the caller's profile row
+-- serializes their creates, so two at once can't both pass.
 create or replace function public.create_huddle(p_name text, p_emoji text, p_day_key text default null)
 returns setof public.huddles
 language plpgsql security definer set search_path = public as $$
 declare
   v_code text;
   v_huddle huddles%rowtype;
+  v_kept int;
   alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
+  if free_limits_active() then
+    perform 1 from profiles where id = auth.uid() for update;
+    select count(*) into v_kept from memberships where user_id = auth.uid() and role = 'keeper';
+    if is_user_premium(auth.uid()) then
+      if v_kept >= 10 then raise exception 'huddle_limit_reached_premium'; end if;
+    elsif v_kept >= 3 then
+      raise exception 'huddle_limit_reached_free';
+    end if;
+  end if;
   loop
     v_code := '';
     -- Crypto-strength source (not the predictable `random()` PRNG); the
@@ -276,8 +526,8 @@ begin
   end loop;
   insert into huddles (name, emoji, invite_code) values (p_name, p_emoji, v_code)
     returning * into v_huddle;
-  insert into memberships (user_id, huddle_id, role, joined_day_key)
-    values (auth.uid(), v_huddle.id, 'keeper', client_day_key(p_day_key));
+  insert into memberships (user_id, huddle_id, role, joined_day_key, keeper_since)
+    values (auth.uid(), v_huddle.id, 'keeper', client_day_key(p_day_key), now());
   return next v_huddle;
 end $$;
 
@@ -294,7 +544,62 @@ create table public.join_attempts (
 create index join_attempts_user_time on public.join_attempts (user_id, attempted_at);
 alter table public.join_attempts enable row level security;
 
--- Validates the invite code and enforces the 8-member cap atomically.
+-- How many members a huddle takes, and why it refuses one more if it does.
+-- The keeper's plan decides, not the members': with Plus, 10; on the free
+-- plan, 4, and only in the 3 huddles they've kept longest, so a month of Plus
+-- spent creating empty huddles fills just 3 of them for free afterwards.
+-- Before the free limits start, every huddle takes 8, as it always has.
+-- Once they're on, no refusal says "huddle_full" and every one says
+-- "blocked": app builds from before Plus show "This huddle already has 8
+-- members" for any message containing "huddle_full", and "You can't join
+-- this huddle." for one containing "blocked", which is true of them all.
+create or replace function public.huddle_join_rule(p_huddle uuid)
+returns table (member_count int, member_cap int, refusal text)
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_keeper uuid;
+begin
+  select count(*)::int into member_count from memberships where huddle_id = p_huddle;
+  if not free_limits_active() then
+    member_cap := 8;
+    refusal := case when member_count >= member_cap then 'huddle_full' end;
+    return next;
+    return;
+  end if;
+  select m.user_id into v_keeper from memberships m where m.huddle_id = p_huddle and m.role = 'keeper';
+  if v_keeper is not null and is_user_premium(v_keeper) then
+    member_cap := 10;
+    refusal := case when member_count >= member_cap then 'join_blocked_max_members' end;
+  else
+    member_cap := 4;
+    if v_keeper is null or p_huddle not in (
+      select m.huddle_id from memberships m where m.user_id = v_keeper and m.role = 'keeper'
+      order by m.keeper_since, m.huddle_id limit 3
+    ) then
+      refusal := 'join_blocked_invites_paused';
+    elsif member_count >= member_cap then
+      refusal := 'join_blocked_free_limit';
+    end if;
+  end if;
+  return next;
+end $$;
+revoke execute on function public.huddle_join_rule(uuid) from public, anon, authenticated;
+
+-- For a huddle's members: whether it takes new members right now, and if
+-- not, why (huddle_join_rule's refusal), so the app can explain instead of
+-- showing an invite code that would fail.
+create or replace function public.huddle_join_status(p_huddle uuid)
+returns table (accepting boolean, refusal text, member_count int, member_cap int)
+language sql stable security definer set search_path = public as $$
+  select r.refusal is null, r.refusal, r.member_count, r.member_cap
+  from huddle_join_rule(p_huddle) r
+  where is_huddle_member(p_huddle);
+$$;
+
+-- Validates the invite code and applies huddle_join_rule atomically: the
+-- joiner's and the huddle's rows are locked before anything is counted, so
+-- two people joining at once can't both take the last place, and nobody
+-- passes the 25-huddle limit by joining two at once.
 -- `p_day_key` is the caller's local today, stored as their join day — the
 -- streak starts waiting on them the day after. An unknown code returns no
 -- row (the app reads that as "no huddle for that code"): raising instead
@@ -306,6 +611,7 @@ returns setof public.huddles
 language plpgsql security definer set search_path = public as $$
 declare
   v_huddle huddles%rowtype;
+  v_refusal text;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
   delete from join_attempts where user_id = auth.uid() and attempted_at < now() - interval '1 hour';
@@ -320,9 +626,13 @@ begin
   if exists (select 1 from memberships where huddle_id = v_huddle.id and user_id = auth.uid()) then
     raise exception 'already_member';
   end if;
-  if (select count(*) from memberships where huddle_id = v_huddle.id) >= 8 then
-    raise exception 'huddle_full';
+  perform 1 from profiles where id = auth.uid() for update;
+  perform 1 from huddles where id = v_huddle.id for update;
+  if free_limits_active() and (select count(*) from memberships where user_id = auth.uid()) >= 25 then
+    raise exception 'join_blocked_membership_limit';
   end if;
+  select r.refusal into v_refusal from huddle_join_rule(v_huddle.id) r;
+  if v_refusal is not null then raise exception '%', v_refusal; end if;
   insert into memberships (user_id, huddle_id, joined_day_key)
     values (auth.uid(), v_huddle.id, client_day_key(p_day_key));
   return next v_huddle;
@@ -330,9 +640,10 @@ end $$;
 
 -- A huddle always has a keeper: when the keeper leaves (or deletes their
 -- account, which cascades here), the longest-standing remaining member
--- takes over. A departing member's wrapped copy of the huddle key goes with
--- them: no key material outlives the membership. Runs as the table owner,
--- since members can't update roles or delete key copies.
+-- takes over, keeper from now on (keeper_since). A departing member's wrapped
+-- copy of the huddle key goes with them: no key material outlives the
+-- membership. Runs as the table owner, since members can't update roles or
+-- delete key copies.
 create or replace function public.handle_membership_removed()
 returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -340,7 +651,7 @@ begin
   delete from huddle_keys where huddle_id = old.huddle_id and user_id = old.user_id;
   if old.role = 'keeper'
      and not exists (select 1 from memberships where huddle_id = old.huddle_id and role = 'keeper') then
-    update memberships set role = 'keeper'
+    update memberships set role = 'keeper', keeper_since = now()
       where id = (select id from memberships where huddle_id = old.huddle_id
                   order by joined_at, id limit 1);
   end if;
@@ -411,7 +722,8 @@ end $$;
 
 -- ======================================================= storage RLS
 -- One private bucket, "deposits", with two path namespaces:
---   "<huddle_id>/<file>.jpg"          → huddle photos (ciphertext), gated by membership
+--   "<huddle_id>/<file>.jpg|.mp4"     → huddle photos and video clips (ciphertext),
+--                                      gated by membership; uploading a clip takes Plus
 --   "avatars/<user_id>/<file>.jpg"   → profile photos: readable by the owner and
 --                                      anyone who shares a huddle with them (the
 --                                      same people who can read the profile row);
@@ -454,6 +766,8 @@ create policy deposits_storage_insert on storage.objects for insert
       or (
         try_uuid((storage.foldername(name))[1]) is not null
         and is_huddle_member(try_uuid((storage.foldername(name))[1]))
+        -- Video clips: Plus only.
+        and (name !~* '\.mp4$' or caller_is_premium())
       )
     )
   );
@@ -548,8 +862,11 @@ create table public.preserved_photos (
   author_id uuid,
   day_key text,
   caption text,
-  -- The encrypted file, still in Storage (bucket "deposits").
+  -- The encrypted file, still in Storage (bucket "deposits"). For a video,
+  -- its poster; the clip is video_path, the same path ending in .mp4.
   storage_path text not null,
+  media_type text not null default 'photo',
+  video_path text,
   -- The photo key sealed with the huddle key, as the deposit row held it.
   wrapped_photo_key text not null,
   -- The photo's own key from the newest report that carried one: opens the
@@ -567,10 +884,11 @@ create table public.preserved_photos (
 alter table public.preserved_photos enable row level security;
 revoke all on public.preserved_photos from anon, authenticated;
 
--- Removes one photo from its huddle. With p_preserve (the default), it is
--- kept in preserved_photos first; pass false for a removal the law doesn't
--- ask you to keep (an adult's intimate image, a copyright notice), then
--- delete the returned file in Storage. Returns the file's Storage path.
+-- Removes one photo or video from its huddle. With p_preserve (the default),
+-- it is kept in preserved_photos first; pass false for a removal the law
+-- doesn't ask you to keep (an adult's intimate image, a copyright notice),
+-- then delete the returned file in Storage, and for a video its clip too
+-- (the same path ending in .mp4). Returns the file's Storage path.
 create or replace function public.remove_reported_photo(
   p_deposit uuid, p_preserve boolean default true, p_note text default null
 )
@@ -589,9 +907,10 @@ begin
     from reports r where r.deposit_id = p_deposit;
   if p_preserve then
     insert into preserved_photos (deposit_id, huddle_id, author_id, day_key, caption, storage_path,
-                                  wrapped_photo_key, photo_key, report_ids, note)
+                                  media_type, video_path, wrapped_photo_key, photo_key, report_ids, note)
       values (v_deposit.id, v_deposit.huddle_id, v_deposit.author_id, v_deposit.day_key, v_deposit.caption,
-              v_deposit.storage_path, v_deposit.wrapped_photo_key, v_photo_key, v_report_ids, p_note);
+              v_deposit.storage_path, v_deposit.media_type, v_deposit.video_path, v_deposit.wrapped_photo_key,
+              v_photo_key, v_report_ids, p_note);
   end if;
   delete from deposits where id = p_deposit;
   return v_deposit.storage_path;
@@ -599,8 +918,9 @@ end $$;
 revoke execute on function public.remove_reported_photo(uuid, boolean, text) from public, anon, authenticated;
 grant execute on function public.remove_reported_photo(uuid, boolean, text) to service_role;
 
--- Preserved photos past keep_until: delete each file in Storage, then its
--- row (delete from preserved_photos where id = ...).
+-- Preserved photos past keep_until: delete each file in Storage (for a
+-- video, its video_path too), then its row (delete from preserved_photos
+-- where id = ...).
 create or replace function public.expired_preserved_photos()
 returns table (id uuid, storage_path text, keep_until timestamptz)
 language sql stable set search_path = public as $$
@@ -844,14 +1164,16 @@ $$ select exists (select 1 from huddle_keys k
 
 -- Joins with a new-format invite. The caller proves they hold the code (the
 -- proof's hash must match) under the same 10-misses-an-hour limit as
--- join_huddle; then the usual checks, plus: nobody in the huddle has blocked
--- them. Returns the sealed huddle key for the caller's app to open with the
--- code's secret. A wrong code returns no row, so the miss is recorded.
+-- join_huddle; then the same limits and locks, plus: nobody in the huddle
+-- has blocked them. Returns the sealed huddle key for the caller's app to
+-- open with the code's secret. A wrong code returns no row, so the miss is
+-- recorded.
 create or replace function public.redeem_huddle_invite(p_lookup text, p_proof text, p_day_key text default null)
 returns table (joined_huddle_id uuid, invite_salt text, invite_sealed_key text)
 language plpgsql security definer set search_path = public as $$
 declare
   v_invite huddle_invite_keys%rowtype;
+  v_refusal text;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
   delete from join_attempts where user_id = auth.uid() and attempted_at < now() - interval '1 hour';
@@ -869,9 +1191,13 @@ begin
   if exists (select 1 from memberships m where m.huddle_id = v_invite.huddle_id and m.user_id = auth.uid()) then
     raise exception 'already_member';
   end if;
-  if (select count(*) from memberships m where m.huddle_id = v_invite.huddle_id) >= 8 then
-    raise exception 'huddle_full';
+  perform 1 from profiles where id = auth.uid() for update;
+  perform 1 from huddles where id = v_invite.huddle_id for update;
+  if free_limits_active() and (select count(*) from memberships m where m.user_id = auth.uid()) >= 25 then
+    raise exception 'join_blocked_membership_limit';
   end if;
+  select r.refusal into v_refusal from huddle_join_rule(v_invite.huddle_id) r;
+  if v_refusal is not null then raise exception '%', v_refusal; end if;
   if exists (select 1 from blocks b
              join memberships m on m.user_id = b.blocker_id and m.huddle_id = v_invite.huddle_id
              where b.blocked_id = auth.uid()) then
@@ -1090,6 +1416,23 @@ language sql stable set search_path = public as $$
 $$;
 revoke execute on function public.push_targets(text, uuid) from public, anon, authenticated;
 grant execute on function public.push_targets(text, uuid) to service_role;
+
+-- What a notification's deposit is, 'photo' or 'video', so it can say which
+-- (null for a join). Service role only: send-push calls it.
+create or replace function public.push_media_type(p_kind text, p_id uuid)
+returns text
+language sql stable set search_path = public as $$
+  select d.media_type from deposits d where p_kind = 'deposit' and d.id = p_id
+  union all
+  select d.media_type from comments c join deposits d on d.id = c.deposit_id
+   where p_kind = 'comment' and c.id = p_id
+  union all
+  select d.media_type from reactions r join deposits d on d.id = r.deposit_id
+   where p_kind = 'reaction' and r.id = p_id
+  limit 1;
+$$;
+revoke execute on function public.push_media_type(text, uuid) from public, anon, authenticated;
+grant execute on function public.push_media_type(text, uuid) to service_role;
 
 -- AFTER INSERT on the four tables: queues a POST to send-push with the kind
 -- of event and the new row's id. pg_net sends it only once the insert

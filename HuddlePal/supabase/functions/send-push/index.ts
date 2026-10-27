@@ -6,8 +6,9 @@
 // {"kind": "deposit" | "comment" | "reaction" | "join", "id": "<row id>"}
 // through pg_net with the shared secret in x-push-secret. The function asks
 // public.push_targets who to notify (never the person who acted, never across
-// a block), sends one alert per device, and deletes tokens APNs reports as
-// invalid (410 Unregistered, 400 BadDeviceToken).
+// a block) and public.push_media_type whether it's about a photo or a video
+// (migration 013), sends one alert per device, and deletes tokens APNs
+// reports as invalid (410 Unregistered, 400 BadDeviceToken).
 //
 // Deploy with JWT verification off (the trigger sends no user token; the
 // shared secret is the check):
@@ -46,6 +47,11 @@ Deno.serve((req) =>
       const { data, error } = await admin.rpc("push_targets", { p_kind: kind, p_id: id });
       if (error) throw new Error(error.message);
       return (data ?? []) as PushTarget[];
+    },
+    async mediaType(kind, id) {
+      const { data, error } = await admin.rpc("push_media_type", { p_kind: kind, p_id: id });
+      if (error) throw new Error(error.message);
+      return data === "video" ? "video" : data === "photo" ? "photo" : null;
     },
     async removeTokens(tokens) {
       const { error } = await admin.from("device_tokens").delete().in("token", tokens);
