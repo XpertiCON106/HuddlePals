@@ -111,8 +111,7 @@ private struct ProfileContent: View {
         .background(Theme.background)
         .overlay {
             if viewModel.isLoading {
-                ProgressView()
-                    .accessibilityLabel("Loading profile")
+                HuddleSpinner(label: "Loading profile")
             }
         }
         .task {
@@ -306,17 +305,26 @@ private struct ProfileContent: View {
             }
             .listRowBackground(Theme.surface)
 
-            VStack(alignment: .leading, spacing: 4) {
-                BirthdayRow(birthday: viewModel.birthday) { picked in
-                    Task { await viewModel.saveBirthday(picked) }
+            // Given when the profile was made, and only shown here: it
+            // can't be changed after sign-up.
+            if let birthday = viewModel.birthday {
+                HStack(spacing: 8) {
+                    Text("Birthday")
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Text(birthday.formatted())
+                        .foregroundStyle(Theme.textSecondary)
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
                 }
-                if let message = viewModel.birthdayMessage {
-                    Text(message)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.destructive)
-                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Birthday")
+                .accessibilityValue(birthday.formatted())
+                .accessibilityHint("Only you can see it.")
+                .accessibilityIdentifier("birthdayRow")
+                .listRowBackground(Theme.surface)
             }
-            .listRowBackground(Theme.surface)
 
             // A profile picture is the avatar: the colour choices come back
             // when it's removed. (The colour itself stays, for the places

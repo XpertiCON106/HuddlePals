@@ -83,6 +83,9 @@ HuddlePal/
 │   ├── Components/                     AppDialog (the app's own alerts and choices), BirthdayRow,
 │   │                                   BlurredDepositCard, DepositCard, AvatarStack,
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,
+│   │                                   HuddleSpinner (every loading spinner) +
+│   │                                   HuddleRefreshSpinner (pull to refresh),
+│   │                                   ClipTrimBar (trimming a video),
 │   │                                   CaptionTextField (80-char enforcement),
 │   │                                   CodeEntryField, CameraPicker, TermsDocumentView,
 │   │                                   VideoRecorder + VideoCaptureView (6-second clips),

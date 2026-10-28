@@ -140,52 +140,81 @@ final class LiveDepositService: DepositServiceProtocol {
         return result
     }
 
+    /// Saved here first, so it shows everywhere at once; the server catches
+    /// up. If it can't, the change is undone here and the error thrown.
     func toggleReaction(_ emoji: String, on deposit: Deposit, by user: User) async throws {
         if let mine = deposit.reactions.first(where: { $0.user?.id == user.id && $0.emoji == emoji }) {
-            try await client.delete("reactions", query: [
-                URLQueryItem(name: "id", value: "eq.\(mine.id.uuidString)"),
-            ])
+            let id = mine.id
+            let createdAt = mine.createdAt
             store.deleteReactionLocally(mine)
+            try store.save()
+            store.withdrawnIDs.insert(id)
+            defer { store.withdrawnIDs.remove(id) }
+            do {
+                try await client.delete("reactions", query: [
+                    URLQueryItem(name: "id", value: "eq.\(id.uuidString)"),
+                ])
+            } catch {
+                store.insertReactionLocally(id: id, emoji: emoji, createdAt: createdAt, deposit: deposit, user: user)
+                try? store.save()
+                throw error
+            }
         } else {
             struct NewReaction: Encodable {
+                let id: UUID
                 let depositId: UUID
                 let userId: UUID
                 let emoji: String
             }
-            let rows: [ReactionDTO] = try await client.upsert(
-                "reactions",
-                values: NewReaction(depositId: deposit.id, userId: user.id, emoji: emoji),
-                onConflict: "deposit_id,user_id,emoji",
-                // Already there (a stale screen, a double tap): nothing to do.
-                ignoreDuplicates: true
-            )
-            if let dto = rows.first {
-                store.insertReactionLocally(dto, deposit: deposit, user: user)
+            let reaction = store.insertReactionLocally(id: UUID(), emoji: emoji, createdAt: .now, deposit: deposit, user: user)
+            let id = reaction.id
+            try store.save()
+            store.pendingIDs.insert(id)
+            defer { store.pendingIDs.remove(id) }
+            do {
+                let _: [ReactionDTO] = try await client.upsert(
+                    "reactions",
+                    values: NewReaction(id: id, depositId: deposit.id, userId: user.id, emoji: emoji),
+                    onConflict: "deposit_id,user_id,emoji",
+                    // Already there (a stale screen, a double tap): nothing to do.
+                    ignoreDuplicates: true
+                )
+            } catch {
+                store.deleteReactionLocally(reaction)
+                try? store.save()
+                throw error
             }
         }
-        try store.save()
     }
 
+    /// Saved here first, so it shows everywhere at once; the server catches
+    /// up. If it can't, the comment comes off again and the error is thrown.
     @discardableResult
     func addComment(_ text: String, to deposit: Deposit, by user: User) async throws -> Comment {
         struct NewComment: Encodable {
+            let id: UUID
             let depositId: UUID
             let userId: UUID
             let body: String
         }
-        let rows: [CommentDTO] = try await client.upsert(
-            "comments",
-            values: NewComment(
-                depositId: deposit.id,
-                userId: user.id,
-                body: text.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-        )
-        guard let dto = rows.first else {
-            throw SupabaseClient.ClientError.http(status: 500, message: "comment insert returned nothing")
-        }
-        let comment = store.insertCommentLocally(dto, deposit: deposit, user: user)
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let comment = store.insertCommentLocally(id: UUID(), text: body, createdAt: .now, deposit: deposit, user: user)
+        let id = comment.id
         try store.save()
-        return comment
+        store.pendingIDs.insert(id)
+        defer { store.pendingIDs.remove(id) }
+        do {
+            let rows: [CommentDTO] = try await client.upsert(
+                "comments",
+                values: NewComment(id: id, depositId: deposit.id, userId: user.id, body: body)
+            )
+            if let created = rows.first?.createdAt { comment.createdAt = created }
+            try store.save()
+            return comment
+        } catch {
+            store.deleteCommentLocally(comment)
+            try? store.save()
+            throw error
+        }
     }
 }

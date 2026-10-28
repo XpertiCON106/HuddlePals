@@ -269,6 +269,78 @@ final class LiveServiceTests: XCTestCase {
         }
     }
 
+    // MARK: Reactions and comments show at once
+
+    private func depositForReacting() throws -> Deposit {
+        let huddle = try store.apply(HuddleDTO(
+            id: UUID(), name: "Family", emoji: "🏔", inviteCode: "FAM123", notificationHour: 19, streakCount: 0
+        ))
+        let deposit = Deposit(huddle: huddle, author: me, localImagePath: "Media/x/y.jpg", dayKey: "2026-10-20")
+        container.mainContext.insert(deposit)
+        return deposit
+    }
+
+    /// The id a write sent, as the row's id there.
+    private func sentID() throws -> String {
+        let body = try XCTUnwrap(StubURLProtocol.requests.last { $0.httpMethod == "POST" }?.httpBody)
+        let row = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        return try XCTUnwrap(row["id"] as? String).lowercased()
+    }
+
+    /// Saved here before the server answers, as the very row it's sent as;
+    /// taken back or added offline, it's put back as it was.
+    func testAReactionIsSavedHereFirstAndUndoneIfTheServerCantBeReached() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        session.currentUser = me
+        let deposit = try depositForReacting()
+        let service = LiveDepositService(
+            client: client, store: store,
+            keyring: LivePhotoKeyring(client: client, session: session, identityStore: InMemoryIdentityStore())
+        )
+
+        StubURLProtocol.respond { _ in .init() }
+        try await service.toggleReaction("🔥", on: deposit, by: me)
+        XCTAssertEqual(deposit.reactions.map { $0.id.uuidString.lowercased() }, [try sentID()])
+        XCTAssertTrue(store.pendingIDs.isEmpty)
+
+        StubURLProtocol.respond { _ in .init(error: URLError(.notConnectedToInternet)) }
+        do {
+            try await service.toggleReaction("🔥", on: deposit, by: me)
+            XCTFail("taking it back never reached the server")
+        } catch {}
+        XCTAssertEqual(deposit.reactions.map(\.emoji), ["🔥"], "back, as the server still has it")
+        XCTAssertTrue(store.withdrawnIDs.isEmpty)
+
+        do {
+            try await service.toggleReaction("❤️", on: deposit, by: me)
+            XCTFail("adding it never reached the server")
+        } catch {}
+        XCTAssertEqual(deposit.reactions.map(\.emoji), ["🔥"], "and the one that didn't send is gone again")
+    }
+
+    func testACommentIsSavedHereFirstAndTakenOffIfTheServerCantBeReached() async throws {
+        let client = try await LiveStub.signedInClient(userID: me.id)
+        session.currentUser = me
+        let deposit = try depositForReacting()
+        let service = LiveDepositService(
+            client: client, store: store,
+            keyring: LivePhotoKeyring(client: client, session: session, identityStore: InMemoryIdentityStore())
+        )
+
+        StubURLProtocol.respond { _ in .init() }
+        let comment = try await service.addComment(" Nice one ", to: deposit, by: me)
+        XCTAssertEqual(comment.id.uuidString.lowercased(), try sentID())
+        XCTAssertEqual(deposit.comments.map(\.text), ["Nice one"])
+        XCTAssertTrue(store.pendingIDs.isEmpty)
+
+        StubURLProtocol.respond { _ in .init(error: URLError(.notConnectedToInternet)) }
+        do {
+            _ = try await service.addComment("Offline", to: deposit, by: me)
+            XCTFail("it never reached the server")
+        } catch {}
+        XCTAssertEqual(deposit.comments.map(\.text), ["Nice one"], "the one that didn't send is gone again")
+    }
+
     // MARK: Reporting comments and profiles (App Review 1.2)
 
     func testReportingACommentOrAProfileDisclosesNoPhotoKey() async throws {

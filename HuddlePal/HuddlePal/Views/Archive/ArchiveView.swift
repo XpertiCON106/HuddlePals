@@ -45,21 +45,14 @@ private struct ArchiveContent: View {
                     }
                 }
 
-                if !viewModel.hasLoaded {
-                    if viewModel.loadError == nil {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 80)
-                            .accessibilityLabel("Loading the archive")
-                    }
-                } else if viewModel.months.isEmpty {
+                if viewModel.hasLoaded && viewModel.months.isEmpty {
                     EmptyHuddleState(
                         systemImage: "archivebox",
                         title: "The archive starts today",
                         message: "Every day your group completes gets shelved here, forever."
                     )
                     .padding(.top, 60)
-                } else {
+                } else if viewModel.hasLoaded {
                     ForEach(viewModel.months) { month in
                         Section {
                             ForEach(month.days) { day in
@@ -84,11 +77,21 @@ private struct ArchiveContent: View {
             }
             .padding(.horizontal, Theme.screenPadding)
             .padding(.bottom, 36)
+            .huddleRefreshSpinner()
         }
+        .overlay {
+            // While the archive loads, in the middle of the screen.
+            if !viewModel.hasLoaded && viewModel.loadError == nil {
+                HuddleSpinner(label: "Loading the archive")
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.35), value: viewModel.hasLoaded)
         .navigationTitle("Archive")
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(Theme.background, for: .navigationBar)
         .refreshable { await viewModel.refresh() }
+        .refreshesLive(huddleID: viewModel.huddle.id) { await viewModel.refresh() }
         .task { await viewModel.refresh() }
         .onChange(of: deps.dateProvider.dayOffset) {
             Task { await viewModel.refresh() }

@@ -89,9 +89,8 @@ private struct PaywallContent: View {
     private var plans: some View {
         switch viewModel.phase {
         case .loading:
-            ProgressView()
+            HuddleSpinner(size: 32, label: "Loading prices")
                 .padding(.vertical, 30)
-                .accessibilityLabel("Loading prices")
         case .unavailable(let reason):
             VStack(spacing: 12) {
                 Text(reason)

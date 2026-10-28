@@ -219,6 +219,26 @@ final class ComposeVideoTests: XCTestCase {
         XCTAssertTrue(compose().canRecordVideo)
     }
 
+    /// The trim bar's part is what's posted: Continue cuts the clip to it.
+    func testATrimmedVideoIsPostedCutToThePartKept() async throws {
+        plans.setPlus(true, for: you.id)
+        let viewModel = compose()
+        viewModel.choose(.video)
+        viewModel.setCapturedVideo(try await ClipPreparer.placeholder(seed: 32))
+        XCTAssertFalse(viewModel.isClipTrimmed)
+        viewModel.clipRange = 0.5...1.7
+        XCTAssertTrue(viewModel.isClipTrimmed)
+        let cut = await viewModel.applyTrim()
+        XCTAssertTrue(cut)
+        XCTAssertNil(viewModel.clipRange, "a new clip, all of it kept")
+        XCTAssertEqual(Double(try XCTUnwrap(viewModel.clip?.durationMs)), 1200, accuracy: 100)
+
+        viewModel.continueToConfirm()
+        let posted = await viewModel.confirmAndPost()
+        XCTAssertTrue(posted)
+        XCTAssertEqual(Double(try XCTUnwrap(todaysDeposit()?.durationMs)), 1200, accuracy: 100)
+    }
+
     func testAVideoGoesInAsAVideoWithItsPosterAndClip() async throws {
         plans.setPlus(true, for: you.id)
         let viewModel = compose()

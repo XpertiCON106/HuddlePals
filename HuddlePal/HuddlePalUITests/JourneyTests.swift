@@ -39,6 +39,50 @@ final class JourneyTests: HuddleUITestCase {
         XCTAssertFalse(app.buttons["Add today's memory"].exists, "one photo a day: no second post offered")
     }
 
+    /// A comment: Send waits for words, Return sends, and the comment shows
+    /// in view with the keyboard put away and the field empty again.
+    func testACommentSendsWithReturnAndComesIntoView() {
+        launchToShelf()
+        openHuddle("The Crew")
+        depositPhoto(caption: "Comment on me")
+        waitFor(app.staticTexts["Comment on me"], timeout: 20)
+        app.buttons.containing(.staticText, identifier: "Comment on me").firstMatch.tap()
+        let send = waitFor(app.buttons["Send comment"], timeout: 10)
+        XCTAssertFalse(send.isEnabled, "nothing to send yet")
+
+        let field = waitFor(app.descendants(matching: .any)["commentField"])
+        field.tap()
+        let words = "What a light, honestly the best one this whole week"
+        field.typeText(words)
+        XCTAssertTrue(send.isEnabled)
+        snapshot("36 writing a comment")
+        field.typeText("\n")
+
+        let posted = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", words)).firstMatch
+        waitFor(posted, timeout: 10, "the comment shows")
+        waitUntilGone(app.keyboards.firstMatch, timeout: 5)
+        XCTAssertFalse(send.isEnabled, "the field is empty again")
+        XCTAssertTrue(posted.isHittable, "and in view")
+        XCTAssertTrue(posted.label.hasPrefix("You"), posted.label)
+        snapshot("37 comment posted")
+    }
+
+    /// The welcome cards: a week goes by on the first, and the prints are
+    /// different moments (people, pets, occasions) on all three.
+    func testTheWelcomeCards() {
+        launchToShelf()
+        signOut()
+        let next = waitFor(app.buttons["Continue"], timeout: 20)
+        wait(for: [expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: next)], timeout: 10)
+        snapshot("38 welcome one photo a day")
+        next.tap()
+        waitFor(app.staticTexts["Today's photos stay blurred until you deposit your own."])
+        snapshot("39 welcome locked until you share")
+        waitFor(app.buttons["Continue"]).tap()
+        waitFor(app.buttons["Get started"])
+        snapshot("40 welcome yours forever")
+    }
+
     /// 1 + 2. A brand-new user signs up, and joins a huddle another member
     /// created and shared the code for: both are in it.
     func testCreateInviteJoinAcrossTwoAccounts() {

@@ -54,7 +54,9 @@ struct HuddlePalApp: App {
                     // handed to onOpenURL.
                     if let url = activity.webpageURL { handleDeepLink(url) }
                 }
-                .onChange(of: scenePhase) { _, phase in
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    // Live updates: only while signed in and on screen.
+                    dependencies.liveUpdates.setActive(phase == .active && dependencies.session.currentUser != nil)
                     // Re-evaluate reminders on foreground: an upload made on
                     // another device (or earlier today) should silence the
                     // remaining nudges. Push picks up a permission changed
@@ -70,6 +72,7 @@ struct HuddlePalApp: App {
                     }
                 }
                 .onChange(of: dependencies.session.currentUser?.id) { _, userID in
+                    dependencies.liveUpdates.setActive(userID != nil && scenePhase == .active)
                     // Signed in (or switched account): register this device
                     // for the account's notifications, record (or ask for)
                     // its agreement to the Terms, and learn its plan.

@@ -297,7 +297,7 @@ private struct SettingsContent: View {
                     )
                 }
             } else if viewModel.isLoadingInvite {
-                ProgressView()
+                HuddleSpinner(size: 26, label: "Loading the invite")
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Theme.surface)
             } else {

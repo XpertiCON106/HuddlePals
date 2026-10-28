@@ -163,10 +163,14 @@ private struct ComposeContent: View {
             PrimaryButton(
                 title: "Continue",
                 systemImage: "arrow.right",
+                isLoading: viewModel.isPreparingClip,
                 isEnabled: viewModel.canContinue
             ) {
                 captionFocused = false
-                viewModel.continueToConfirm()
+                // A trimmed clip is cut to the part kept first (a moment).
+                Task {
+                    if await viewModel.applyTrim() { viewModel.continueToConfirm() }
+                }
             }
         }
         .padding(Theme.screenPadding)
@@ -202,8 +206,15 @@ private struct ComposeContent: View {
                 .aspectRatio(3 / 4, contentMode: .fit)
 
             if let clip = viewModel.clip {
-                Self.framed { ClipPreview(clip: clip) }
-                    .overlay(alignment: .bottomTrailing) {
+                // Sound, pause and the trim bar along the bottom; recording
+                // again up top, out of their way.
+                Self.framed {
+                    ClipPreview(clip: clip, range: Binding(
+                        get: { viewModel.clipRange ?? 0...clip.seconds },
+                        set: { viewModel.clipRange = $0 }
+                    ))
+                }
+                    .overlay(alignment: .topTrailing) {
                         Button {
                             showCamera = true
                         } label: {
@@ -214,7 +225,7 @@ private struct ComposeContent: View {
                                 .background(.black.opacity(0.55), in: Circle())
                         }
                         .accessibilityLabel("Record again")
-                        .padding(12)
+                        .padding(8)
                     }
             } else if let image = viewModel.previewImage {
                 Self.framed {

@@ -36,9 +36,12 @@ final class ProfileSetupTests: HuddleUITestCase {
         waitFor(app.staticTexts["The Crew"], timeout: 10)
 
         openProfile()
-        let birthday = app.buttons["Birthday"]
+        let birthday = app.descendants(matching: .any)["birthdayRow"]
         scrollTo(birthday)
         XCTAssertEqual(birthday.value as? String, "January 1, 2000", "Profile shows it, to its owner only")
+        XCTAssertFalse(app.buttons["Birthday"].exists, "and it can't be changed there")
+        birthday.tap()
+        XCTAssertFalse(app.otherElements["appDialog"].waitForExistence(timeout: 2), "nothing opens")
     }
 
     func testSomeoneSignedInCanSignOutFromTheTerms() {

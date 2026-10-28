@@ -65,25 +65,36 @@ private struct HomeContent: View {
                     }
                 }
 
-                if !viewModel.hasLoaded {
-                    if viewModel.loadError == nil {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 80)
-                            .accessibilityLabel("Loading today")
+                if viewModel.hasLoaded {
+                    // Eases in as the spinner goes; each card then shows
+                    // once its pictures are in.
+                    Group {
+                        if viewModel.todayDeposits.isEmpty && !viewModel.isUnlocked {
+                            firstToDepositState
+                        } else if viewModel.isUnlocked {
+                            unlockedFeed
+                        } else {
+                            lockedGrid
+                        }
                     }
-                } else if viewModel.todayDeposits.isEmpty && !viewModel.isUnlocked {
-                    firstToDepositState
-                } else if viewModel.isUnlocked {
-                    unlockedFeed
-                } else {
-                    lockedGrid
+                    .transition(.opacity.combined(with: .offset(y: 14)))
                 }
             }
             .padding(.horizontal, Theme.screenPadding)
             .padding(.bottom, 36)
+            .huddleRefreshSpinner()
         }
+        .overlay {
+            // While today loads, in the middle of the screen.
+            if !viewModel.hasLoaded && viewModel.loadError == nil {
+                HuddleSpinner(label: "Loading today")
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.35), value: viewModel.hasLoaded)
         .refreshable { await viewModel.refresh() }
+        // Others' posts, comments and reactions show up as they happen.
+        .refreshesLive(huddleID: viewModel.huddle.id) { await viewModel.refresh() }
         .safeAreaInset(edge: .bottom) { depositCTA }
         .overlay {
             if viewModel.playUnlockReveal {

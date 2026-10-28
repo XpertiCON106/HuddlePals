@@ -101,9 +101,18 @@ final class LoopingClipPlayer {
     private var statusObservation: NSKeyValueObservation?
     private var observers: [NSObjectProtocol] = []
 
-    init(clip: Data) {
+    /// `range` (seconds) loops just that part: a clip being trimmed.
+    init(clip: Data, range: ClosedRange<Double>? = nil) {
         loader = InMemoryClipLoader(data: clip)
-        looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(asset: loader.makeAsset()))
+        let item = AVPlayerItem(asset: loader.makeAsset())
+        if let range {
+            looper = AVPlayerLooper(player: player, templateItem: item, timeRange: CMTimeRange(
+                start: CMTime(seconds: range.lowerBound, preferredTimescale: 600),
+                end: CMTime(seconds: range.upperBound, preferredTimescale: 600)
+            ))
+        } else {
+            looper = AVPlayerLooper(player: player, templateItem: item)
+        }
         statusObservation = player.observe(\.timeControlStatus) { [weak self] player, _ in
             guard player.timeControlStatus == .paused else { return }
             Task { @MainActor in self?.resumeSoon() }
@@ -356,15 +365,51 @@ struct VideoBadge: View {
     }
 }
 
-/// A just-recorded clip in Compose, looping muted from memory over its poster.
+/// A just-recorded clip in Compose, looping from memory over its poster,
+/// with its sound on (it's yours) and play/pause and sound buttons, a tap on
+/// the video pausing it, as on the detail screen. Given `range`, it plays
+/// just that part, with the trim bar between the buttons to change it.
 struct ClipPreview: View {
     let clip: PreparedClip
+    var range: Binding<ClosedRange<Double>>?
+
+    @Environment(\.scenePhase) private var scenePhase
     @State private var clipPlayer: LoopingClipPlayer?
+    @State private var frames: ClipFrames?
+    @State private var isMuted = false
+    @State private var isPaused = false
+    /// The frame under a trim handle while it's dragged.
+    @State private var scrubFrame: UIImage?
+    @State private var scrubTask: Task<Void, Never>?
+
+    private var playing: ClosedRange<Double> { range?.wrappedValue ?? 0...clip.seconds }
 
     var body: some View {
-        // Exactly the frame it's given: a video is taller (9:16) than the
-        // frames it's shown in, and the poster filling one must not stretch
-        // it and push what's below off the screen.
+        video
+            .overlay(alignment: .topLeading) {
+                VideoBadge(durationMs: Int(((playing.upperBound - playing.lowerBound) * 1000).rounded()))
+                    .padding(10)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottom) { controls }
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPaused)
+            .task(id: "\(clip.id)#\(playing.lowerBound)#\(playing.upperBound)") { play(playing) }
+            .task(id: clip.id) {
+                if range != nil { frames = ClipFrames(clip: clip.clip) }
+            }
+            .onDisappear {
+                clipPlayer?.pause()
+                if !isMuted { PlaybackAudio.release() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active, !isPaused, scrubFrame == nil { clipPlayer?.play() } else { clipPlayer?.pause() }
+            }
+    }
+
+    /// Exactly the frame it's given: a video is taller (9:16) than the
+    /// frames it's shown in, and the poster filling one must not stretch it
+    /// and push what's below off the screen.
+    private var video: some View {
         Color.clear
             .overlay {
                 Image(uiImage: clip.posterImage)
@@ -376,20 +421,124 @@ struct ClipPreview: View {
                     ClipPlayerView(player: clipPlayer.player)
                 }
             }
+            .overlay {
+                if let scrubFrame {
+                    Image(uiImage: scrubFrame)
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
             .clipped()
-            .overlay(alignment: .topLeading) {
-                VideoBadge(durationMs: clip.durationMs)
-                    .padding(10)
-            }
+            .overlay { pausedMark }
+            .contentShape(Rectangle())
+            .onTapGesture { togglePlayback() }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Your video, \(DepositVideoPlayer.seconds(clip.durationMs)) seconds")
-            .task(id: clip.id) {
-                let player = LoopingClipPlayer(clip: clip.clip)
-                player.isMuted = true
-                PlaybackAudio.muted()
-                clipPlayer = player
-                player.play()
+            .accessibilityLabel(accessibilityTitle)
+            .accessibilityValue(isPaused ? "Paused" : "")
+            .accessibilityAddTraits(.startsMediaSession)
+            .accessibilityAction(named: isPaused ? "Play" : "Pause") { togglePlayback() }
+    }
+
+    private var accessibilityTitle: String {
+        let seconds = DepositVideoPlayer.seconds(Int((playing.upperBound - playing.lowerBound) * 1000))
+        return "Your video, \(seconds) seconds"
+    }
+
+    @ViewBuilder
+    private var pausedMark: some View {
+        if isPaused, scrubFrame == nil {
+            Image(systemName: "play.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 62, height: 62)
+                .background(.black.opacity(0.45), in: Circle())
+                .allowsHitTesting(false)
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
+        }
+    }
+
+    /// Play/pause, the trim bar (when trimming), and sound, over a shade.
+    private var controls: some View {
+        HStack(spacing: 4) {
+            control(isPaused ? "play.fill" : "pause.fill", label: isPaused ? "Play" : "Pause") { togglePlayback() }
+            if let range, let frames {
+                ClipTrimBar(duration: clip.seconds, frames: frames, range: range) { scrub(to: $0) }
+                    .padding(.horizontal, 4)
+            } else {
+                Spacer()
             }
-            .onDisappear { clipPlayer?.pause() }
+            control(isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: isMuted ? "Unmute" : "Mute") { toggleSound() }
+        }
+        .padding(4)
+        .padding(.top, 28)
+        .background(
+            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+                .allowsHitTesting(false)
+        )
+    }
+
+    /// A round button on the video, its tap area 44 pt.
+    private func control(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(.black.opacity(0.5), in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// A player for `part` of the clip, playing from its start.
+    private func play(_ part: ClosedRange<Double>) {
+        let player = LoopingClipPlayer(clip: clip.clip, range: range == nil ? nil : part)
+        player.isMuted = isMuted
+        if isMuted { PlaybackAudio.muted() } else { PlaybackAudio.soundOn() }
+        clipPlayer?.pause()
+        clipPlayer = player
+        isPaused = false
+        player.play()
+    }
+
+    private func togglePlayback() {
+        guard let clipPlayer, scrubFrame == nil else { return }
+        isPaused.toggle()
+        if isPaused {
+            clipPlayer.pause()
+            if !isMuted { PlaybackAudio.release() }
+        } else {
+            if !isMuted { PlaybackAudio.soundOn() }
+            clipPlayer.play()
+        }
+        Haptics.light()
+    }
+
+    private func toggleSound() {
+        guard let clipPlayer else { return }
+        isMuted.toggle()
+        clipPlayer.isMuted = isMuted
+        if isMuted { PlaybackAudio.release() } else { PlaybackAudio.soundOn() }
+        Haptics.light()
+    }
+
+    /// While a handle is dragged: still, showing the frame under it. Let
+    /// go (nil), the new part plays from its start.
+    private func scrub(to time: Double?) {
+        scrubTask?.cancel()
+        guard let time else {
+            scrubFrame = nil
+            // Let go where it was: carry on (a new part gets a new player).
+            if !isPaused { clipPlayer?.play() }
+            return
+        }
+        clipPlayer?.pause()
+        scrubTask = Task {
+            let frame = await frames?.frame(at: time)
+            if !Task.isCancelled, let frame { scrubFrame = frame }
+        }
     }
 }

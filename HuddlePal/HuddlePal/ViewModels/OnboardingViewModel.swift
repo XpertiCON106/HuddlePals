@@ -38,7 +38,7 @@ final class OnboardingViewModel {
         Card(
             illustration: .lockedUntilYouShare,
             title: "Locked until you share",
-            message: "Today's photos stay blurred until you deposit your own. Reciprocity, not lurking."
+            message: "Today's photos stay blurred until you deposit your own."
         ),
         Card(
             illustration: .yoursForever,

@@ -15,7 +15,7 @@ import UIKit
 ///   -ui-testing-plus            the seeded "You" has HuddlePals+
 ///   -ui-testing-plus-intro      a first post introduces HuddlePals+ (other
 ///                               runs skip it, so it never covers a tap)
-///   -ui-testing-motion          the welcome cards move, as outside tests (for
+///   -ui-testing-motion          the welcome cards and spinners move, as outside tests (for
 ///                               recording them; tests otherwise hold a frame)
 ///   -ui-testing-no-birthday     the seeded "You" has no birthday yet, as an
 ///                               account from before birthdays were asked for

@@ -35,12 +35,7 @@ private struct HuddleListContent: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                if viewModel.isLoading && !viewModel.hasHuddles {
-                    ProgressView()
-                        .padding(.top, 120)
-                } else if !viewModel.hasHuddles {
-                    emptyState
-                } else {
+                if viewModel.hasHuddles {
                     ForEach(viewModel.rows) { row in
                         Button {
                             Haptics.light()
@@ -51,6 +46,8 @@ private struct HuddleListContent: View {
                         .buttonStyle(.plain)
                         .transition(.scale(scale: 0.97).combined(with: .opacity))
                     }
+                } else if !viewModel.isLoading {
+                    emptyState
                 }
 
                 if let error = viewModel.errorMessage {
@@ -64,8 +61,18 @@ private struct HuddleListContent: View {
             .padding(.bottom, 36)
             .frame(maxWidth: .infinity)
             .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewModel.rows.map(\.id))
+            .huddleRefreshSpinner()
         }
+        .overlay {
+            // While the huddles load, in the middle of the screen.
+            if viewModel.isLoading && !viewModel.hasHuddles {
+                HuddleSpinner(label: "Loading your huddles")
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.35), value: viewModel.isLoading)
         .refreshable { await viewModel.refresh() }
+        .refreshesLive(huddleID: nil) { await viewModel.refresh() }
         .navigationTitle("Huddles")
         .toolbarBackground(Theme.background, for: .navigationBar)
         .toolbar {

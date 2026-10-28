@@ -13,8 +13,7 @@ struct PrimaryButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if isLoading {
-                    ProgressView()
-                        .tint(Theme.onAccent)
+                    HuddleSpinner(size: 20, color: Theme.onAccent, label: nil)
                 } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 17, weight: .semibold))

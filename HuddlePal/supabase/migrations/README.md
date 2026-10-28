@@ -50,3 +50,8 @@ comes back on their next refresh).
 
 Run 016 before shipping the build that asks for birthdays: until it runs,
 that build can't save one, so new profiles can't be finished.
+
+Run 017 for live updates: it puts deposits, comments and reactions in the
+`supabase_realtime` publication, so an open huddle updates as members post,
+comment and react. Until it runs, the app still refreshes an open huddle
+every half minute, so it can go before or after the build ships.

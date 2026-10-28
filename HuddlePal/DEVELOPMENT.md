@@ -196,8 +196,8 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
 - **Birthdays** (`Support/Birthday.swift`, a calendar date with no time
   zone): asked on the profile step, and once, full screen, of an account
   without one (`AppSession.needsBirthday`, checked at sign-in). Only the
-  owner reads or changes it (`profile_birthdates`, migration 016); Profile
-  shows it and saves a change straight away, outside the draft. Under 13
+  owner reads it (`profile_birthdates`, migration 016); Profile only shows
+  it: it's given at sign-up and can't be changed in the app. Under 13
   (`Birthday.minimumAge`, the Terms' 2.1), only "HuddlePals is for people
   13 or older." shows (`UnderageNotice`), with Sign out: nothing of the
   page, so the given age can't be changed to get past. The server refuses
@@ -351,12 +351,26 @@ codes, tokens and keys are never logged.
   writable by the owner. Uploads are plain inserts: **never send
   `x-upsert`** (permanence, and huddle paths have no update policy).
 - **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
-  (001–012, idempotent, run in order) upgrades the deployed one;
+  (001–017, idempotent, run in order) upgrades the deployed one;
   `supabase/scripts/reset_database.sql` wipes an old database for a fresh
   start. Writes that need rules RLS can't express go through SECURITY
   DEFINER functions (key sharing, invites, joins, skips, streaks).
   `huddle_invite_keys` and `join_attempts` have no policies at all, so only
   those functions touch them.
+- **Live updates** (`Services/Live/LiveRealtime.swift`): Supabase Realtime
+  over a WebSocket, no SDK. One channel for Postgres changes to deposits,
+  comments and reactions (migration 017 puts them in the
+  `supabase_realtime` publication; Realtime checks each against RLS with
+  the account's token). A change goes to the screens as its huddle's id;
+  your own are skipped. Connected while signed in and in the foreground,
+  with a heartbeat that also hands over a refreshed token. Screens use
+  `.refreshesLive(huddleID:)`: refresh on a change, and every 30 seconds as
+  a backstop (live backend only).
+- **Your own reactions and comments show at once**: `LiveDepositService`
+  saves them locally first under an id the app picks, then sends that same
+  row; on failure it undoes them and throws. `SupabaseStore.pendingIDs` keeps
+  a sync from pruning them meanwhile, and `withdrawnIDs` stops a sync
+  bringing back a reaction just taken back.
 - **Edge functions**: `delete-account` and `send-push`. Each splits into
   `index.ts` (wiring), `handler.ts` (logic) and a client file (`apple.ts`,
   `apns.ts`), so Node can test the logic. `verify-subscription` and
@@ -564,7 +578,22 @@ warm paper, ink actions) and dark (charcoal, never pure black), with
 `Theme.onAccent` for labels on accent fills and `.cardSurface()` for cards.
 Appearance follows the system unless set in Profile. Identity colours come
 from `AvatarPalette` (6 solids, 2 gradients); chrome stays neutral. Names
-and avatars open the member's profile (`UserLink`). The app icon
+and avatars open the member's profile (`UserLink`). Anything loading
+shows `HuddleSpinner` (`Components/HuddleSpinner.swift`: four dots that
+huddle in and spread out as they turn), never `ProgressView`; it holds
+still in UI tests, and with Reduce Motion only its brightest dot moves
+round. A screen that's loading shows it in the middle of the screen (an
+overlay, not in the scrolling content). Pull to refresh shows it too: put
+`.huddleRefreshSpinner()` on the content of a `.refreshable` ScrollView,
+and it takes the place of the system's spinner in the refresh control
+(`Components/HuddleRefreshSpinner.swift`). Cards on Today show whole: a soft stand-in (`LoadingShimmer`) until
+the photo or poster and the author's picture are in (`MediaReadyKey`; a
+slow profile picture is waited on for a second at most), then they fade in
+together; photos and avatars fade in everywhere. The welcome cards' prints
+are drawn (`WelcomePicture`: silhouettes on soft skies), never emoji.
+Compose's video preview plays with sound, pauses on a tap, and trims
+(`ClipTrimBar`; Continue cuts the clip, without re-encoding, with
+`ClipTrimmer`). The app icon
 (`tools/generate_icon.swift`) must stay a 1024 px opaque PNG with no SF
 Symbols.
 
@@ -586,7 +615,8 @@ Symbols.
   sealed secrets 72. HKDF info uses lowercase UUIDs (Postgres prints them
   lowercase; Swift doesn't).
 - A SwiftUI `TextField`'s tap target is its text height; padding doesn't
-  count, so keep the font at least 18 pt where the audit checks it.
+  count. The audit fails a 15 pt field (18 pt tall) and passes 16 pt
+  (20 pt tall), so keep fields at 16 pt or more.
 - OVERVIEW.md uses Mermaid, which GitHub renders.
 
 ## Open issues

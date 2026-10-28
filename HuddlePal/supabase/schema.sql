@@ -1554,6 +1554,26 @@ create policy profile_birthdates_update on public.profile_birthdates for update
   using (user_id = auth.uid())
   with check (user_id = auth.uid() and birth_date <= (current_date - interval '13 years' + interval '1 day')::date);
 
+-- Live updates: deposits, comments and reactions go out over Supabase
+-- Realtime (Postgres changes); Realtime checks every row against the
+-- table's RLS with the listener's own token. Only where the
+-- supabase_realtime publication exists (every Supabase project has it).
+do $$
+declare
+  t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['deposits', 'comments', 'reactions'] loop
+      if not exists (
+        select 1 from pg_publication_tables
+        where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+      ) then
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      end if;
+    end loop;
+  end if;
+end $$;
+
 -- ============================================ already ran an older schema?
 -- This file only builds a fresh database. To start over on one that ran an
 -- earlier copy, run supabase/scripts/reset_database.sql (destructive), empty

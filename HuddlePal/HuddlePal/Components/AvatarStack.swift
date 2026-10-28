@@ -14,6 +14,9 @@ struct AvatarView: View {
 
     @State private var image: UIImage?
     @State private var loadedPath: String?
+    /// Its picture is in, or a second has gone by (`MediaReadyKey`): a card
+    /// shouldn't wait on a slow profile picture for long.
+    @State private var isSettled = false
 
     private var initials: String {
         let parts = name.split(separator: " ").prefix(2)
@@ -30,6 +33,7 @@ struct AvatarView: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
+                        .transition(.opacity)
                 } else {
                     Text(initials)
                         .font(.system(size: size * 0.4, weight: .semibold))
@@ -41,6 +45,7 @@ struct AvatarView: View {
             // Decorative: a name is always next to it, or the surrounding
             // link / stack carries it (UserLink, AvatarStack).
             .accessibilityHidden(true)
+            .preference(key: MediaReadyKey.self, value: imagePath == nil || imageData != nil || isSettled)
             .task(id: imageLoadID) {
                 if let imageData {
                     image = UIImage(data: imageData)
@@ -53,9 +58,15 @@ struct AvatarView: View {
                     return
                 }
                 guard loadedPath != imagePath else { return }
+                let patience = Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    isSettled = true
+                }
                 let data = await deps.mediaService.loadImageData(at: imagePath)
-                image = data.flatMap(UIImage.init(data:))
+                patience.cancel()
+                withAnimation(.easeOut(duration: 0.3)) { image = data.flatMap(UIImage.init(data:)) }
                 loadedPath = imagePath
+                isSettled = true
             }
     }
 

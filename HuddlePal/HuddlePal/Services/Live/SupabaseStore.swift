@@ -10,6 +10,13 @@ import SwiftData
 final class SupabaseStore {
     private let context: ModelContext
 
+    /// Reactions and comments made here, saved before the server has them
+    /// (they show at once): a sync keeps them instead of pruning them as gone.
+    var pendingIDs: Set<UUID> = []
+    /// Reactions taken back here that the server may still have: a sync
+    /// doesn't bring them back.
+    var withdrawnIDs: Set<UUID> = []
+
     init(context: ModelContext) {
         self.context = context
     }
@@ -21,6 +28,12 @@ final class SupabaseStore {
     // time was O(n²). The id is unique, so fetchLimit 1 is exact.
     func user(id: UUID) throws -> User? {
         var descriptor = FetchDescriptor<User>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
+    func deposit(id: UUID) throws -> Deposit? {
+        var descriptor = FetchDescriptor<Deposit>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
         return try context.fetch(descriptor).first
     }
@@ -168,10 +181,10 @@ final class SupabaseStore {
         let remoteReactionIDs = Set(reactions.map(\.id))
         let remoteCommentIDs = Set(comments.map(\.id))
         for deposit in depositsByID.values {
-            for stale in deposit.reactions where !remoteReactionIDs.contains(stale.id) {
+            for stale in deposit.reactions where !remoteReactionIDs.contains(stale.id) && !pendingIDs.contains(stale.id) {
                 context.delete(stale)
             }
-            for stale in deposit.comments where !remoteCommentIDs.contains(stale.id) {
+            for stale in deposit.comments where !remoteCommentIDs.contains(stale.id) && !pendingIDs.contains(stale.id) {
                 context.delete(stale)
             }
         }
@@ -179,12 +192,17 @@ final class SupabaseStore {
             depositsByID.values.flatMap(\.reactions).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
-        for dto in reactions {
+        for dto in reactions where !withdrawnIDs.contains(dto.id) {
             guard let deposit = depositsByID[dto.depositId] else { continue }
             // Counts stay honest even when the reactor's profile is unreadable.
             let user = try resolveUser(dto.userId)
             if let existing = existingReactions[dto.id] {
                 if existing.user?.id != user?.id { existing.user = user }
+                continue
+            }
+            // The same reaction, still on its way from here under its own id:
+            // one per person and emoji, as on the server.
+            if deposit.reactions.contains(where: { pendingIDs.contains($0.id) && $0.user?.id == dto.userId && $0.emoji == dto.emoji }) {
                 continue
             }
             context.insert(Reaction(
@@ -265,29 +283,34 @@ final class SupabaseStore {
         }
     }
 
-    func insertReactionLocally(_ dto: ReactionDTO, deposit: Deposit, user: User) {
-        guard !deposit.reactions.contains(where: { $0.id == dto.id }) else { return }
-        context.insert(Reaction(
-            id: dto.id, deposit: deposit, user: user,
-            emoji: dto.emoji, createdAt: dto.createdAt ?? .now
-        ))
-    }
-
+    /// A reaction made here; `id` is its row's id on the server too.
     @discardableResult
-    func insertCommentLocally(_ dto: CommentDTO, deposit: Deposit, user: User) -> Comment {
-        if let existing = deposit.comments.first(where: { $0.id == dto.id }) {
+    func insertReactionLocally(id: UUID, emoji: String, createdAt: Date, deposit: Deposit, user: User) -> Reaction {
+        if let existing = deposit.reactions.first(where: { $0.id == id }) {
             return existing
         }
-        let comment = Comment(
-            id: dto.id, deposit: deposit, user: user,
-            text: dto.body, createdAt: dto.createdAt ?? .now
-        )
+        let reaction = Reaction(id: id, deposit: deposit, user: user, emoji: emoji, createdAt: createdAt)
+        context.insert(reaction)
+        return reaction
+    }
+
+    /// A comment made here; `id` is its row's id on the server too.
+    @discardableResult
+    func insertCommentLocally(id: UUID, text: String, createdAt: Date, deposit: Deposit, user: User) -> Comment {
+        if let existing = deposit.comments.first(where: { $0.id == id }) {
+            return existing
+        }
+        let comment = Comment(id: id, deposit: deposit, user: user, text: text, createdAt: createdAt)
         context.insert(comment)
         return comment
     }
 
     func deleteReactionLocally(_ reaction: Reaction) {
         context.delete(reaction)
+    }
+
+    func deleteCommentLocally(_ comment: Comment) {
+        context.delete(comment)
     }
 
     func deleteMembershipLocally(_ membership: Membership) {

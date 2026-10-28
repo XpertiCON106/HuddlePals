@@ -99,6 +99,9 @@ final class AppDependencies {
     /// HuddlePals+ introduced once after a first post, and the occasional
     /// reminder about it for those who asked (local notifications).
     let plusPromo: PlusPromotion
+    /// Others' posts, comments and reactions as they happen (Supabase
+    /// Realtime); nothing offline.
+    let liveUpdates: any LiveUpdatesProtocol
 
     init(
         isLive: Bool = false,
@@ -122,8 +125,10 @@ final class AppDependencies {
         reminders: ReminderCoordinator,
         push: PushCoordinator? = nil,
         plusPromoSettings: PlusPromoSettings = PlusPromoSettings(),
-        plusReminders: any PlusReminderScheduling = PlusReminderScheduler()
+        plusReminders: any PlusReminderScheduling = PlusReminderScheduler(),
+        liveUpdates: any LiveUpdatesProtocol = NoLiveUpdates()
     ) {
+        self.liveUpdates = liveUpdates
         self.isLive = isLive
         self.modelContainer = modelContainer
         self.engine = engine
@@ -183,6 +188,7 @@ final class AppDependencies {
     /// server refusing the session) and leaves nothing of the account for
     /// whoever signs in next.
     func endSession() async {
+        liveUpdates.setActive(false)
         session.currentUser = nil
         session.needsProfileSetup = false
         session.needsBirthday = false
@@ -310,7 +316,8 @@ final class AppDependencies {
             ),
             push: PushCoordinator(
                 registrar: SystemPushRegistrar(), tokens: LivePushTokenService(client: client), session: session
-            )
+            ),
+            liveUpdates: LiveRealtime(config: config, client: client, store: store, session: session)
         )
         relay.dependencies = dependencies
         return dependencies

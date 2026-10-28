@@ -23,6 +23,8 @@ struct LocalDepositImage: View {
     @State private var image: UIImage?
     @State private var loadedPath: String?
     @State private var isLocked = false
+    /// Loaded, or found locked: what a card waits for (`MediaReadyKey`).
+    @State private var isSettled = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -32,6 +34,7 @@ struct LocalDepositImage: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
+                        .transition(.opacity)
                 } else if isLocked {
                     lockedPlaceholder
                 }
@@ -43,6 +46,7 @@ struct LocalDepositImage: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityAddTraits(.isImage)
+        .preference(key: MediaReadyKey.self, value: isSettled)
         // A huddle photo that couldn't be opened retries whenever this device
         // gains a huddle key (the launch-time sync, or an invite).
         .task(id: deposit == nil ? relativePath : "\(relativePath)#\(deps.session.photoKeysVersion)") {
@@ -61,12 +65,12 @@ struct LocalDepositImage: View {
             } else {
                 loaded = await deps.mediaService.loadImageData(at: relativePath)
             }
-            if let maxPixelSize {
-                image = loaded.flatMap { Self.downsampled($0, maxPixelSize: maxPixelSize) }
-            } else {
-                image = loaded.flatMap(UIImage.init(data:))
-            }
+            let decoded = maxPixelSize.map { size in loaded.flatMap { Self.downsampled($0, maxPixelSize: size) } }
+                ?? loaded.flatMap(UIImage.init(data:))
+            // Fades in rather than popping in.
+            withAnimation(.easeOut(duration: 0.3)) { image = decoded }
             isLocked = deposit != nil && image == nil
+            isSettled = true
             // Only a huddle photo that opened is final; a locked one retries.
             if deposit == nil || image != nil {
                 loadedPath = relativePath
@@ -114,12 +118,52 @@ extension LocalDepositImage {
     }
 }
 
+/// Whether the pictures in a view have loaded (or settled as locked): a
+/// card waits for its photo and its author's picture before it shows.
+struct MediaReadyKey: PreferenceKey {
+    static let defaultValue = true
+
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value && nextValue()
+    }
+}
+
+/// A soft stand-in while something loads: the elevated surface with a
+/// light passing across it (still in UI tests and with Reduce Motion).
+struct LoadingShimmer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Theme.surfaceElevated
+            .overlay {
+                if !reduceMotion, !UITestHooks.isUITesting || UITestHooks.motion {
+                    TimelineView(.animation) { timeline in
+                        let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
+                        GeometryReader { geo in
+                            LinearGradient(
+                                colors: [.white.opacity(0), .white.opacity(0.16), .white.opacity(0)],
+                                startPoint: .leading, endPoint: .trailing
+                            )
+                            .frame(width: geo.size.width * 0.6)
+                            .offset(x: -geo.size.width * 0.6 + geo.size.width * 1.6 * phase)
+                        }
+                    }
+                }
+            }
+            .clipped()
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Unlocked card
 
 /// Full deposit card for the unlocked feed: photo, caption, author row,
-/// reaction summary.
+/// reaction summary. It shows whole: a soft stand-in until its photo (or
+/// video's poster) and its author's picture are in, then all of it fades
+/// in together, never a time and a name over an empty frame.
 struct DepositCard: View {
     let deposit: Deposit
+    @State private var isReady = false
 
     private var reactionSummary: [(emoji: String, count: Int)] {
         Dictionary(grouping: deposit.reactions, by: \.emoji)
@@ -138,54 +182,86 @@ struct DepositCard: View {
                 }
             }
             .aspectRatio(3 / 4, contentMode: .fit)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    UserLink(user: deposit.author) {
-                        HStack(spacing: 10) {
-                            AvatarView(
-                                name: deposit.author?.displayName ?? "?",
-                                colorHex: deposit.author?.avatarColorHex ?? "888888",
-                                imagePath: deposit.author?.profilePhotoPaths.first,
-                                size: 30
-                            )
-                            Text(deposit.author?.displayName ?? "Former member")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(Theme.textPrimary)
-                        }
-                    }
-                    Spacer()
-                    Text(deposit.createdAt, format: .dateTime.hour().minute())
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.textSecondary)
-                }
-
-                if let caption = deposit.caption {
-                    Text(caption)
-                        .font(.system(size: 15))
-                        .foregroundStyle(Theme.textPrimary.opacity(0.9))
-                        .lineSpacing(2)
-                }
-
-                if !reactionSummary.isEmpty || !deposit.comments.isEmpty {
-                    HStack(spacing: 12) {
-                        ForEach(reactionSummary, id: \.emoji) { item in
-                            Text("\(item.emoji) \(item.count)")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        if !deposit.comments.isEmpty {
-                            Label("\(deposit.comments.count)", systemImage: "bubble")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        Spacer()
-                    }
+            .overlay {
+                if !isReady {
+                    LoadingShimmer().transition(.opacity)
                 }
             }
-            .padding(14)
+
+            details
+                .opacity(isReady ? 1 : 0)
+                .overlay(alignment: .topLeading) {
+                    if !isReady {
+                        detailsStandIn.transition(.opacity)
+                    }
+                }
         }
         .cardSurface()
+        .onPreferenceChange(MediaReadyKey.self) { ready in
+            guard ready, !isReady else { return }
+            withAnimation(.easeOut(duration: 0.35)) { isReady = true }
+        }
+    }
+
+    /// Where the author, the time and the rest go, while the card loads.
+    private var detailsStandIn: some View {
+        HStack(spacing: 10) {
+            Circle().frame(width: 30, height: 30)
+            RoundedRectangle(cornerRadius: 4).frame(width: 96, height: 11)
+            Spacer()
+            RoundedRectangle(cornerRadius: 4).frame(width: 38, height: 9)
+        }
+        .foregroundStyle(Theme.surfaceElevated)
+        .padding(14)
+        .accessibilityHidden(true)
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                UserLink(user: deposit.author) {
+                    HStack(spacing: 10) {
+                        AvatarView(
+                            name: deposit.author?.displayName ?? "?",
+                            colorHex: deposit.author?.avatarColorHex ?? "888888",
+                            imagePath: deposit.author?.profilePhotoPaths.first,
+                            size: 30
+                        )
+                        Text(deposit.author?.displayName ?? "Former member")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                    }
+                }
+                Spacer()
+                Text(deposit.createdAt, format: .dateTime.hour().minute())
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            if let caption = deposit.caption {
+                Text(caption)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.textPrimary.opacity(0.9))
+                    .lineSpacing(2)
+            }
+
+            if !reactionSummary.isEmpty || !deposit.comments.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(reactionSummary, id: \.emoji) { item in
+                        Text("\(item.emoji) \(item.count)")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    if !deposit.comments.isEmpty {
+                        Label("\(deposit.comments.count)", systemImage: "bubble")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .padding(14)
     }
 }
 

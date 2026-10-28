@@ -58,6 +58,38 @@ final class LiveSyncTests: XCTestCase {
         CommentDTO(id: UUID(), depositId: deposit, userId: user, body: "hi")
     }
 
+    // MARK: Writes still on their way
+
+    /// A sync while a reaction or comment is uploading keeps it, doesn't
+    /// count a reaction twice, and doesn't bring back one just taken back.
+    func testASyncKeepsWhatsOnItsWayAndLeavesWhatWasTakenBack() throws {
+        let huddle = try XCTUnwrap(store.huddle(id: huddleID))
+        let dto = depositDTO(author: friend.id)
+        try store.applyDeposits([dto], reactions: [], comments: [], to: huddle)
+        let deposit = try XCTUnwrap(huddle.deposits.first)
+
+        let comment = store.insertCommentLocally(id: UUID(), text: "on its way", createdAt: .now, deposit: deposit, user: me)
+        let fire = store.insertReactionLocally(id: UUID(), emoji: "🔥", createdAt: .now, deposit: deposit, user: me)
+        store.pendingIDs = [comment.id, fire.id]
+        let takenBack = ReactionDTO(id: UUID(), depositId: dto.id, userId: me.id, emoji: "❤️")
+        store.withdrawnIDs = [takenBack.id]
+        // The server has a 🔥 from me already, under its own id.
+        let serverFire = ReactionDTO(id: UUID(), depositId: dto.id, userId: me.id, emoji: "🔥")
+
+        try store.applyDeposits([dto], reactions: [takenBack, serverFire], comments: [], to: huddle)
+        try store.save()
+        XCTAssertEqual(deposit.comments.map(\.text), ["on its way"])
+        XCTAssertEqual(deposit.reactions.map(\.emoji), ["🔥"])
+
+        // Sent: the server's word again.
+        store.pendingIDs = []
+        store.withdrawnIDs = []
+        try store.applyDeposits([dto], reactions: [], comments: [], to: huddle)
+        try store.save()
+        XCTAssertTrue(deposit.comments.isEmpty)
+        XCTAssertTrue(deposit.reactions.isEmpty)
+    }
+
     // MARK: Decoding
 
     func testNullAuthorRowsDecodeAndAreKeptAsFormerMember() throws {

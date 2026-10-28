@@ -113,20 +113,17 @@ final class BirthdayTests: XCTestCase {
 
     // MARK: Profile
 
-    func testProfileSavesABirthdayButNeverOneUnder13() async throws {
+    /// Profile shows the birthday given at sign-up; there's no changing it there.
+    func testProfileShowsTheBirthdayGivenAtSignUp() async throws {
         let deps = AppDependencies.makeMock(inMemory: true)
         deps.session.currentUser = try await deps.auth.completeProfile(displayName: "Pat", avatarColorHex: "E5484D")
         let profile = ProfileViewModel(deps: deps)
         await profile.loadBirthday()
         XCTAssertNil(profile.birthday)
 
-        await profile.saveBirthday(Birthday(year: 1991, month: 2, day: 3))
+        try await deps.auth.saveBirthday(Birthday(year: 1991, month: 2, day: 3))
+        await profile.loadBirthday()
         XCTAssertEqual(profile.birthday, Birthday(year: 1991, month: 2, day: 3))
-        XCTAssertNil(profile.birthdayMessage)
-
-        await profile.saveBirthday(twelveYearsAgo)
-        XCTAssertEqual(profile.birthday, Birthday(year: 1991, month: 2, day: 3), "the saved one stays")
-        XCTAssertEqual(profile.birthdayMessage, AuthError.underMinimumAge.errorDescription)
     }
 
     // MARK: A huddle deleted while it's open

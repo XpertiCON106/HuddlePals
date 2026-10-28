@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// The welcome cards' small moving pictures, in the app's paper-and-ink
-/// look: paper-bordered prints, members' colours for the photos. Each loops
-/// quietly with a rest between moves. With Reduce Motion (and in UI tests,
-/// which wait for the screen to settle) each holds one frame.
+/// look: paper-bordered prints of drawn moments (`WelcomePicture`: friends,
+/// the dog, a birthday…). Each loops quietly with a rest between moves. With Reduce
+/// Motion (and in UI tests, which wait for the screen to settle) each holds
+/// one frame.
 struct WelcomeIllustration: View {
     enum Kind {
         /// One photo a day: a day goes by, behind the whole card
@@ -36,15 +37,12 @@ struct WelcomeIllustration: View {
     static func animates(reduceMotion: Bool) -> Bool {
         !reduceMotion && (!UITestHooks.isUITesting || UITestHooks.motion)
     }
-
-    /// The photo colours: the members' palette, solids first.
-    static let tones = AvatarPalette.hexes.map(AvatarStyle.components(of:))
 }
 
 /// A photo as the app prints it: a paper border, a little deeper at the
-/// bottom, and a sun over a hill standing in for the picture.
+/// bottom, around a drawn moment.
 private struct Print: View {
-    let colors: [Color]
+    let picture: WelcomePicture
     var width: CGFloat
     /// 0 is a blank print; 1 has fully developed.
     var developed: Double = 1
@@ -52,20 +50,8 @@ private struct Print: View {
     var body: some View {
         ZStack {
             Theme.surfaceElevated
-            ZStack(alignment: .bottom) {
-                LinearGradient(colors: colors.count > 1 ? colors : [colors[0], colors[0].opacity(0.75)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                Ellipse()
-                    .fill(.white.opacity(0.22))
-                    .frame(width: width * 1.3, height: width * 0.55)
-                    .offset(x: -width * 0.2, y: width * 0.3)
-                Circle()
-                    .fill(.white.opacity(0.55))
-                    .frame(width: width * 0.2)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(width * 0.14)
-            }
-            .opacity(developed)
+            WelcomePictureView(picture: picture)
+                .opacity(developed)
         }
         .frame(width: width, height: width * 1.2)
         .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
@@ -98,6 +84,14 @@ struct DayGoesByScene: View {
     /// One day, in seconds, and when in it the camera snaps.
     static let day = 9.0
     static let snapAt = 0.3 * day
+
+    /// The day the pill shows: a new one with each snap, a week over and
+    /// over (1 to 7).
+    static func dayNumber(at t: Double) -> Int {
+        let cycle = Int((t / day).rounded(.down))
+        let u = t - Double(cycle) * day
+        return (cycle + (u >= snapAt ? 1 : 0)) % 7 + 1
+    }
 
     /// It reaches under the status bar and the home indicator, and keeps
     /// what it says clear of them.
@@ -165,7 +159,7 @@ struct DayGoesByScene: View {
             clothesline(t: t, u: u, cycle: Int(cycle), w: w, k: k, skyHeight: skyHeight, colors: colors)
             camera(u: u, w: w, k: k, skyHeight: skyHeight, colors: colors)
 
-            Text("DAY \(Int(cycle) + 1 + (u >= Self.snapAt ? 1 : 0))")
+            Text("DAY \(Self.dayNumber(at: t))")
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .tracking(0.7)
                 .foregroundStyle(Theme.textPrimary)
@@ -286,8 +280,7 @@ struct DayGoesByScene: View {
             .stroke(colors.string, lineWidth: 1.6)
 
             ForEach(hung) { item in
-                let tone = WelcomeIllustration.tones[((item.day % 8) + 8) % 8]
-                Print(colors: tone, width: printWidth / 1.14, developed: item.developed)
+                Print(picture: .of(day: item.day), width: printWidth / 1.14, developed: item.developed)
                     .overlay(alignment: .top) {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(colors.peg)
@@ -460,12 +453,13 @@ private struct LockedGrid: View {
     var body: some View {
         ZStack {
             Grid(horizontalSpacing: 14, verticalSpacing: 12) {
+                // Friends, the dog and a birthday; yours, from the top of a hill.
                 GridRow {
-                    theirs(0, tilt: -3)
-                    theirs(1, tilt: 2)
+                    theirs(.friendsOnTheBeach, tilt: -3)
+                    theirs(.dogOnTheHill, tilt: 2)
                 }
                 GridRow {
-                    theirs(4, tilt: 2)
+                    theirs(.birthday, tilt: 2)
                     yours
                 }
             }
@@ -500,8 +494,8 @@ private struct LockedGrid: View {
         }
     }
 
-    private func theirs(_ tone: Int, tilt: Double) -> some View {
-        Print(colors: WelcomeIllustration.tones[tone], width: size)
+    private func theirs(_ picture: WelcomePicture, tilt: Double) -> some View {
+        Print(picture: picture, width: size)
             .blur(radius: open ? 0 : 7)
             .overlay {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -522,7 +516,7 @@ private struct LockedGrid: View {
                 }
                 .frame(width: size * 1.14, height: size * 1.46)
                 .opacity(yoursIn ? 0 : 1)
-            Print(colors: WelcomeIllustration.tones[6], width: size)
+            Print(picture: .hikeAtDawn, width: size)
                 .rotationEffect(.degrees(-2))
                 .scaleEffect(yoursIn ? 1 : 1.25)
                 .opacity(yoursIn ? 1 : 0)
@@ -569,14 +563,13 @@ private struct ArchiveGrid: View {
         }
     }
 
+    /// A day's photo, small.
     private func day(_ index: Int) -> some View {
-        let tone = WelcomeIllustration.tones[(index * 5) % WelcomeIllustration.tones.count]
-        return ZStack {
+        ZStack {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(Theme.surfaceElevated)
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(LinearGradient(colors: tone.count > 1 ? tone : [tone[0], tone[0].opacity(0.75)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            WelcomePictureView(picture: .of(day: index * 5))
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 .scaleEffect(index < filled ? 1 : 0.3)
                 .opacity(index < filled ? 1 : 0)
         }

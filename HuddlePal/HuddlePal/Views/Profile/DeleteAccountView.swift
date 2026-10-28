@@ -38,8 +38,10 @@ private struct DeleteAccountContent: View {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 10) {
                     Image(systemName: "person.crop.circle.badge.xmark")
-                        .font(.system(size: 40, weight: .light))
+                        .font(.system(size: 30))
                         .foregroundStyle(Theme.destructive)
+                        .frame(width: 62, height: 62)
+                        .background(Theme.destructive.opacity(0.13), in: Circle())
                         .accessibilityHidden(true)
                     Text("Delete your account?")
                         .font(Theme.displayFont(28))
@@ -55,18 +57,24 @@ private struct DeleteAccountContent: View {
                     point("trash", "Your account, name, bio, birthday and profile photos are deleted, and you're signed out.")
                     point("photo.on.rectangle.angled", "Photos and videos you already posted stay in your huddles as \u{201C}Former member\u{201D}. A huddle's archive is permanent.")
                     point("person.2", "Huddles you keep pass to the member who's been in them longest.")
-                    point("exclamationmark.circle", "This can't be undone.")
+                    point("exclamationmark.circle", "This can't be undone.", warning: true)
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .cardSurface()
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                        .strokeBorder(Theme.destructive.opacity(0.35), lineWidth: 1)
+                )
 
                 if viewModel.appleBillingContinues {
                     billingWarning
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Type \(DeleteAccountViewModel.confirmationWord) to confirm")
+                    (Text("Type ")
+                        + Text(DeleteAccountViewModel.confirmationWord).foregroundStyle(Theme.destructive)
+                        + Text(" to confirm"))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     TextField(DeleteAccountViewModel.confirmationWord, text: $viewModel.confirmation)
@@ -81,7 +89,10 @@ private struct DeleteAccountContent: View {
                         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(viewModel.isConfirmed ? Theme.destructive : Theme.hairline, lineWidth: viewModel.isConfirmed ? 1.5 : 1)
+                                .strokeBorder(
+                                    viewModel.isConfirmed || fieldFocused ? Theme.destructive : Theme.destructive.opacity(0.35),
+                                    lineWidth: viewModel.isConfirmed ? 2 : 1.5
+                                )
                         )
                         .disabled(viewModel.isDeleting)
                         .accessibilityLabel("Type \(DeleteAccountViewModel.confirmationWord) to confirm")
@@ -97,6 +108,8 @@ private struct DeleteAccountContent: View {
             .padding(.horizontal, Theme.screenPadding)
             .padding(.bottom, 24)
         }
+        // Red, not ink, on this page: the caret, and Manage subscription.
+        .tint(Theme.destructive)
         .scrollDismissesKeyboard(.interactively)
         // Pinned above the keyboard: right there once DELETE is typed.
         .safeAreaInset(edge: .bottom) {
@@ -106,7 +119,7 @@ private struct DeleteAccountContent: View {
             } label: {
                 HStack(spacing: 8) {
                     if viewModel.isDeleting {
-                        ProgressView().tint(Theme.onDestructive)
+                        HuddleSpinner(size: 20, color: Theme.onDestructive, label: nil)
                     }
                     Text("Delete my account")
                 }
@@ -159,15 +172,15 @@ private struct DeleteAccountContent: View {
         )
     }
 
-    private func point(_ symbol: String, _ text: String) -> some View {
+    private func point(_ symbol: String, _ text: String, warning: Bool = false) -> some View {
         Label {
             Text(text)
-                .font(.system(size: 15))
-                .foregroundStyle(Theme.textPrimary)
+                .font(.system(size: 15, weight: warning ? .semibold : .regular))
+                .foregroundStyle(warning ? Theme.destructive : Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: symbol)
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.destructive)
                 .frame(width: 24)
         }
     }

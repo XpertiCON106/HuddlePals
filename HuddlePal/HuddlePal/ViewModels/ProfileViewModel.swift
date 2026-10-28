@@ -186,25 +186,12 @@ final class ProfileViewModel {
 
     // MARK: Birthday surface
 
-    /// Only its owner sees it, so it's saved on its own (no draft, no
-    /// confirmation), and it must meet the minimum age.
+    /// Shown to its owner only, and never changed here: it's given once,
+    /// when the profile is made (or on the one-time question).
     private(set) var birthday: Birthday?
-    private(set) var birthdayMessage: String?
 
     func loadBirthday() async {
         birthday = try? await deps.auth.birthday()
-    }
-
-    func saveBirthday(_ picked: Birthday) async {
-        guard picked != birthday else { return }
-        do {
-            try await deps.auth.saveBirthday(picked)
-            birthday = picked
-            birthdayMessage = nil
-            Haptics.success()
-        } catch {
-            birthdayMessage = error.localizedDescription
-        }
     }
 
     // MARK: Daily reminder surface

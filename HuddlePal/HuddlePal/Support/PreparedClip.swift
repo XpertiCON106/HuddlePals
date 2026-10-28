@@ -12,6 +12,43 @@ struct PreparedClip: Identifiable {
     let poster: Data
     let posterImage: UIImage
     let durationMs: Int
+
+    var seconds: Double { Double(durationMs) / 1000 }
+}
+
+/// Cuts a clip to the part kept in Compose's trim bar.
+enum ClipTrimmer {
+    /// The part of `clip` from `range.lowerBound` to `range.upperBound`
+    /// seconds, copied as recorded (no re-encoding), with a new poster from
+    /// its first frame. The plaintext touches disk only in `CaptureFiles`,
+    /// as the recording itself did, and is deleted straight after.
+    static func trim(_ clip: PreparedClip, to range: ClosedRange<Double>) async throws -> PreparedClip {
+        let source = try CaptureFiles.newClipURL()
+        defer { try? FileManager.default.removeItem(at: source) }
+        try clip.clip.write(to: source, options: .completeFileProtection)
+        let output = try CaptureFiles.newClipURL()
+        guard let export = AVAssetExportSession(asset: AVURLAsset(url: source), presetName: AVAssetExportPresetPassthrough) else {
+            throw ClipPreparer.ClipError.unreadable
+        }
+        export.timeRange = CMTimeRange(
+            start: CMTime(seconds: range.lowerBound, preferredTimescale: 600),
+            end: CMTime(seconds: range.upperBound, preferredTimescale: 600)
+        )
+        do {
+            if #available(iOS 18.0, *) {
+                try await export.export(to: output, as: .mp4)
+            } else {
+                export.outputURL = output
+                export.outputFileType = .mp4
+                await export.export()
+                guard export.status == .completed else { throw ClipPreparer.ClipError.unreadable }
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: output)
+            throw ClipPreparer.ClipError.unreadable
+        }
+        return try await ClipPreparer.prepare(fileAt: output)
+    }
 }
 
 /// Turns a finished recording into a `PreparedClip` and deletes the file.

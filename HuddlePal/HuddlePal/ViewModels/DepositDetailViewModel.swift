@@ -10,7 +10,6 @@ final class DepositDetailViewModel {
     let deposit: Deposit
 
     var commentDraft = ""
-    private(set) var isPosting = false
     private(set) var errorMessage: String?
     private(set) var didReport = false
     private(set) var reportedCommentIDs: Set<UUID> = []
@@ -127,20 +126,29 @@ final class DepositDetailViewModel {
         }
     }
 
-    func postComment() async {
+    /// Whoever is writing: their avatar sits beside the comment field.
+    var currentUser: User? { deps.session.currentUser }
+
+    /// Posts the draft. The field empties at once and the comment shows
+    /// straight away (the services save it here first); true once the
+    /// server has it.
+    @discardableResult
+    func postComment() async -> Bool {
         let text = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !isPosting, (1...TextLimit.comment).contains(text.serverLength),
-              let user = deps.session.currentUser else { return }
-        isPosting = true
+        guard (1...TextLimit.comment).contains(text.serverLength),
+              let user = deps.session.currentUser else { return false }
+        let draft = commentDraft
+        commentDraft = ""
         errorMessage = nil
-        defer { isPosting = false }
         do {
             try await deps.depositService.addComment(text, to: deposit, by: user)
-            commentDraft = ""
+            return true
         } catch {
-            // The live path can fail (network); keep the draft so the user
-            // can retry, and surface why it didn't post.
+            // The live path can fail (network): the comment comes off again,
+            // and the words come back to retry, with why.
+            if commentDraft.isEmpty { commentDraft = draft }
             errorMessage = error.localizedDescription
+            return false
         }
     }
 }

@@ -55,13 +55,27 @@ final class VideoJourneyTests: HuddleUITestCase {
         sleep(1)
         snapshot("compose video preview")
 
+        // It plays with its sound on, pauses, and trims: the start dragged
+        // up to the end keeps the shortest part, a second.
+        XCTAssertTrue(waitFor(app.buttons["Mute"]).exists, "the sound is on")
+        waitFor(app.buttons["Pause"]).tap()
+        waitFor(app.buttons["Play"], timeout: 5, "paused")
+        let start = waitFor(app.otherElements["Start of the clip"], timeout: 10)
+        let end = waitFor(app.otherElements["End of the clip"])
+        start.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: end.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+        waitFor(app.otherElements["Your video, 1 seconds"], timeout: 10, "a second kept")
+        waitFor(app.buttons["Pause"], timeout: 5, "the kept part plays")
+        snapshot("compose video trimmed")
+
         // A 9:16 recording, as a phone makes: the buttons stay on screen.
         let next = waitFor(app.buttons["Continue"])
         waitUntilEnabled(next)
         XCTAssertTrue(next.isHittable, "Continue on screen")
         XCTAssertLessThanOrEqual(next.frame.maxY, app.frame.maxY)
         next.tap()
-        waitFor(app.staticTexts["This is permanent"])
+        waitFor(app.staticTexts["This is permanent"], timeout: 15)
+        waitFor(app.otherElements["Your video, 1 seconds"], timeout: 10, "posted as trimmed")
         let post = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Post'")).firstMatch
         waitFor(post)
         snapshot("compose video confirm")

@@ -506,10 +506,18 @@ private struct ProfileStep: View {
                         }
                         .modifier(FormField())
 
-                    BirthdayRow(birthday: viewModel.birthday) { viewModel.birthdayPicked($0) }
-                        .font(.system(size: 17))
-                        .modifier(FormField())
-                        .disabled(viewModel.isWorking)
+                    VStack(alignment: .leading, spacing: 6) {
+                        BirthdayRow(birthday: viewModel.birthday) { viewModel.birthdayPicked($0) }
+                            .font(.system(size: 17))
+                            .modifier(FormField(asksToBeFilled: viewModel.birthday == nil))
+                            .disabled(viewModel.isWorking)
+                        Text(viewModel.birthday == nil
+                             ? "Needed to open your huddle. Only you can see it."
+                             : "Only you can see your birthday.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.horizontal, 4)
+                    }
 
                     VStack(alignment: .trailing, spacing: 4) {
                         TextField("A short bio (optional)", text: $viewModel.bio, axis: .vertical)
@@ -528,11 +536,6 @@ private struct ProfileStep: View {
                         }
                     }
                     .modifier(FormField())
-
-                    Text("Only you can see your birthday.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 4)
                 }
 
                 // A profile picture is the avatar: the colours come back
@@ -548,14 +551,22 @@ private struct ProfileStep: View {
                         .multilineTextAlignment(.center)
                 }
 
-                PrimaryButton(
-                    title: "Open my huddle",
-                    systemImage: "lock.open",
-                    isLoading: viewModel.isWorking,
-                    isEnabled: viewModel.canCompleteProfile
-                ) {
-                    focused = nil
-                    Task { await viewModel.completeProfile() }
+                VStack(spacing: 10) {
+                    PrimaryButton(
+                        title: "Open my huddle",
+                        systemImage: "lock.open",
+                        isLoading: viewModel.isWorking,
+                        isEnabled: viewModel.canCompleteProfile
+                    ) {
+                        focused = nil
+                        Task { await viewModel.completeProfile() }
+                    }
+                    // The name's there, but not the birthday: say so where they're looking.
+                    if viewModel.birthday == nil && !viewModel.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Add your birthday to continue.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                 }
             }
             .padding(.horizontal, Theme.screenPadding)
@@ -599,7 +610,7 @@ private struct ProfileStep: View {
                 ) {
                     VStack(spacing: 6) {
                         if viewModel.isProcessingPhotos {
-                            ProgressView()
+                            HuddleSpinner(size: 22, color: Theme.textSecondary, label: nil)
                         } else {
                             Image(systemName: "plus")
                                 .font(.system(size: 20, weight: .semibold))
@@ -625,6 +636,10 @@ private struct ProfileStep: View {
 
 /// A form field on the sign-up profile step: a card the width of the screen.
 private struct FormField: ViewModifier {
+    /// Still to fill in (the birthday): a dashed ink edge, like an empty
+    /// photo slot, instead of the hairline.
+    var asksToBeFilled = false
+
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, 14)
@@ -633,7 +648,10 @@ private struct FormField: ViewModifier {
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Theme.hairline, lineWidth: 1)
+                    .strokeBorder(
+                        asksToBeFilled ? Theme.accent.opacity(0.5) : Theme.hairline,
+                        style: StrokeStyle(lineWidth: asksToBeFilled ? 1.5 : 1, dash: asksToBeFilled ? [5, 4] : [])
+                    )
             )
     }
 }

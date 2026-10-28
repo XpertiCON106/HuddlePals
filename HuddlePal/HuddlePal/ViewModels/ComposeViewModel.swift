@@ -43,7 +43,17 @@ final class ComposeViewModel {
     /// clip is still here, and a photo for the day is offered instead.
     private(set) var videoNeedsPlus = false
 
-    var canContinue: Bool { (imageData != nil || clip != nil) && !isSaving }
+    var canContinue: Bool { (imageData != nil || clip != nil) && !isSaving && !isPreparingClip }
+
+    /// The part of the clip to post, in seconds, from the trim bar (nil:
+    /// all of it). Cut to it on Continue (`applyTrim`).
+    var clipRange: ClosedRange<Double>?
+    private(set) var isPreparingClip = false
+
+    var isClipTrimmed: Bool {
+        guard let clip, let clipRange else { return false }
+        return clipRange.lowerBound > 0.05 || clipRange.upperBound < clip.seconds - 0.05
+    }
     /// Video drops come with HuddlePals+.
     var canRecordVideo: Bool { deps.plus.isPremium }
 
@@ -76,6 +86,7 @@ final class ComposeViewModel {
         previewImage = image
         imageData = data
         clip = nil
+        clipRange = nil
         videoNeedsPlus = false
     }
 
@@ -84,8 +95,24 @@ final class ComposeViewModel {
         errorMessage = nil
         videoNeedsPlus = false
         self.clip = clip
+        clipRange = nil
         imageData = nil
         previewImage = clip.posterImage
+    }
+
+    /// Cuts the clip to the part kept in the trim bar, if it was trimmed.
+    /// True when there's a clip (or photo) to go on with.
+    func applyTrim() async -> Bool {
+        guard isClipTrimmed, let clip, let clipRange else { return true }
+        isPreparingClip = true
+        defer { isPreparingClip = false }
+        do {
+            setCapturedVideo(try await ClipTrimmer.trim(clip, to: clipRange))
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     /// Photo or video: switching drops what was captured for the other.
@@ -94,6 +121,7 @@ final class ComposeViewModel {
         self.medium = medium
         imageData = nil
         clip = nil
+        clipRange = nil
         previewImage = nil
         errorMessage = nil
         videoNeedsPlus = false

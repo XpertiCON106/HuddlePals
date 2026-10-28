@@ -453,6 +453,24 @@ continue), and accounts from before are asked for theirs once.
    needs a birthday; one under 13 stops with Sign out. An existing account
    is asked once, full screen, then Profile shows it.
 
+## Phase 10 — Live updates
+
+An open huddle updates as soon as someone posts, comments or reacts, over
+Supabase Realtime. Until this runs, the app refreshes an open huddle every
+half minute instead, so it can go before or after the build ships.
+
+1. **Migration 017.** SQL Editor → paste
+   [`supabase/migrations/017_live_updates.sql`](supabase/migrations/017_live_updates.sql)
+   → Run (safe to re-run). It adds `deposits`, `comments` and `reactions`
+   to the `supabase_realtime` publication. Realtime checks each change
+   against the tables' RLS with the listener's own token, so nobody hears
+   about a row they can't read.
+2. **Check it ran**: Database → Publications → `supabase_realtime` lists
+   the three tables (Realtime is on for every project by default).
+3. **Check on two phones** in one huddle: a post, a comment or a reaction
+   on one shows on the other within a second or two, with the huddle open
+   and no pull to refresh.
+
 ---
 
 > Already ran an earlier `schema.sql`? There are no upgrade migrations —
