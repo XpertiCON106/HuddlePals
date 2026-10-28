@@ -184,6 +184,29 @@ final class ProfileViewModel {
         set { deps.appearance.preference = newValue }
     }
 
+    // MARK: Birthday surface
+
+    /// Only its owner sees it, so it's saved on its own (no draft, no
+    /// confirmation), and it must meet the minimum age.
+    private(set) var birthday: Birthday?
+    private(set) var birthdayMessage: String?
+
+    func loadBirthday() async {
+        birthday = try? await deps.auth.birthday()
+    }
+
+    func saveBirthday(_ picked: Birthday) async {
+        guard picked != birthday else { return }
+        do {
+            try await deps.auth.saveBirthday(picked)
+            birthday = picked
+            birthdayMessage = nil
+            Haptics.success()
+        } catch {
+            birthdayMessage = error.localizedDescription
+        }
+    }
+
     // MARK: Daily reminder surface
 
     var reminderEnabled: Bool { deps.reminders.settings.isEnabled }
@@ -497,11 +520,7 @@ final class ProfileViewModel {
     // MARK: Account actions
 
     func signOut() async {
-        // While the session still exists: this device stops getting the
-        // account's notifications.
-        await deps.push.removeDeviceToken()
-        try? await deps.auth.signOut()
-        await deps.endSession()
+        await deps.signOut()
     }
 
     // MARK: State helpers

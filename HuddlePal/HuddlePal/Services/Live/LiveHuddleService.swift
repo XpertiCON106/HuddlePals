@@ -29,6 +29,14 @@ final class LiveHuddleService: HuddleServiceProtocol {
         engine.todayKey(now: dateProvider.now)
     }
 
+    func isMember(of huddle: Huddle, user: User) async throws -> Bool {
+        let rows: [MembershipDTO] = try await client.select("memberships", query: [
+            URLQueryItem(name: "huddle_id", value: "eq.\(huddle.id.uuidString)"),
+            URLQueryItem(name: "user_id", value: "eq.\(user.id.uuidString)"),
+        ])
+        return !rows.isEmpty
+    }
+
     func huddles(for user: User) async throws -> [Huddle] {
         let mine: [MembershipDTO] = try await client.select("memberships", query: [
             URLQueryItem(name: "user_id", value: "eq.\(user.id.uuidString)"),

@@ -110,6 +110,24 @@ final class JourneyTests: HuddleUITestCase {
         XCTAssertTrue(app.staticTexts["Day one"].exists || app.images.count > 0)
     }
 
+    /// Share → Copy link: the link is copied, and "Link copied" shows beside
+    /// Share for a moment.
+    func testCopyingTheInviteLinkSaysSo() {
+        launchToShelf()
+        openHuddle("Sunday Dinners")
+        waitFor(app.buttons["Huddle settings"]).tap()
+        let share = app.buttons["Share"]
+        scrollTo(share)
+        share.tap()
+        let card = dialog("Invite to \u{201C}Sunday Dinners\u{201D}")
+        snapshot("34 invite card")
+        card.buttons["Copy link"].tap()
+        let copied = app.descendants(matching: .any)["linkCopied"]
+        waitFor(copied, timeout: 5, "Link copied, beside Share")
+        snapshot("35 link copied")
+        waitUntilGone(copied, timeout: 6)
+    }
+
     /// 5. A huddle's keeper can't leave it, only delete it.
     func testTheKeeperCanDeleteButNotLeave() {
         launchToShelf()

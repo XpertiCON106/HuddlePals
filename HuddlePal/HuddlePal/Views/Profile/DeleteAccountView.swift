@@ -52,7 +52,7 @@ private struct DeleteAccountContent: View {
                 .padding(.top, 8)
 
                 VStack(alignment: .leading, spacing: 16) {
-                    point("trash", "Your account, name, bio and profile photos are deleted, and you're signed out.")
+                    point("trash", "Your account, name, bio, birthday and profile photos are deleted, and you're signed out.")
                     point("photo.on.rectangle.angled", "Photos and videos you already posted stay in your huddles as \u{201C}Former member\u{201D}. A huddle's archive is permanent.")
                     point("person.2", "Huddles you keep pass to the member who's been in them longest.")
                     point("exclamationmark.circle", "This can't be undone.")

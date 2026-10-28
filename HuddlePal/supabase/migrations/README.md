@@ -23,6 +23,7 @@ that both end up identical (`npm test`).
 | `013_plus_and_video.sql` | HuddlePals+ and video drops: `user_entitlements` (written only by `apply_entitlement`, for the `verify-subscription` and `app-store-notifications` functions), `my_entitlement()`, the free plan's caps (`create_huddle`, `huddle_join_rule`, `huddle_join_status`, `memberships.keeper_since`), video deposits (`media_type`, `duration_ms`, `video_path`; posting one and uploading a `.mp4` take Plus), videos in `preserved_photos`, and `push_media_type` for the notification copy. The caps apply as soon as it runs |
 | `014_delete_huddle.sql` | A keeper deletes their huddle: `delete_huddle(huddle, user)` (service role only, for the `delete-huddle` function) keeps any reported deposit in `preserved_photos`, records the deletion in `huddle_deletions` for the members' notification (`queue_push`, `push_targets` learns `huddle_deleted`), and deletes the huddle with everything in it |
 | `015_keeper_cannot_leave.sql` | A keeper can't leave their huddle, only delete it: leaving (deleting your own `memberships` row) is for members. The keeper's row still goes with their account, and the longest-standing member takes over |
+| `016_birthdays.sql` | Birthdays (`profile_birthdates`): one per account, readable and writable only by its owner, refused under 13, gone with the profile |
 
 Ship the app build with 008 and 009: run them first, and older builds keep
 working (they keep joining with old codes until someone on the new build
@@ -46,3 +47,6 @@ notification. Until the build ships, nothing calls it.
 Run 015 with the build that hides Leave from keepers. Older builds still
 offer it; once 015 runs, the server keeps the keeper in place (the huddle
 comes back on their next refresh).
+
+Run 016 before shipping the build that asks for birthdays: until it runs,
+that build can't save one, so new profiles can't be finished.

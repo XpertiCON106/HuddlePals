@@ -22,6 +22,9 @@ final class AppSession {
     /// Authenticated but never finished the profile step — onboarding
     /// resumes there instead of at sign-in.
     var needsProfileSetup = false
+    /// Signed in, but the account has no birthday yet (made before it was
+    /// asked for): it's asked once, before anything else.
+    var needsBirthday = false
     /// False until seeding + session restore finish on launch.
     var isReady = false
     /// Bumped by the live photo keyring whenever this device gains a huddle
@@ -154,12 +157,35 @@ final class AppDependencies {
         self.push.centerDelegate.promotion = self.plusPromo
     }
 
+    /// Whether the signed-in account still needs its birthday, from the
+    /// server (offline: not asked this time, asked on a later launch).
+    func checkBirthday() async {
+        guard session.currentUser != nil else {
+            session.needsBirthday = false
+            return
+        }
+        do {
+            session.needsBirthday = try await auth.birthday() == nil
+        } catch {
+            // Unknown: don't stop anyone over a network error.
+        }
+    }
+
+    /// Signs out on this device: first, while the session still exists, the
+    /// device stops getting the account's notifications.
+    func signOut() async {
+        await push.removeDeviceToken()
+        try? await auth.signOut()
+        await endSession()
+    }
+
     /// Ends the session on this device (sign-out, account deletion, or the
     /// server refusing the session) and leaves nothing of the account for
     /// whoever signs in next.
     func endSession() async {
         session.currentUser = nil
         session.needsProfileSetup = false
+        session.needsBirthday = false
         session.pendingInviteCode = nil
         session.pendingHuddleID = nil
         session.blockedUserIDs = []

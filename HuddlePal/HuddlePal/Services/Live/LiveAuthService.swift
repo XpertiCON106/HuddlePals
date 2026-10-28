@@ -119,6 +119,28 @@ final class LiveAuthService: AuthServiceProtocol {
         return user
     }
 
+    func birthday() async throws -> Birthday? {
+        guard let session = try await client.validSession() else {
+            throw AuthError.notAuthenticated
+        }
+        let rows: [BirthdayDTO] = try await client.select("profile_birthdates", query: [
+            URLQueryItem(name: "user_id", value: "eq.\(session.userId.uuidString)"),
+        ])
+        return rows.first.flatMap { Birthday(isoDate: $0.birthDate) }
+    }
+
+    func saveBirthday(_ birthday: Birthday) async throws {
+        guard birthday.isOldEnough(on: .now) else { throw AuthError.underMinimumAge }
+        guard let session = try await client.validSession() else {
+            throw AuthError.notAuthenticated
+        }
+        let _: [BirthdayDTO] = try await client.upsert(
+            "profile_birthdates",
+            values: BirthdayDTO(userId: session.userId, birthDate: birthday.isoDate),
+            onConflict: "user_id"
+        )
+    }
+
     func updateProfile(
         user: User,
         displayName: String,

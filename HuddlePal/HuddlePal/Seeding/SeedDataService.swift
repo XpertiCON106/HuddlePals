@@ -106,6 +106,11 @@ final class SeedDataService {
         )
         let allUsers = [you, maya, sam, riley]
         allUsers.forEach { context.insert($0) }
+        // An account from before birthdays were asked for would be asked
+        // first thing: the seeded one has one.
+        if !UITestHooks.noBirthday {
+            MockAuthService.storeBirthday(Birthday(year: 1995, month: 6, day: 14), for: you.id)
+        }
 
         // Profile photos (placeholder portraits into the avatars namespace).
         var portraitSeed = 500

@@ -45,6 +45,7 @@ final class TextLimitTests: XCTestCase {
 
     func testOnboardingNamesOverTheServerLimitCannotBeSaved() {
         let viewModel = OnboardingViewModel(deps: AppDependencies.makeMock(inMemory: true))
+        viewModel.birthdayPicked(Birthday(year: 1990, month: 1, day: 1))
         viewModel.displayName = String(repeating: "a", count: 40)
         XCTAssertTrue(viewModel.canCompleteProfile)
         viewModel.displayName = String(repeating: "a", count: 41)

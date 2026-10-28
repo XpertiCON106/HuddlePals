@@ -1533,6 +1533,27 @@ end $$;
 revoke execute on function public.delete_huddle(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.delete_huddle(uuid, uuid) to service_role;
 
+-- ============================================================ birthdays
+-- Asked when a profile is made (and once of accounts from before), to keep
+-- HuddlePals to people 13 and older (Terms 2.1). Only the account's owner
+-- reads or changes theirs, and it goes with the profile. The age rule
+-- allows a day for time zones: the app checks the age on the person's own
+-- calendar.
+create table public.profile_birthdates (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  birth_date date not null check (birth_date >= date '1900-01-01')
+);
+alter table public.profile_birthdates enable row level security;
+revoke all on public.profile_birthdates from anon, authenticated;
+grant select, insert, update on public.profile_birthdates to authenticated;
+create policy profile_birthdates_select on public.profile_birthdates for select
+  using (user_id = auth.uid());
+create policy profile_birthdates_insert on public.profile_birthdates for insert
+  with check (user_id = auth.uid() and birth_date <= (current_date - interval '13 years' + interval '1 day')::date);
+create policy profile_birthdates_update on public.profile_birthdates for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid() and birth_date <= (current_date - interval '13 years' + interval '1 day')::date);
+
 -- ============================================ already ran an older schema?
 -- This file only builds a fresh database. To start over on one that ran an
 -- earlier copy, run supabase/scripts/reset_database.sql (destructive), empty

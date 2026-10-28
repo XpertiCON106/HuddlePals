@@ -435,6 +435,24 @@ all-caps Section 13 notice at the top (Section 13 itself is unchanged).
    account opens its page, and Delete my account works only once DELETE is
    typed.
 
+## Phase 9 — Birthdays
+
+New profiles ask for a birthday (only its owner can see it; under 13 can't
+continue), and accounts from before are asked for theirs once.
+
+1. **Migration 016.** SQL Editor → paste
+   [`supabase/migrations/016_birthdays.sql`](supabase/migrations/016_birthdays.sql)
+   → Run (safe to re-run). Run it before shipping the build: without the
+   table, that build can't finish a new profile.
+2. **Website**: the Privacy Policy with the birthday (the Grok instructions
+   have it, word for word).
+3. **App Store Connect → App Privacy**: add the birthday as collected data
+   (Other Data, linked to the user, for App Functionality, not used for
+   tracking).
+4. **Check on a phone** with the new build: a new account's profile step
+   needs a birthday; one under 13 stops with Sign out. An existing account
+   is asked once, full screen, then Profile shows it.
+
 ---
 
 > Already ran an earlier `schema.sql`? There are no upgrade migrations —

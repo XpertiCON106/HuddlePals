@@ -197,17 +197,23 @@ struct ClipPlayerView: UIViewRepresentable {
 // MARK: - A video drop
 
 /// A video deposit: its poster (as any photo shows, locked while its key
-/// isn't here) and, over it, the clip looping from memory. The feed starts
-/// muted (tap to unmute), the detail screen with sound. Pauses off screen and
-/// in the background.
+/// isn't here) and, over it, the clip looping from memory, with play/pause
+/// and sound buttons on its bottom corners. The feed starts muted (a tap on
+/// the video unmutes), the detail screen with sound (a tap there plays or
+/// pauses). Pauses off screen and in the background; one paused by hand
+/// stays paused until it's played again.
 struct DepositVideoPlayer: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(\.scenePhase) private var scenePhase
     let deposit: Deposit
     var startsMuted = true
+    /// A tap on the video plays or pauses it (the detail screen), instead
+    /// of turning the sound on or off (the feed).
+    var tapPlaysAndPauses = false
 
     @State private var clipPlayer: LoopingClipPlayer?
     @State private var isMuted = true
+    @State private var isPaused = false
     @State private var isOnScreen = false
 
     var body: some View {
@@ -222,27 +228,43 @@ struct DepositVideoPlayer: View {
             VideoBadge(durationMs: deposit.durationMs)
                 .padding(10)
         }
-        .overlay(alignment: .bottomTrailing) {
-            if clipPlayer != nil {
-                Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 13, weight: .semibold))
+        .overlay {
+            if clipPlayer != nil, isPaused {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(.white)
-                    .padding(8)
-                    .background(.black.opacity(0.5), in: Circle())
-                    .padding(10)
-                    .accessibilityHidden(true)
+                    .frame(width: 62, height: 62)
+                    .background(.black.opacity(0.45), in: Circle())
+                    .contentShape(Circle())
+                    .onTapGesture { togglePlayback() }
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottom) {
+            if clipPlayer != nil {
+                HStack {
+                    control(isPaused ? "play.fill" : "pause.fill") { togglePlayback() }
+                    Spacer()
+                    control(isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") { toggleSound() }
+                }
+                .padding(4)
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPaused)
         .contentShape(Rectangle())
-        .onTapGesture { toggleSound() }
+        .onTapGesture {
+            if tapPlaysAndPauses { togglePlayback() } else { toggleSound() }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Video by \(deposit.author?.displayName ?? "Former member")\(deposit.durationMs.map { ", \(Self.seconds($0)) seconds" } ?? "")")
+        .accessibilityValue(isPaused ? "Paused" : "")
         .accessibilityAddTraits(.startsMediaSession)
+        .accessibilityAction(named: isPaused ? "Play" : "Pause") { togglePlayback() }
         .accessibilityAction(named: isMuted ? "Unmute" : "Mute") { toggleSound() }
         .task(id: "\(deposit.id)#\(deps.session.photoKeysVersion)") { await load() }
         .onAppear {
             isOnScreen = true
-            clipPlayer?.play()
+            if !isPaused { clipPlayer?.play() }
         }
         .onDisappear {
             isOnScreen = false
@@ -250,8 +272,35 @@ struct DepositVideoPlayer: View {
             if !isMuted { PlaybackAudio.release() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active, isOnScreen { clipPlayer?.play() } else { clipPlayer?.pause() }
+            if phase == .active, isOnScreen, !isPaused { clipPlayer?.play() } else { clipPlayer?.pause() }
         }
+    }
+
+    /// A round button on the video's corner, its tap area 44 pt.
+    private func control(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 30, height: 30)
+            .background(.black.opacity(0.5), in: Circle())
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+            .contentTransition(.symbolEffect(.replace))
+    }
+
+    private func togglePlayback() {
+        guard let clipPlayer else { return }
+        isPaused.toggle()
+        if isPaused {
+            clipPlayer.pause()
+            // Paused with sound on: give the sound back meanwhile.
+            if !isMuted { PlaybackAudio.release() }
+        } else {
+            if !isMuted { PlaybackAudio.soundOn() }
+            clipPlayer.play()
+        }
+        Haptics.light()
     }
 
     private func load() async {
@@ -270,7 +319,7 @@ struct DepositVideoPlayer: View {
         player.isMuted = startsMuted
         if startsMuted { PlaybackAudio.muted() } else { PlaybackAudio.soundOn() }
         clipPlayer = player
-        if isOnScreen { player.play() }
+        if isOnScreen, !isPaused { player.play() }
     }
 
     private func toggleSound() {

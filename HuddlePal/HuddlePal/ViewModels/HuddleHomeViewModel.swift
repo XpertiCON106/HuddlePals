@@ -26,6 +26,9 @@ final class HuddleHomeViewModel {
     /// Members waiting for the huddle's key until someone checks their key
     /// code (in the huddle's settings).
     private(set) var keyChecks: [KeyCheck] = []
+    /// Its keeper deleted the huddle while it was open here: the screen says
+    /// so and goes back to the shelf, which then lets it go.
+    var wasDeleted = false
 
     /// "Ben is waiting…" / "2 members are waiting…"
     var keyCheckSummary: String? {
@@ -73,6 +76,13 @@ final class HuddleHomeViewModel {
             return
         }
         do {
+            // First, before anything syncs: a deleted huddle's rows would be
+            // cleared from under this screen.
+            guard try await deps.huddleService.isMember(of: huddle, user: user) else {
+                wasDeleted = true
+                hasLoaded = true
+                return
+            }
             let all = try await deps.depositService.deposits(in: huddle)
             let key = todayKey
             let todayAll = all.filter { $0.dayKey == key }

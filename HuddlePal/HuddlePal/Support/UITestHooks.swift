@@ -15,6 +15,10 @@ import UIKit
 ///   -ui-testing-plus            the seeded "You" has HuddlePals+
 ///   -ui-testing-plus-intro      a first post introduces HuddlePals+ (other
 ///                               runs skip it, so it never covers a tap)
+///   -ui-testing-motion          the welcome cards move, as outside tests (for
+///                               recording them; tests otherwise hold a frame)
+///   -ui-testing-no-birthday     the seeded "You" has no birthday yet, as an
+///                               account from before birthdays were asked for
 enum UITestHooks {
     #if DEBUG
     private static let arguments = ProcessInfo.processInfo.arguments
@@ -26,6 +30,8 @@ enum UITestHooks {
     static let appleUnavailable = arguments.contains("-ui-testing-apple-unavailable")
     static let plus = arguments.contains("-ui-testing-plus")
     static let plusIntro = arguments.contains("-ui-testing-plus-intro")
+    static let motion = arguments.contains("-ui-testing-motion")
+    static let noBirthday = arguments.contains("-ui-testing-no-birthday")
     #else
     static let isUITesting = false
     static let resetsState = false
@@ -35,6 +41,8 @@ enum UITestHooks {
     static let appleUnavailable = false
     static let plus = false
     static let plusIntro = false
+    static let motion = false
+    static let noBirthday = false
     #endif
 
     /// Wipes what the app persists (settings, the local store, cached

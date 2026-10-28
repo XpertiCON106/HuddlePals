@@ -116,6 +116,12 @@ private struct HomeContent: View {
         .onChange(of: deps.dateProvider.dayOffset) {
             Task { await viewModel.refresh() }
         }
+        .appDialog(
+            "This huddle was deleted",
+            isPresented: $viewModel.wasDeleted,
+            message: "Its keeper deleted \u{201C}\(viewModel.huddle.name)\u{201D}, with every photo and video in it.",
+            actions: [DialogAction("Back to my huddles", role: .cancel) { router.popToHuddleList() }]
+        )
         .sheet(isPresented: $viewModel.showCompose) {
             ComposeView(huddle: viewModel.huddle) { success in
                 if success {
