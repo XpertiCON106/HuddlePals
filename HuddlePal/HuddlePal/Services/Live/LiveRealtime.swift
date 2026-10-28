@@ -10,8 +10,8 @@ import Foundation
 /// token), and when it drops it reconnects, waiting longer each time.
 @MainActor
 final class LiveRealtime: LiveUpdatesProtocol {
-    static let topic = "realtime:huddlepals"
-    static let tables = ["deposits", "comments", "reactions"]
+    nonisolated static let topic = "realtime:huddlepals"
+    nonisolated static let tables = ["deposits", "comments", "reactions"]
 
     private let socketURL: URL?
     private let client: SupabaseClient

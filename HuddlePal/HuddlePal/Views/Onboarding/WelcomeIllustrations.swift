@@ -79,7 +79,9 @@ struct DayGoesByScene: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
-    @State private var start = Date()
+    /// Runs only while its card shows: back on it, the day carries on where
+    /// it left off instead of jumping ahead.
+    @State private var clock = PausableClock()
 
     /// One day, in seconds, and when in it the camera snaps.
     static let day = 9.0
@@ -102,7 +104,7 @@ struct DayGoesByScene: View {
             Group {
                 if WelcomeIllustration.animates(reduceMotion: reduceMotion) {
                     TimelineView(.animation(paused: !isActive)) { timeline in
-                        scene(at: timeline.date.timeIntervalSince(start), size: full, top: insets.top)
+                        scene(at: clock.time(at: timeline.date), size: full, top: insets.top)
                     }
                 } else {
                     // Just after the day's photo, settled.
@@ -111,8 +113,15 @@ struct DayGoesByScene: View {
             }
             .frame(width: full.width, height: full.height)
             .offset(y: -insets.top)
+            // Frame by frame from its clock: nothing in it is ever animated
+            // by a page change (that fast-forwarded the day).
+            .transaction { $0.animation = nil }
         }
         .accessibilityHidden(true)
+        .onAppear { if !isActive { clock.pause(at: .now) } }
+        .onChange(of: isActive) { _, active in
+            if active { clock.resume(at: .now) } else { clock.pause(at: .now) }
+        }
     }
 
     private func scene(at t: Double, size: CGSize, top: CGFloat) -> some View {
@@ -366,6 +375,27 @@ struct DayGoesByScene: View {
     private func ease(_ x: Double) -> CGFloat {
         let c = min(1, max(0, x))
         return CGFloat(c < 0.5 ? 2 * c * c : 1 - pow(-2 * c + 2, 2) / 2)
+    }
+}
+
+/// Time that only passes while running.
+struct PausableClock {
+    private var banked: TimeInterval = 0
+    private var runningSince: Date? = .now
+
+    func time(at date: Date) -> TimeInterval {
+        banked + (runningSince.map { max(0, date.timeIntervalSince($0)) } ?? 0)
+    }
+
+    mutating func pause(at date: Date) {
+        guard let since = runningSince else { return }
+        banked += max(0, date.timeIntervalSince(since))
+        runningSince = nil
+    }
+
+    mutating func resume(at date: Date) {
+        guard runningSince == nil else { return }
+        runningSince = date
     }
 }
 

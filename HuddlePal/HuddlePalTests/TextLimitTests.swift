@@ -29,8 +29,8 @@ final class TextLimitTests: XCTestCase {
         XCTAssertEqual(caption?.count, 40)
         let bio = AuthValidation.sanitizedBio(String(repeating: "👨‍👩‍👧‍👦", count: 40))
         XCTAssertLessThanOrEqual(bio?.serverLength ?? 0, AuthValidation.bioLimit)
-        XCTAssertEqual(AuthValidation.bioLimit, 50)
-        XCTAssertEqual(AuthValidation.sanitizedBio(String(repeating: "a", count: 60))?.count, 50)
+        XCTAssertEqual(AuthValidation.bioLimit, 30)
+        XCTAssertEqual(AuthValidation.sanitizedBio(String(repeating: "a", count: 60))?.count, 30)
     }
 
     func testHuddleNamesOverTheServerLimitCannotBeCreated() {
@@ -43,12 +43,47 @@ final class TextLimitTests: XCTestCase {
         XCTAssertFalse(viewModel.canCreate)
     }
 
-    func testOnboardingNamesOverTheServerLimitCannotBeSaved() {
+    func testOnboardingNamesOverTenCharactersCannotBeSaved() {
         let viewModel = OnboardingViewModel(deps: AppDependencies.makeMock(inMemory: true))
         viewModel.birthdayPicked(Birthday(year: 1990, month: 1, day: 1))
-        viewModel.displayName = String(repeating: "a", count: 40)
+        XCTAssertEqual(AuthValidation.displayNameLimit, 10)
+        viewModel.displayName = String(repeating: "a", count: 10)
         XCTAssertTrue(viewModel.canCompleteProfile)
-        viewModel.displayName = String(repeating: "a", count: 41)
+        viewModel.displayName = String(repeating: "a", count: 11)
         XCTAssertFalse(viewModel.canCompleteProfile)
+    }
+
+    /// A cut that ends on a space is trimmed, so the same bio always comes
+    /// out the same: opening Profile with a longer bio changes nothing.
+    func testACutBioComesOutTheSameEveryTime() async throws {
+        let long = "Keeper of the crew. One photo at a time." // 30 characters in is a space
+        let once = AuthValidation.sanitizedBio(long)
+        XCTAssertEqual(once, "Keeper of the crew. One photo")
+        XCTAssertEqual(AuthValidation.sanitizedBio(once), once)
+
+        let deps = AppDependencies.makeMock(inMemory: true)
+        let user = try await deps.auth.completeProfile(displayName: "Sam", avatarColorHex: "E5484D")
+        user.bio = long
+        deps.session.currentUser = user
+        let profile = ProfileViewModel(deps: deps)
+        await profile.loadInitialState()
+        XCTAssertEqual(profile.bio, "Keeper of the crew. One photo")
+        XCTAssertFalse(profile.hasUnsavedChanges, "opening Profile changes nothing")
+    }
+
+    /// A name saved before the limit keeps working: the rest of the profile
+    /// still saves, until the name itself is edited.
+    func testAnOlderLongerNameStaysUntilItsEdited() async throws {
+        let deps = AppDependencies.makeMock(inMemory: true)
+        deps.session.currentUser = try await deps.auth.completeProfile(displayName: "Alexandria Q", avatarColorHex: "E5484D")
+        let profile = ProfileViewModel(deps: deps)
+        await profile.loadInitialState()
+        XCTAssertEqual(profile.displayName, "Alexandria Q", "shown as it is")
+        XCTAssertFalse(profile.hasUnsavedChanges, "nothing changed by opening Profile")
+        XCTAssertTrue(profile.isDraftValid)
+        profile.displayName = "Alexandria Qu"
+        XCTAssertFalse(profile.isDraftValid, "an edit must fit the limit")
+        profile.displayName = "Alexandria"
+        XCTAssertTrue(profile.isDraftValid)
     }
 }

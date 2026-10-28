@@ -152,16 +152,23 @@ protocol AuthServiceProtocol: AnyObject {
 }
 
 extension AuthValidation {
-    /// The app's limit; the database allows 160, which older bios may use
-    /// until they're next edited.
-    static let bioLimit = 50
+    /// The app's limit for a display name; the database allows 40, which an
+    /// older name keeps until it's edited.
+    static let displayNameLimit = 10
+    /// The app's limit; the database allows 160. An older, longer bio is
+    /// shown cut to this in Profile, and saved so with the next change.
+    static let bioLimit = 30
     static let maxProfilePhotos = 3
 
     static func sanitizedBio(_ raw: String?) -> String? {
         guard let raw else { return nil }
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed.prefix(serverLength: bioLimit)
+        // Trimmed again once it's cut: a cut can end on a space, and the
+        // same bio must come out the same every time (or Profile would see
+        // a change that isn't one).
+        let cut = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .prefix(serverLength: bioLimit)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cut.isEmpty ? nil : cut
     }
 }
 

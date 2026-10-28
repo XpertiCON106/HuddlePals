@@ -124,7 +124,7 @@ final class OnboardingViewModel {
 
     var canCompleteProfile: Bool {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (1...TextLimit.displayName).contains(name.serverLength)
+        return (1...AuthValidation.displayNameLimit).contains(name.serverLength)
             && bio.serverLength <= AuthValidation.bioLimit
             && birthday != nil && !isUnderage
             && !isWorking && !isProcessingPhotos

@@ -141,7 +141,11 @@ final class ProfileViewModel {
 
     var isDraftValid: Bool {
         let name = normalizedDisplayName
-        return (1...TextLimit.displayName).contains(name.serverLength)
+        // A name from before the 10-character limit stays as it is until
+        // it's edited: the rest of the profile still saves.
+        let nameFits = (1...AuthValidation.displayNameLimit).contains(name.serverLength)
+            || (!name.isEmpty && name == originalDisplayName)
+        return nameFits
             && bio.serverLength <= AuthValidation.bioLimit
             && draftPhotos.count <= AuthValidation.maxProfilePhotos
     }
@@ -172,6 +176,9 @@ final class ProfileViewModel {
     }
 
     var bioRemaining: Int { AuthValidation.bioLimit - bio.serverLength }
+
+    /// The name as saved, before this session's edits.
+    var originalDisplayName: String? { originalState?.displayName }
     /// Whether the Add tile shows (it's disabled, not hidden, while
     /// saving, so the row keeps its shape).
     var canAddPhotos: Bool {

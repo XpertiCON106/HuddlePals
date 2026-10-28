@@ -280,8 +280,11 @@ private struct ProfileContent: View {
                     .font(.system(size: 17, weight: .medium))
                     .allowsHitTesting(!viewModel.isWorking)
                     .onChange(of: viewModel.displayName) { _, newValue in
-                        if newValue.serverLength > TextLimit.displayName {
-                            viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
+                        // Typing stops at the limit; a longer name saved
+                        // before it isn't cut just by opening Profile.
+                        if newValue.serverLength > AuthValidation.displayNameLimit,
+                           newValue != viewModel.originalDisplayName {
+                            viewModel.displayName = newValue.prefix(serverLength: AuthValidation.displayNameLimit)
                         }
                     }
             }

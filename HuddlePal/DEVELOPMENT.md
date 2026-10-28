@@ -617,6 +617,12 @@ Symbols.
 - A SwiftUI `TextField`'s tap target is its text height; padding doesn't
   count. The audit fails a 15 pt field (18 pt tall) and passes 16 pt
   (20 pt tall), so keep fields at 16 pt or more.
+- In a view, a delayed closure (`asyncAfter`, or a `Task` started in
+  `onAppear`) sees the view's `let`s as they were when it started: the
+  launch logo once waited forever on a stale `isAppReady` when the app was
+  ready before it finished. Set state from a `.task` and react in
+  `.onChange`, which sees current values. UI tests start slower than a
+  phone, so test the fast path too (`testAFreshOpenSignedOut…`).
 - OVERVIEW.md uses Mermaid, which GitHub renders.
 
 ## Open issues

@@ -15,6 +15,24 @@ final class JourneyTests: HuddleUITestCase {
         snapshot("02 huddle shelf")
     }
 
+    /// Closed and opened fresh while signed out, when the app is ready
+    /// almost at once: the logo plays out, then gives way to the welcome
+    /// cards. (It once stayed on the logo for good.)
+    func testAFreshOpenSignedOutPlaysTheLogoThenShowsTheWelcome() {
+        launchToShelf()
+        signOut()
+        app.terminate()
+        // Fresh, and still signed out: no reset this time.
+        app.launchArguments = ["-ui-testing", "-ui-testing-fake-camera"]
+        app.launch()
+        // The logo covers the welcome until it's played out and gone.
+        let start = waitFor(app.buttons["Continue"], timeout: 10)
+        let settled = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: start)
+        wait(for: [settled], timeout: 10)
+        XCTAssertFalse(app.staticTexts["HuddlePals"].exists, "the logo has gone")
+        snapshot("41 fresh open signed out")
+    }
+
     /// QA-31: the day's one action must be on screen without scrolling.
     func testTheDepositButtonIsVisibleWithoutScrolling() {
         launchToShelf()

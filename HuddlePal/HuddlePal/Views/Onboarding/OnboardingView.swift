@@ -157,9 +157,11 @@ private struct WelcomeStep: View {
         ZStack {
             // The first card's day goes by behind the whole screen, and
             // gives way to the others' pictures as they come in.
+            // Only the fade is animated, never the scene itself.
             DayGoesByScene(isActive: viewModel.pageIndex == 0)
-                .opacity(viewModel.pageIndex == 0 ? 1 : 0)
-                .animation(.easeInOut(duration: 0.45), value: viewModel.pageIndex)
+                .animation(.easeInOut(duration: 0.45)) { scene in
+                    scene.opacity(viewModel.pageIndex == 0 ? 1 : 0)
+                }
 
             VStack(spacing: 0) {
                 TabView(selection: $viewModel.pageIndex) {
@@ -500,8 +502,8 @@ private struct ProfileStep: View {
                         .submitLabel(.next)
                         .onSubmit { focused = .bio }
                         .onChange(of: viewModel.displayName) { _, newValue in
-                            if newValue.serverLength > TextLimit.displayName {
-                                viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
+                            if newValue.serverLength > AuthValidation.displayNameLimit {
+                                viewModel.displayName = newValue.prefix(serverLength: AuthValidation.displayNameLimit)
                             }
                         }
                         .modifier(FormField())
@@ -603,19 +605,22 @@ private struct ProfileStep: View {
                 .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
             if viewModel.canAddPhotos {
+                // Read here: the picker's label isn't on the main actor.
+                let isProcessing = viewModel.isProcessingPhotos
+                let hasPhotos = !viewModel.photos.isEmpty
                 PhotosPicker(
                     selection: $viewModel.photoItems,
                     maxSelectionCount: AuthValidation.maxProfilePhotos - viewModel.photos.count,
                     matching: .images
                 ) {
                     VStack(spacing: 6) {
-                        if viewModel.isProcessingPhotos {
+                        if isProcessing {
                             HuddleSpinner(size: 22, color: Theme.textSecondary, label: nil)
                         } else {
                             Image(systemName: "plus")
                                 .font(.system(size: 20, weight: .semibold))
                         }
-                        Text(viewModel.photos.isEmpty ? "Add photos" : "Add")
+                        Text(hasPhotos ? "Add" : "Add photos")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .foregroundStyle(Theme.textSecondary)

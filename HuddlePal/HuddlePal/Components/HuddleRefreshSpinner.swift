@@ -98,7 +98,9 @@ private struct RefreshSpinnerHook: UIViewRepresentable {
             // SwiftUI may tint the control again; keep its own spinner hidden.
             if control.tintColor != .clear { control.tintColor = .clear }
             let pull = -(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
-            progress.pulled = min(1, max(0, Double(pull) / 80))
+            // All four dots are in well before the refresh starts, so it
+            // turns straight on from them.
+            progress.pulled = min(1, max(0, Double(pull) / 64))
             progress.isRefreshing = control.isRefreshing
         }
 

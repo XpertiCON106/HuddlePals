@@ -67,6 +67,9 @@ private struct LaunchRevealView: View {
     @State private var exitScale: CGFloat = 1
     @State private var exitOpacity: CGFloat = 1
     @State private var exitStarted = false
+    /// The whole mark has been seen. Animated state takes its final value
+    /// at once (only the drawing takes time), so this waits on the clock.
+    @State private var hasPlayed = false
 
     /// Side of the square the mark is laid out in — the icon's full canvas,
     /// so the mark itself is 0.64 × this wide.
@@ -108,9 +111,17 @@ private struct LaunchRevealView: View {
         }
         .opacity(exitOpacity)
         .onAppear(perform: start)
-        .onChange(of: isAppReady) {
-            exitIfPossible()
+        .task {
+            // The whole mark plays out, the wordmark settled, however fast the
+            // app is ready (signed out, it's ready almost at once).
+            guard !reduceMotion else { return }
+            try? await Task.sleep(for: .seconds(1.45))
+            hasPlayed = true
         }
+        // Either can come last; each checks the other as it is now. (A
+        // delayed closure would see `isAppReady` as it was at the start.)
+        .onChange(of: hasPlayed) { exitIfPossible() }
+        .onChange(of: isAppReady) { exitIfPossible() }
     }
 
     private func start() {
@@ -118,7 +129,7 @@ private struct LaunchRevealView: View {
             armProgress = 1
             headsVisible = [true, true, true]
             wordmarkVisible = true
-            exitIfPossible()
+            hasPlayed = true
             return
         }
         withAnimation(.easeOut(duration: 0.6)) {
@@ -132,16 +143,11 @@ private struct LaunchRevealView: View {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.75)) {
             wordmarkVisible = true
         }
-        // Minimum dwell so a fast bootstrap still reads as a moment.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) {
-            exitIfPossible()
-        }
     }
 
     private func exitIfPossible() {
-        // Wait for both: animation dwell elapsed AND bootstrap finished.
-        guard isAppReady, armProgress == 1, !exitStarted else { return }
-        guard wordmarkVisible || reduceMotion else { return }
+        // Wait for both: the mark played out AND bootstrap finished.
+        guard isAppReady, hasPlayed, !exitStarted else { return }
         exitStarted = true
         if reduceMotion {
             withAnimation(.easeOut(duration: 0.3)) { exitOpacity = 0 }
