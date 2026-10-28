@@ -421,12 +421,13 @@ create policy huddles_update on public.huddles for update
 revoke update on public.huddles from authenticated;
 grant update (name, emoji, notification_hour) on public.huddles to authenticated;
 
--- memberships: visible to co-members; leaving deletes your own row.
+-- memberships: visible to co-members; leaving deletes your own row, for a
+-- member: the keeper can't leave, only delete the huddle (delete_huddle).
 -- Inserts happen only inside the create_huddle / join_huddle RPCs.
 create policy memberships_select on public.memberships for select
   using (is_huddle_member(huddle_id));
 create policy memberships_delete on public.memberships for delete
-  using (user_id = auth.uid());
+  using (user_id = auth.uid() and role = 'member');
 
 -- deposits: members read; you write only your own, only into your huddles,
 -- and only for today-or-yesterday (the 48h backfill window, UTC-anchored —

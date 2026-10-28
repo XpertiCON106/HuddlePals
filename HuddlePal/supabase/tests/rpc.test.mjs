@@ -244,7 +244,18 @@ describe('huddle key sharing', () => {
 })
 
 describe('keeper succession', () => {
-  it('when the keeper leaves, the longest-standing member becomes keeper', async () => {
+  it("the keeper can't leave: deleting their own membership deletes nothing", async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const h = await createHuddle(db, A)
+    await joinHuddle(db, B, h.invite_code)
+    assert.equal(await affected(db, A, 'delete from memberships where user_id = $1', [A]), 0)
+    const roles = Object.fromEntries((await admin(db, 'select user_id, role from memberships')).map((r) => [r.user_id, r.role]))
+    assert.deepEqual(roles, { [A]: 'keeper', [B]: 'member' })
+  })
+
+  it("when the keeper's account goes, the longest-standing member becomes keeper", async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
@@ -252,7 +263,7 @@ describe('keeper succession', () => {
     const h = await createHuddle(db, A)
     await joinHuddle(db, B, h.invite_code)
     await joinHuddle(db, C, h.invite_code)
-    await affected(db, A, 'delete from memberships where user_id = $1', [A])
+    await admin(db, 'delete from auth.users where id = $1', [A])
     const roles = Object.fromEntries((await admin(db, 'select user_id, role from memberships')).map((r) => [r.user_id, r.role]))
     assert.deepEqual(roles, { [B]: 'keeper', [C]: 'member' })
     // The new keeper can manage the huddle.

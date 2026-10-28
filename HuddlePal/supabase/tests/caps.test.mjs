@@ -9,7 +9,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import {
-  freshDatabase, q, admin, serverToday, signUp, createHuddle, joinHuddle, deposit,
+  freshDatabase, q, admin, service, serverToday, signUp, createHuddle, joinHuddle, deposit,
   grantPlus, endPlus, WRAPPED_KEY, PUBLIC_KEY,
 } from './harness.mjs'
 
@@ -26,6 +26,9 @@ async function members(db, count, huddle = null, prefix = 'M') {
   }
   return ids
 }
+
+/** The keeper deletes `h` (what the delete-huddle function does). */
+const deleteHuddle = (db, h, uid) => service(db, 'select delete_huddle($1, $2)', [h.id, uid])
 
 const memberCount = async (db, h) =>
   Number((await admin(db, 'select count(*) n from memberships where huddle_id = $1', [h.id]))[0].n)
@@ -73,18 +76,18 @@ describe('creating huddles', () => {
     assert.equal(await refusal(createHuddle(db, A)), 'huddle_limit_reached_premium')
   })
 
-  it('huddles inherited from a keeper who left count toward the cap', async () => {
+  it("huddles inherited from a keeper whose account went count toward the cap", async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
     const [inherited] = await keep(db, A, 1)
     await joinHuddle(db, B, inherited.invite_code)
     await keep(db, B, 2)
-    await q(db, A, 'delete from memberships where user_id = $1', [A])
+    await admin(db, 'delete from auth.users where id = $1', [A])
     assert.equal(await refusal(createHuddle(db, B)), 'huddle_limit_reached_free')
   })
 
-  it('leaving a huddle makes room; only huddles you keep count', async () => {
+  it('deleting a huddle makes room; only huddles you keep count', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
@@ -93,7 +96,7 @@ describe('creating huddles', () => {
     await joinHuddle(db, A, other.invite_code)
     await joinHuddle(db, B, huddles[0].invite_code)
     assert.equal(await refusal(createHuddle(db, A)), 'huddle_limit_reached_free')
-    await q(db, A, 'delete from memberships where user_id = $1 and huddle_id = $2', [A, huddles[0].id])
+    await deleteHuddle(db, huddles[0], A)
     assert.equal(await refusal(createHuddle(db, A)), null)
   })
 
@@ -105,10 +108,7 @@ describe('creating huddles', () => {
     await endPlus(db, otid)
     assert.equal((await q(db, A, 'select id from huddles')).length, 5)
     assert.equal(await refusal(createHuddle(db, A)), 'huddle_limit_reached_free')
-    for (const h of huddles.slice(0, 3)) {
-      await members(db, 1, h)
-      await q(db, A, 'delete from memberships where user_id = $1 and huddle_id = $2', [A, h.id])
-    }
+    for (const h of huddles.slice(0, 3)) await deleteHuddle(db, h, A)
     assert.equal(await refusal(createHuddle(db, A)), null)
   })
 })
@@ -140,21 +140,20 @@ describe('joining a huddle whose keeper is on the free plan', () => {
     const [older] = await keep(db, A, 1) // created before any of Ben's
     await joinHuddle(db, B, older.invite_code)
     const own = await keep(db, B, 3)
-    await q(db, A, 'delete from memberships where user_id = $1', [A])
+    await admin(db, 'delete from auth.users where id = $1', [A])
     assert.deepEqual(await admin(db, `select user_id from memberships where huddle_id = $1 and role = 'keeper'`, [older.id]), [{ user_id: B }])
     for (const h of own) assert.equal(await tryJoin(db, h), null, "Ben's own huddles still take members")
     assert.equal(await tryJoin(db, older), 'join_blocked_invites_paused')
   })
 
-  it('leaving an earlier huddle moves a paused one into the first 3', async () => {
+  it('deleting an earlier huddle moves a paused one into the first 3', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     const otid = await grantPlus(db, A)
     const huddles = await keep(db, A, 4)
     await endPlus(db, otid)
     assert.equal(await tryJoin(db, huddles[3]), 'join_blocked_invites_paused')
-    await members(db, 1, huddles[0])
-    await q(db, A, 'delete from memberships where user_id = $1 and huddle_id = $2', [A, huddles[0].id])
+    await deleteHuddle(db, huddles[0], A)
     assert.equal(await tryJoin(db, huddles[3]), null)
   })
 })
@@ -215,7 +214,7 @@ describe('joining a huddle whose keeper has Plus', () => {
   })
 })
 
-describe('huddles over the free limits, and keepers who leave', () => {
+describe('huddles over the free limits, and keepers who go', () => {
   it('a huddle that grew to 6 with Plus keeps everyone posting, reacting and commenting when it ends; only joins stop', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
@@ -242,13 +241,13 @@ describe('huddles over the free limits, and keepers who leave', () => {
     assert.equal((await q(db, A, 'select id from huddles')).length, 5)
   })
 
-  it('a Plus keeper leaving hands a 7-member huddle to a free member: everyone stays, joins stop', async () => {
+  it("a Plus keeper's account going hands a 7-member huddle to a free member: everyone stays, joins stop", async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     await grantPlus(db, A)
     const [h] = await keep(db, A, 1)
     const joined = await members(db, 6, h)
-    await q(db, A, 'delete from memberships where user_id = $1', [A])
+    await admin(db, 'delete from auth.users where id = $1', [A])
     assert.deepEqual(await admin(db, `select user_id from memberships where huddle_id = $1 and role = 'keeper'`, [h.id]), [{ user_id: joined[0] }])
     assert.equal(await memberCount(db, h), 6)
     assert.equal(await tryJoin(db, h), 'join_blocked_free_limit')
@@ -273,7 +272,7 @@ describe('huddles over the free limits, and keepers who leave', () => {
     const [h] = await keep(db, A, 1)
     const [B, C] = await members(db, 2, h)
     const [{ joined_at: joinedAt }] = await admin(db, 'select joined_at from memberships where user_id = $1', [B])
-    await q(db, A, 'delete from memberships where user_id = $1', [A])
+    await admin(db, 'delete from auth.users where id = $1', [A])
     const [{ keeper_since: since }] = await admin(db, 'select keeper_since from memberships where user_id = $1', [B])
     assert.ok(since > joinedAt)
     assert.deepEqual(await admin(db, 'select keeper_since from memberships where user_id = $1', [C]), [{ keeper_since: null }])

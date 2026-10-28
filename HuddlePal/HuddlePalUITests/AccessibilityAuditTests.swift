@@ -27,6 +27,9 @@ final class AccessibilityAuditTests: HuddleUITestCase {
     ///   section headers), and at the sides, on text a horizontal row has
     ///   scrolled part-way off the screen (the archive's day strips).
     /// - The system keyboard (not app UI).
+    /// - Clipping on text in the app's dialog card: iOS 26 draws a short
+    ///   sheet a little scaled down, so a title's frame measures smaller
+    ///   than its text (the screenshots show it whole).
     /// - Hit-region on static text: hit areas apply to controls; plain text
     ///   isn't one.
     /// - Any issue reported with no element: nothing to check or fix (the
@@ -37,12 +40,14 @@ final class AccessibilityAuditTests: HuddleUITestCase {
     ///   near-black text on the paper background there (verified on screen).
     static func isAccepted(
         _ issue: XCUIAccessibilityAuditIssue, knownOpen: XCUIAccessibilityAuditType,
-        chromeTop: CGFloat, chromeBottom: CGFloat, keyboard: CGRect?, screen: CGRect
+        chromeTop: CGFloat, chromeBottom: CGFloat, keyboard: CGRect?, screen: CGRect,
+        dialog: CGRect? = nil
     ) -> Bool {
         if knownOpen.contains(issue.auditType) { return true }
         if issue.compactDescription.localizedCaseInsensitiveContains("nearly passed") { return true }
         guard let element = issue.element else { return true }
         if let keyboard, keyboard.intersects(element.frame) { return true }
+        if issue.auditType == .textClipped, let dialog, dialog.intersects(element.frame) { return true }
         if issue.auditType == .hitRegion && element.elementType == .staticText { return true }
         if issue.auditType == .contrast && UIDevice.current.userInterfaceIdiom == .pad { return true }
         let label = element.label
@@ -78,14 +83,17 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         // Looked up per issue: the keyboard may still be animating in when
         // the audit starts. Its host view is `inputView`.
         let keyboardHost = app.otherElements["inputView"]
+        let dialogCard = app.otherElements["appDialog"]
         let screenFrame = app.frame
         try app.performAccessibilityAudit { [knownOpen] issue in
             let keyboard = keyboardHost.exists ? keyboardHost.frame : nil
+            let dialog = dialogCard.exists ? dialogCard.frame : nil
             let element = issue.element.map { "type \($0.elementType.rawValue) '\($0.label)' id '\($0.identifier)' at \($0.frame)" } ?? "-"
-            let entry = "[\(screen)] \(issue.compactDescription) — \(element)"
+            let entry = "[\(screen)] \(issue.compactDescription) — \(element)" + (dialog.map { " (in a dialog at \($0))" } ?? "")
             found.append(entry)
             if !Self.isAccepted(issue, knownOpen: knownOpen, chromeTop: chromeTop,
-                                chromeBottom: chromeBottom, keyboard: keyboard, screen: screenFrame) { failing.append(entry) }
+                                chromeBottom: chromeBottom, keyboard: keyboard, screen: screenFrame,
+                                dialog: dialog) { failing.append(entry) }
             return true
         }
         let report = XCTAttachment(string: found.isEmpty ? "[\(screen)] no issues" : found.joined(separator: "\n"))
@@ -135,6 +143,18 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         openProfile()
         waitFor(app.textFields["Display name"])
         try audit("profile")
+        let signOut = app.buttons["Sign out"]
+        scrollTo(signOut)
+        signOut.tap()
+        let card = dialog("Sign out?")
+        XCTAssertTrue(isHittable(card.buttons["Cancel"], within: 5))
+        // The card rises, then settles to the height of what it says.
+        sleep(1)
+        try audit("dialog")
+        card.buttons["Cancel"].tap()
+        waitUntilGone(card)
+        openDeleteAccount()
+        try audit("delete account")
     }
 
     /// What the free plan holds back, and the paywall it leads to.

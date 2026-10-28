@@ -89,6 +89,15 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   guard, which shows Unsaved Changes first; while there are unsaved
   changes, Profile swaps the system Back for its own and swipe-back is off.
   Home, Archive and Compose view models take their huddle in `init`.
+- **No iOS alerts or menus**: every confirmation, warning, message and
+  choice is `appDialog` (`Components/AppDialog.swift`), the app's own card
+  rising from the bottom, with `DialogAction`s (primary, secondary,
+  destructive, cancel). A choice runs once the card has gone; swiping it
+  away is Cancel. Pickers that would pop up (reminder times) put a wheel in
+  one. Only what iOS doesn't let an app replace stays Apple's: permission
+  prompts, the App Store purchase, Sign in with Apple, subscription
+  settings, the photo picker, the camera, and the Messages and share
+  screens behind the invite card.
 - **View pattern**: the screen holds `@State var viewModel: VM?`, creates it
   in `.onAppear` with `deps`, and an inner `…Content` view takes
   `@Bindable var viewModel`.
@@ -111,9 +120,12 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   Join with the code; without the app, the website's join page shows the
   code and how to get it. The code is the fragment, which browsers and link
   previews never send, so the invite's secret stays off every server.
-  `InviteShareButton` hands Messages its own preview (a card with the
-  huddle's emoji and name, `LPLinkMetadata`) and other apps a line with the
-  link. `huddlepal://join/<code>` links from before still open.
+  `InviteShareButton` opens the app's own card (the invite's picture, then
+  Messages, Copy link or More apps). Messages gets the link with that
+  picture; More apps opens iOS's share sheet, which hands Messages its own
+  preview (`LPLinkMetadata`, a card with the huddle's emoji and name) and
+  other apps a line with the link. `huddlepal://join/<code>` links from
+  before still open.
 - **Once and permanent**: one photo per member per huddle per day, never
   edited or deleted (`DepositError.alreadyDepositedToday`; the database has
   no update or delete policy on deposits). Compose asks "This is permanent —
@@ -153,7 +165,8 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   after its start). A broken streak shows a countdown until then; if the
   missing members backfill in time, the recompute restores it.
 - **Limits**: captions ≤ 80, comments ≤ 500, names ≤ 40 (huddles 60), bios
-  ≤ 160, 3 profile photos. Members per huddle 4 on the free plan and 10 with
+  ≤ 50 (the database allows 160, which older bios may use until they're
+  edited), 3 profile photos. Members per huddle 4 on the free plan and 10 with
   Plus, huddles kept 3 and 10, huddles joined 25 (`HuddleLimits.swift`;
   all enforced by the server). Lengths count code points, as Postgres does
   (`TextLimits.swift`).
@@ -167,6 +180,11 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   unfiltered data. Someone a member has blocked can't join their huddle.
 - **Profile edits** stay a draft until **Save Changes** is confirmed;
   leaving with unsaved changes asks first, and nothing is queued.
+- **Keepers don't leave**: a huddle always has its keeper, who can delete
+  it but not leave it (Huddle Settings shows them Delete huddle only; the
+  services refuse, and so does the server's `memberships_delete` policy,
+  migration 015). Members leave as before. When a keeper's account is
+  deleted, the member who's been in the huddle longest takes over.
 
 ## Encryption and invites (live)
 
@@ -280,10 +298,12 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
 
 ## Account deletion
 
-Profile → **Delete account** → confirm → Apple's sheet gives a fresh
-authorization code (`SystemAppleReauthenticator`). Closing the sheet
-deletes nothing; if Apple can't confirm, the app offers **Delete account
-anyway**. The `delete-account` function then revokes the app's Apple tokens
+Profile → **Delete account** opens its own page (`DeleteAccountView`):
+what goes and what stays, Apple's billing if Plus renews, and a field where
+**DELETE** has to be typed, exactly, before **Delete my account** works.
+Apple's sheet then gives a fresh authorization code
+(`SystemAppleReauthenticator`). Closing the sheet deletes nothing; if Apple
+can't confirm, the page offers **Delete account anyway**. The `delete-account` function then revokes the app's Apple tokens
 (App Review 5.1.1(v)), deletes device tokens and avatars, releases the
 user's photos (`release_storage_objects`), and calls
 `auth.admin.deleteUser`. An Apple failure is logged and deletion goes on;
@@ -549,9 +569,6 @@ Symbols.
   carry SwiftData models and the store prunes rows gone remotely (say,
   after leaving on another device). Never reproduced. The fix is ID-based
   routes that look the model up and pop if it's gone.
-- **Terms screen contrast**: `AccessibilityAuditTests.testOnboardingScreens`
-  fails on the all-caps arbitration paragraph of the Terms. Every other UI
-  test passes.
 
 ## Conventions
 

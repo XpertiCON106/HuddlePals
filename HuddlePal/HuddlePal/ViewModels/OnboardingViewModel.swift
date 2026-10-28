@@ -21,24 +21,24 @@ final class OnboardingViewModel {
 
     struct Card: Identifiable {
         let id = UUID()
-        let systemImage: String
+        let illustration: WelcomeIllustration.Kind
         let title: String
         let message: String
     }
 
     static let cards = [
         Card(
-            systemImage: "photo.on.rectangle.angled",
+            illustration: .onePhotoADay,
             title: "One photo a day",
             message: "Everyone in your huddle deposits a single photo, every day. Small, honest, real."
         ),
         Card(
-            systemImage: "lock.fill",
+            illustration: .lockedUntilYouShare,
             title: "Locked until you share",
             message: "Today's photos stay blurred until you deposit your own. Reciprocity, not lurking."
         ),
         Card(
-            systemImage: "archivebox.fill",
+            illustration: .yoursForever,
             title: "Yours forever",
             message: "Every day becomes part of a permanent archive your group keeps together."
         ),

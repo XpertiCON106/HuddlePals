@@ -224,12 +224,12 @@ final class PlusGateTests: XCTestCase {
     }
 
     func testDeletingTheAccountWarnsThatApplesBillingGoesOn() async {
-        let profile = ProfileViewModel(deps: deps)
-        await profile.prepareAccountDeletion()
-        XCTAssertFalse(profile.appleBillingContinues)
+        let deletion = DeleteAccountViewModel(deps: deps)
+        await deletion.load()
+        XCTAssertFalse(deletion.appleBillingContinues)
         plans.setPlus(true, for: you.id)
-        await profile.prepareAccountDeletion()
-        XCTAssertTrue(profile.appleBillingContinues)
-        XCTAssertTrue(ProfileViewModel.billingContinuesWarning.contains("Settings › your name › Subscriptions"))
+        await deletion.load()
+        XCTAssertTrue(deletion.appleBillingContinues)
+        XCTAssertTrue(DeleteAccountViewModel.billingContinuesWarning.contains("Settings › your name › Subscriptions"))
     }
 }

@@ -9,6 +9,7 @@ struct UserProfileView: View {
 
     @State private var viewModel: UserProfileViewModel?
     @State private var showBlockConfirmation = false
+    @State private var showOptions = false
 
     private var sharedHuddles: [Huddle] {
         guard let me = deps.session.currentUser else { return [] }
@@ -96,22 +97,8 @@ struct UserProfileView: View {
         .toolbar {
             if let viewModel, !viewModel.isSelf {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button(viewModel.didReport ? "Reported" : "Report \(user.displayName)", systemImage: "flag") {
-                            Task { await viewModel.report() }
-                        }
-                        .disabled(viewModel.didReport)
-                        Button(
-                            viewModel.isBlocked ? "Unblock \(user.displayName)" : "Block \(user.displayName)",
-                            systemImage: viewModel.isBlocked ? "hand.raised.slash" : "hand.raised",
-                            role: viewModel.isBlocked ? nil : .destructive
-                        ) {
-                            if viewModel.isBlocked {
-                                Task { await viewModel.toggleBlock() }
-                            } else {
-                                showBlockConfirmation = true
-                            }
-                        }
+                    Button {
+                        showOptions = true
                     } label: {
                         Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
                     }
@@ -119,29 +106,50 @@ struct UserProfileView: View {
                 }
             }
         }
-        .confirmationDialog(
+        .appDialog(user.displayName, isPresented: $showOptions, actions: optionActions)
+        .appDialog(
             "Block \(user.displayName)?",
             isPresented: $showBlockConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Block", role: .destructive) {
-                Task { await viewModel?.toggleBlock() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You won't see their photos, videos or comments anymore. They won't be told.")
-        }
-        .alert(
+            message: "You won't see their photos, videos or comments anymore. They won't be told.",
+            actions: [
+                DialogAction("Block", role: .destructive) {
+                    Task { await viewModel?.toggleBlock() }
+                },
+                .cancel(),
+            ]
+        )
+        .appDialog(
             viewModel?.didReport == false ? "Couldn't send the report" : ReportFeedback.title,
             isPresented: Binding(
                 get: { viewModel?.isReportAlertPresented ?? false },
                 set: { viewModel?.isReportAlertPresented = $0 }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(viewModel?.didReport == false ? "Check your connection and try again." : ReportFeedback.message)
-        }
+            ),
+            message: viewModel?.didReport == false ? "Check your connection and try again." : ReportFeedback.message,
+            actions: [DialogAction("Done", role: .cancel)]
+        )
+    }
+
+    /// Report them; block or unblock them.
+    private var optionActions: [DialogAction] {
+        guard let viewModel else { return [.cancel()] }
+        return [
+            DialogAction(
+                viewModel.didReport ? "Reported" : "Report \(user.displayName)",
+                role: .secondary,
+                systemImage: "flag",
+                isEnabled: !viewModel.didReport
+            ) {
+                Task { await viewModel.report() }
+            },
+            viewModel.isBlocked
+                ? DialogAction("Unblock \(user.displayName)", role: .secondary, systemImage: "hand.raised.slash") {
+                    Task { await viewModel.toggleBlock() }
+                }
+                : DialogAction("Block \(user.displayName)", role: .destructive, systemImage: "hand.raised") {
+                    showBlockConfirmation = true
+                },
+            .cancel(),
+        ]
     }
 
     @ViewBuilder

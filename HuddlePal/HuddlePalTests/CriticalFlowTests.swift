@@ -189,19 +189,26 @@ final class CriticalFlowTests: XCTestCase {
         XCTAssertEqual(user.displayName, SeedDataService.currentUserName)
     }
 
-    func testWhenTheKeeperLeavesTheLongestStandingMemberTakesOver() async throws {
-        // QA-04, mirroring the server's memberships_after_delete trigger.
+    func testTheKeeperCantLeaveOnlyDelete() async throws {
+        // Mirrors the server's memberships_delete rule.
         let keeper = try await signedInUser()
         let huddles = try await deps.huddleService.huddles(for: keeper)
         let crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
-        XCTAssertEqual(crew.sortedMemberships.first?.user?.id, keeper.id)
-        let expected = crew.sortedMemberships.dropFirst().min { $0.joinedAt < $1.joinedAt }?.user?.id
+        let before = crew.memberships.count
 
-        try await deps.huddleService.leaveHuddle(crew, user: keeper)
+        do {
+            try await deps.huddleService.leaveHuddle(crew, user: keeper)
+            XCTFail("the keeper left")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, HuddleServiceError.keeperCannotLeave.errorDescription)
+        }
+        XCTAssertEqual(crew.memberships.count, before)
+        XCTAssertEqual(crew.memberships.filter { $0.role == .keeper }.map(\.user?.id), [keeper.id])
 
-        let keepers = crew.memberships.filter { $0.role == .keeper }
-        XCTAssertEqual(keepers.count, 1, "a huddle always has exactly one keeper")
-        XCTAssertEqual(keepers.first?.user?.id, expected)
+        // A member can.
+        let member = try XCTUnwrap(crew.sortedMemberships.first { $0.role == .member }?.user)
+        try await deps.huddleService.leaveHuddle(crew, user: member)
+        XCTAssertEqual(crew.memberships.count, before - 1)
     }
 
     // MARK: Create / join

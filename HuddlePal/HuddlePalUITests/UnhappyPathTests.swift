@@ -66,11 +66,11 @@ final class UnhappyPathTests: HuddleUITestCase {
     /// and the dialog says how to remove HuddlePals from Sign in with Apple.
     func testDeletingWhenAppleCantConfirmStillWorks() {
         launchToShelf(arguments: ["-ui-testing-apple-unavailable"])
-        openProfile()
-        tapAndConfirm("Delete account")
-        waitFor(app.staticTexts["Apple couldn't confirm it's you"], timeout: 10)
+        openDeleteAccount()
+        app.buttons["Delete my account"].tap()
+        let failed = dialog("Apple couldn't confirm it's you")
         snapshot("24 apple confirmation failed")
-        waitFor(app.buttons["Delete account anyway"]).tap()
+        failed.buttons["Delete account anyway"].tap()
         waitFor(app.buttons["Continue"], timeout: 20, "back on the welcome cards")
     }
 

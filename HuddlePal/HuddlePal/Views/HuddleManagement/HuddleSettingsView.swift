@@ -33,6 +33,8 @@ private struct SettingsContent: View {
     let onLeft: () -> Void
 
     @State private var notificationHour: Int
+    @State private var showHourPicker = false
+    @State private var pickedHour = 19
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
     @State private var showResetConfirmation = false
@@ -70,35 +72,54 @@ private struct SettingsContent: View {
         .sheet(item: $checking) { check in
             KeyCheckSheet(viewModel: viewModel, check: check) { checking = nil }
         }
-        .confirmationDialog(
+        .appDialog(
             "Leave \(viewModel.huddle.name)?",
             isPresented: $showLeaveConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Leave huddle", role: .destructive) {
-                Task {
-                    await viewModel.leaveHuddle()
-                    if viewModel.didLeave { onLeft() }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You'll lose access to the shared archive. The huddle keeps existing for everyone else.")
-        }
-        .confirmationDialog(
+            message: "You'll lose access to the shared archive. The huddle keeps existing for everyone else.",
+            actions: [
+                DialogAction("Leave huddle", role: .destructive) {
+                    Task {
+                        await viewModel.leaveHuddle()
+                        if viewModel.didLeave { onLeft() }
+                    }
+                },
+                .cancel(),
+            ]
+        )
+        .appDialog(
             "Delete \(viewModel.huddle.name)?",
             isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
+            message: viewModel.memberships.count > 1
+                ? "Everyone is removed, and every photo and video in it is deleted for good. This can't be undone."
+                : "Every photo and video in it is deleted for good. This can't be undone.",
+            actions: [
+                DialogAction("Delete huddle", role: .destructive) {
+                    Task {
+                        await viewModel.deleteHuddle()
+                        if viewModel.didDelete { onLeft() }
+                    }
+                },
+                .cancel(),
+            ]
+        )
+        .appDialog(
+            "Daily reminder",
+            isPresented: $showHourPicker,
+            message: "The huddle's preferred time of day.",
+            actions: [
+                DialogAction("Done") {
+                    notificationHour = pickedHour
+                },
+                .cancel(),
+            ]
         ) {
-            Button("Delete huddle", role: .destructive) {
-                Task {
-                    await viewModel.deleteHuddle()
-                    if viewModel.didDelete { onLeft() }
+            Picker("Daily reminder", selection: $pickedHour) {
+                ForEach(0..<24, id: \.self) { hour in
+                    Text(hourLabel(hour)).tag(hour)
                 }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Everyone is removed, and every photo and video in it is deleted for good. This can't be undone.")
+            .pickerStyle(.wheel)
+            .frame(height: 150)
         }
     }
 
@@ -186,9 +207,16 @@ private struct SettingsContent: View {
 
     private var reminderSection: some View {
         Section {
-            Picker("Daily reminder", selection: $notificationHour) {
-                ForEach(0..<24, id: \.self) { hour in
-                    Text(hourLabel(hour)).tag(hour)
+            Button {
+                pickedHour = notificationHour
+                showHourPicker = true
+            } label: {
+                HStack {
+                    Text("Daily reminder")
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Text(hourLabel(notificationHour))
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
             .listRowBackground(Theme.surface)
@@ -256,18 +284,17 @@ private struct SettingsContent: View {
                     }
                     .disabled(viewModel.isResettingInvite)
                     .listRowBackground(Theme.surface)
-                    .confirmationDialog(
+                    .appDialog(
                         "Make a new invite code?",
                         isPresented: $showResetConfirmation,
-                        titleVisibility: .visible
-                    ) {
-                        Button("New code", role: .destructive) {
-                            Task { await viewModel.resetInvite() }
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("The current code stops working at once. Anyone who hasn't joined yet will need the new one.")
-                    }
+                        message: "The current code stops working at once. Anyone who hasn't joined yet will need the new one.",
+                        actions: [
+                            DialogAction("New code", role: .destructive) {
+                                Task { await viewModel.resetInvite() }
+                            },
+                            .cancel(),
+                        ]
+                    )
                 }
             } else if viewModel.isLoadingInvite {
                 ProgressView()
@@ -296,15 +323,10 @@ private struct SettingsContent: View {
         }
     }
 
+    /// Members can leave; the keeper can't (a huddle always has its
+    /// keeper), only delete it, for everyone.
     private var leaveSection: some View {
         Section {
-            Button(role: .destructive) {
-                showLeaveConfirmation = true
-            } label: {
-                Label("Leave huddle", systemImage: "rectangle.portrait.and.arrow.right")
-            }
-            .listRowBackground(Theme.surface)
-
             if viewModel.isKeeper {
                 Button(role: .destructive) {
                     showDeleteConfirmation = true
@@ -312,6 +334,13 @@ private struct SettingsContent: View {
                     Label("Delete huddle", systemImage: "trash")
                 }
                 .disabled(viewModel.isDeleting)
+                .listRowBackground(Theme.surface)
+            } else {
+                Button(role: .destructive) {
+                    showLeaveConfirmation = true
+                } label: {
+                    Label("Leave huddle", systemImage: "rectangle.portrait.and.arrow.right")
+                }
                 .listRowBackground(Theme.surface)
             }
 

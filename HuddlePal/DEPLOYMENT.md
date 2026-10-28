@@ -418,6 +418,23 @@ not a bare link), and tap it on another phone with HuddlePals installed
 can take up to a day to pick up a change to it; deleting and reinstalling
 the app makes it check again.
 
+## Phase 8 — Keepers stay, and calmer Terms
+
+A huddle's keeper can no longer leave it, only delete it. The Terms lose the
+all-caps Section 13 notice at the top (Section 13 itself is unchanged).
+
+1. **Migration 015.** SQL Editor → paste
+   [`supabase/migrations/015_keeper_cannot_leave.sql`](supabase/migrations/015_keeper_cannot_leave.sql)
+   → Run (safe to re-run). Run it with the build that hides Leave from
+   keepers: older builds still offer it, and once 015 runs, a keeper who
+   taps it stays in place.
+2. **Website**: the Terms page without the notice, version 2026-10-29 (the
+   app asks everyone to agree once more). The Grok instructions have it.
+3. **Check on a phone** with the new build: as a keeper, Huddle Settings
+   shows Delete huddle and no Leave; as a member, Leave. Profile → Delete
+   account opens its page, and Delete my account works only once DELETE is
+   typed.
+
 ---
 
 > Already ran an earlier `schema.sql`? There are no upgrade migrations —

@@ -139,26 +139,18 @@ final class PlusJourneyTests: HuddleUITestCase {
     }
 
     /// Deleting the account doesn't end Apple's billing: with Plus, the
-    /// confirmation says so (App Review 5.1.1(v)).
+    /// Delete account page says so (App Review 5.1.1(v)).
     func testDeletingTheAccountWithPlusWarnsThatAppleKeepsBilling() {
         launchToShelf(arguments: ["-ui-testing-plus"])
-        openProfile()
-        let delete = app.buttons["Delete account"]
-        scrollTo(delete, maxSwipes: 25)
-        delete.tap()
+        openDeleteAccount()
         let warning = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'keeps renewing after your account is deleted'")).firstMatch
         waitFor(warning, timeout: 10, "the billing warning")
         XCTAssertTrue(warning.label.contains("Settings › your name › Subscriptions"), warning.label)
         snapshot("delete with plus")
-        // Close it without deleting. iOS 26 shows it as a popover with no
-        // Cancel button: tap outside it, below.
-        if app.buttons["Cancel"].exists {
-            app.buttons["Cancel"].tap()
-        } else {
-            app.otherElements["PopoverDismissRegion"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).tap()
-        }
+        // Leave without deleting.
+        tapBack()
         waitUntilGone(warning)
-        XCTAssertTrue(app.buttons["Delete account"].exists, "still signed in")
+        XCTAssertTrue(app.buttons["Delete account"].waitForExistence(timeout: 5), "still signed in")
     }
 
     /// This Apple Account already has Plus (here, another account's): the
@@ -181,7 +173,7 @@ final class PlusJourneyTests: HuddleUITestCase {
         XCTAssertFalse(app.staticTexts["renewalTerms"].exists)
         snapshot("paywall restore instead")
         app.buttons["restoreInstead"].tap()
-        let alert = waitFor(app.alerts["This Apple Account already has HuddlePals+"], timeout: 10)
+        let alert = dialog("This Apple Account already has HuddlePals+")
         XCTAssertTrue(alert.staticTexts.matching(NSPredicate(format: "label CONTAINS 'linked to another HuddlePals account'")).firstMatch.exists)
         alert.buttons["OK"].tap()
         waitUntilGone(alert)

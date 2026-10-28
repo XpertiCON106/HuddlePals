@@ -67,14 +67,6 @@ struct ProfileView: View {
                 await viewModel.signOut()
                 router.resetAll()
             }
-        case .deleteAccount:
-            Task {
-                if await viewModel.deleteAccount() { router.resetAll() }
-            }
-        case .deleteAccountWithoutApple:
-            Task {
-                if await viewModel.deleteAccountWithoutApple() { router.resetAll() }
-            }
         }
     }
 }
@@ -85,7 +77,8 @@ private struct ProfileContent: View {
     let onCompleteExit: (ProfileViewModel.ExitAction) -> Void
 
     @State private var showSignOutConfirmation = false
-    @State private var showDeleteConfirmation = false
+    @State private var showReminderTime = false
+    @State private var pickedReminderTime = Date.now
     @State private var showManageSubscription = false
     @State private var showPaywall = false
 
@@ -127,99 +120,82 @@ private struct ProfileContent: View {
             await viewModel.refreshReminderStatus()
             await viewModel.loadKeyCode()
         }
-        .alert(
-            "Confirm Changes",
-            isPresented: $viewModel.isSaveConfirmationPresented
-        ) {
-            Button("Save Changes") {
-                saveConfirmedDraft()
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.cancelSaveConfirmation()
-            }
-        } message: {
-            Text("Are you sure you want to save these changes to your profile?")
-        }
-        .alert(
+        .appDialog(
+            "Save your changes?",
+            isPresented: $viewModel.isSaveConfirmationPresented,
+            message: "Your profile updates for everyone you share a huddle with.",
+            actions: [
+                DialogAction("Save Changes") { saveConfirmedDraft() },
+                .cancel { viewModel.cancelSaveConfirmation() },
+            ]
+        )
+        .appDialog(
             "Unsaved Changes",
-            isPresented: $viewModel.isUnsavedChangesWarningPresented
-        ) {
-            if viewModel.canSaveFromWarning {
-                Button("Save Changes") {
-                    Task {
-                        if await viewModel.saveFromWarning() {
-                            router.resumeBlockedNavigation()
-                        } else {
-                            router.cancelBlockedNavigation()
-                        }
-                    }
-                }
-            }
-            Button("Discard Changes", role: .destructive) {
-                viewModel.discardChanges()
-                router.resumeBlockedNavigation()
-            }
-            Button("Keep Editing", role: .cancel) {
-                viewModel.keepEditing()
-                router.cancelBlockedNavigation()
-            }
-        } message: {
-            Text("Save or discard your profile changes before you leave.")
-        }
-        .confirmationDialog(
+            isPresented: $viewModel.isUnsavedChangesWarningPresented,
+            message: "Save or discard your profile changes before you leave.",
+            actions: unsavedChangesActions
+        )
+        .appDialog(
             "Sign out?",
             isPresented: $showSignOutConfirmation,
-            titleVisibility: .visible
+            message: FeatureFlags.emailAndPhoneSignInEnabled
+                ? "You can sign back in any time with the same Apple ID, email, or phone number."
+                : "You can sign back in any time with the same Apple ID.",
+            actions: [
+                DialogAction("Sign out", role: .destructive) {
+                    if let action = viewModel.requestExit(.signOut) {
+                        onCompleteExit(action)
+                    }
+                },
+                .cancel(),
+            ]
+        )
+        .appDialog(
+            "Reminder time",
+            isPresented: $showReminderTime,
+            message: "When your daily upload reminder comes.",
+            actions: [
+                DialogAction("Done") {
+                    Task { await viewModel.setReminderTime(pickedReminderTime) }
+                },
+                .cancel(),
+            ]
         ) {
-            Button("Sign out", role: .destructive) {
-                if let action = viewModel.requestExit(.signOut) {
-                    onCompleteExit(action)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                FeatureFlags.emailAndPhoneSignInEnabled
-                    ? "You can sign back in any time with the same Apple ID, email, or phone number."
-                    : "You can sign back in any time with the same Apple ID."
-            )
-        }
-        .confirmationDialog(
-            "Delete your account?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete account", role: .destructive) {
-                if let action = viewModel.requestExit(.deleteAccount) {
-                    onCompleteExit(action)
-                }
-            }
-            if viewModel.appleBillingContinues, viewModel.canManageSubscription {
-                Button("Manage subscription") { showManageSubscription = true }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your account, name, and profile photos are permanently removed and you're signed out. Photos and videos you already deposited stay in your shared huddles as \"Former member\" — a huddle's archive is permanent. This can't be undone."
-                 + (viewModel.appleBillingContinues ? "\n\n" + ProfileViewModel.billingContinuesWarning : ""))
+            DatePicker("Reminder time", selection: $pickedReminderTime, displayedComponents: .hourAndMinute)
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .frame(height: 150)
         }
         .manageSubscriptionsSheet(isPresented: $showManageSubscription)
         .sheet(isPresented: $showPaywall) {
             PaywallView(context: .profile)
         }
-        .confirmationDialog(
-            "Apple couldn't confirm it's you",
-            isPresented: $viewModel.isAppleConfirmationFailurePresented,
-            titleVisibility: .visible
-        ) {
-            Button("Delete account anyway", role: .destructive) {
-                if let action = viewModel.requestExit(.deleteAccountWithoutApple) {
-                    onCompleteExit(action)
+    }
+
+    /// Save (when the draft can be saved), Discard, or Keep Editing; the
+    /// first two go on to wherever the person was headed.
+    private var unsavedChangesActions: [DialogAction] {
+        var actions: [DialogAction] = []
+        if viewModel.canSaveFromWarning {
+            actions.append(DialogAction("Save Changes") {
+                Task {
+                    if await viewModel.saveFromWarning() {
+                        router.resumeBlockedNavigation()
+                    } else {
+                        router.cancelBlockedNavigation()
+                    }
                 }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You can still delete your account. Afterwards, remove HuddlePals in Settings › your name › Sign-In & Security › Sign in with Apple.")
+            })
         }
+        actions.append(DialogAction("Discard Changes", role: .destructive) {
+            viewModel.discardChanges()
+            router.resumeBlockedNavigation()
+        })
+        actions.append(DialogAction("Keep Editing", role: .cancel) {
+            viewModel.keepEditing()
+            router.cancelBlockedNavigation()
+        })
+        return actions
     }
 
     private func saveConfirmedDraft() {
@@ -297,7 +273,7 @@ private struct ProfileContent: View {
                     name: viewModel.displayName.isEmpty ? "?" : viewModel.displayName,
                     colorHex: viewModel.selectedColorHex,
                     imagePath: viewModel.draftPhotos.first?.persistedPath,
-                    imageData: viewModel.draftPhotos.first?.previewData,
+                    imageData: viewModel.draftPhotos.first?.displayData,
                     size: 52
                 )
                 TextField("Display name", text: $viewModel.displayName)
@@ -321,7 +297,7 @@ private struct ProfileContent: View {
                             viewModel.bio = newValue.prefix(serverLength: AuthValidation.bioLimit)
                         }
                     }
-                if viewModel.bio.serverLength > AuthValidation.bioLimit - 30 {
+                if viewModel.bio.serverLength > AuthValidation.bioLimit - 15 {
                     Text("\(viewModel.bioRemaining)")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(Theme.textSecondary)
@@ -416,14 +392,18 @@ private struct ProfileContent: View {
             .listRowBackground(Theme.surface)
 
             if viewModel.reminderEnabled {
-                DatePicker(
-                    "Reminder time",
-                    selection: Binding(
-                        get: { viewModel.reminderTime },
-                        set: { newValue in Task { await viewModel.setReminderTime(newValue) } }
-                    ),
-                    displayedComponents: .hourAndMinute
-                )
+                Button {
+                    pickedReminderTime = viewModel.reminderTime
+                    showReminderTime = true
+                } label: {
+                    HStack {
+                        Text("Reminder time")
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Text(viewModel.reminderTime, format: .dateTime.hour().minute())
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
                 .listRowBackground(Theme.surface)
             }
 
@@ -544,11 +524,7 @@ private struct ProfileContent: View {
             .listRowBackground(Theme.surface)
 
             Button(role: .destructive) {
-                Task {
-                    // Apple's billing goes on without the account: say so.
-                    await viewModel.prepareAccountDeletion()
-                    showDeleteConfirmation = true
-                }
+                router.openDeleteAccount()
             } label: {
                 Label("Delete account", systemImage: "trash")
             }
@@ -688,11 +664,11 @@ private struct ProfileDraftPhotoImage: View {
 
     var body: some View {
         Group {
-            if let data = photo.previewData, let image = UIImage(data: data) {
+            if let data = photo.displayData, let image = UIImage(data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .accessibilityLabel("New profile photo, not saved yet")
+                    .accessibilityLabel(photo.persistedPath == nil ? "New profile photo, not saved yet" : "Profile photo")
             } else if let path = photo.persistedPath {
                 LocalDepositImage(relativePath: path, maxPixelSize: 380)
             } else {

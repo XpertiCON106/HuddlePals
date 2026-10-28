@@ -7,7 +7,7 @@ import Observation
 struct TermsOfService {
     /// The Terms' effective date. Bump it with any material change to
     /// Legal/TermsOfService.md: everyone is then asked to agree again.
-    static let version = "2026-10-28"
+    static let version = "2026-10-29"
 
     /// The bundled text, parsed once. Nil only if the resource is missing
     /// from the build.

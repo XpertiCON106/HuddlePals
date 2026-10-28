@@ -239,6 +239,8 @@ struct RouteView: View {
             UserProfileView(user: user)
         case .profile:
             ProfileView()
+        case .deleteAccount:
+            DeleteAccountView()
         }
     }
 }

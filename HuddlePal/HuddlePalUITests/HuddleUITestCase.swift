@@ -10,7 +10,7 @@ class HuddleUITestCase: XCTestCase {
     /// the Terms journey start already agreed, so they don't spend a minute
     /// scrolling the document; if the version moves on, the Terms show and
     /// `launchToShelf` agrees as a person would.
-    static let termsVersion = "2026-10-28"
+    static let termsVersion = "2026-10-29"
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -105,10 +105,33 @@ class HuddleUITestCase: XCTestCase {
     func backToShelf(file: StaticString = #filePath, line: UInt = #line) {
         let shelf = app.navigationBars.buttons["Create or join a huddle"]
         for _ in 0..<5 {
-            if isHittable(shelf, within: 2) || app.alerts.firstMatch.exists { return }
+            if isHittable(shelf, within: 2) || app.otherElements["appDialog"].exists { return }
             app.navigationBars.buttons.firstMatch.tap()
         }
         XCTAssertTrue(isHittable(shelf, within: 5), "never got back to the shelf", file: file, line: line)
+    }
+
+    /// The app's own dialog card (it has no iOS alerts), once it shows
+    /// `title`.
+    @discardableResult
+    func dialog(_ title: String, timeout: TimeInterval = 10,
+                file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
+        let card = app.otherElements["appDialog"]
+        waitFor(card.staticTexts[title], timeout: timeout, "the \(title) dialog", file: file, line: line)
+        return card
+    }
+
+    /// Profile → Delete account: the page, with DELETE typed.
+    func openDeleteAccount(file: StaticString = #filePath, line: UInt = #line) {
+        openProfile()
+        let row = app.buttons["Delete account"]
+        scrollTo(row, maxSwipes: 25)
+        row.tap()
+        let field = waitFor(app.textFields["deleteConfirmation"], file: file, line: line)
+        XCTAssertFalse(app.buttons["Delete my account"].isEnabled, "nothing to tap before DELETE is typed", file: file, line: line)
+        field.tap()
+        field.typeText("DELETE")
+        waitUntilEnabled(app.buttons["Delete my account"], file: file, line: line)
     }
 
     /// The top bar's Back.

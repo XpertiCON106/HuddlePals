@@ -16,10 +16,14 @@ struct ProfilePhotoDraft: Identifiable, Equatable {
 
     let id: UUID
     var source: Source
+    /// A just-saved photo's picked image, kept so its tile doesn't go blank
+    /// while the saved copy loads.
+    private(set) var savedPreview: Data?
 
-    init(id: UUID = UUID(), persistedPath: String) {
+    init(id: UUID = UUID(), persistedPath: String, savedPreview: Data? = nil) {
         self.id = id
         self.source = .persisted(path: persistedPath)
+        self.savedPreview = savedPreview
     }
 
     init(id: UUID = UUID(), stagedData: Data) {
@@ -35,6 +39,9 @@ struct ProfilePhotoDraft: Identifiable, Equatable {
         guard case .staged(let data, _, _) = source else { return nil }
         return data
     }
+
+    /// What its tile shows from memory: the picked image, saved or not.
+    var displayData: Data? { previewData ?? savedPreview }
 
     var persistedPath: String? {
         guard case .persisted(let path) = source else { return nil }
@@ -70,12 +77,10 @@ struct ProfilePhotoDraft: Identifiable, Equatable {
 @MainActor
 @Observable
 final class ProfileViewModel {
+    /// Leaving the account from Profile. (Deleting it has its own page,
+    /// `DeleteAccountView`, reached through the same guard.)
     enum ExitAction: Equatable {
         case signOut
-        case deleteAccount
-        /// After Apple couldn't confirm the person: delete without the
-        /// code, so the app's Apple tokens aren't revoked.
-        case deleteAccountWithoutApple
     }
 
     enum SaveCompletion: Equatable {
@@ -123,10 +128,6 @@ final class ProfileViewModel {
 
     var isSaveConfirmationPresented = false
     var isUnsavedChangesWarningPresented = false
-    /// Apple couldn't confirm the person before deletion (no Apple Account
-    /// on the device, Apple unreachable). Deleting must still be possible
-    /// (Apple TN3194), so the view offers it without the revocation.
-    var isAppleConfirmationFailurePresented = false
     private var confirmedDraft: ConfirmedDraft?
 
     var isWorking: Bool {
@@ -171,8 +172,10 @@ final class ProfileViewModel {
     }
 
     var bioRemaining: Int { AuthValidation.bioLimit - bio.serverLength }
+    /// Whether the Add tile shows (it's disabled, not hidden, while
+    /// saving, so the row keeps its shape).
     var canAddPhotos: Bool {
-        draftPhotos.count < AuthValidation.maxProfilePhotos && !isWorking
+        draftPhotos.count < AuthValidation.maxProfilePhotos
     }
 
     // Appearance (dark mode) preference surface
@@ -265,17 +268,6 @@ final class ProfileViewModel {
             plusMessage = reason
         }
     }
-
-    /// Whether Apple will keep billing after the account is gone: deleting
-    /// it doesn't cancel the subscription. Checked before the dialog opens.
-    private(set) var appleBillingContinues = false
-
-    func prepareAccountDeletion() async {
-        appleBillingContinues = await deps.plus.appleSubscriptionWillRenew()
-    }
-
-    /// Store-wide wording, also checked by tests.
-    static let billingContinuesWarning = "Your HuddlePals+ subscription is billed by Apple and keeps renewing after your account is deleted. To stop it, cancel it in Settings › your name › Subscriptions."
 
     #if DEBUG
     // DEBUG bindings surface
@@ -512,43 +504,6 @@ final class ProfileViewModel {
         await deps.endSession()
     }
 
-    /// Returns true on success so the view can route back to onboarding.
-    /// Apple confirms it's them first; its fresh authorization code lets the
-    /// server revoke the app's Apple tokens (App Review 5.1.1(v)).
-    func deleteAccount() async -> Bool {
-        isPerformingAccountAction = true
-        defer { isPerformingAccountAction = false }
-        let code: String
-        do {
-            code = try await deps.appleReauth.authorizationCode()
-        } catch is CancellationError {
-            return false // closed Apple's sheet: nothing is deleted
-        } catch {
-            isAppleConfirmationFailurePresented = true
-            return false
-        }
-        return await performDeletion(appleAuthorizationCode: code)
-    }
-
-    /// Deletes without Apple's confirmation, once the person chose to after
-    /// it failed. They remove the app from Sign in with Apple themselves.
-    func deleteAccountWithoutApple() async -> Bool {
-        isPerformingAccountAction = true
-        defer { isPerformingAccountAction = false }
-        return await performDeletion(appleAuthorizationCode: nil)
-    }
-
-    private func performDeletion(appleAuthorizationCode: String?) async -> Bool {
-        do {
-            try await deps.auth.deleteAccount(appleAuthorizationCode: appleAuthorizationCode)
-            await deps.endSession()
-            return true
-        } catch {
-            statusMessage = error.localizedDescription
-            return false
-        }
-    }
-
     // MARK: State helpers
 
     private var normalizedDisplayName: String {
@@ -603,7 +558,7 @@ final class ProfileViewModel {
 
         draftPhotos = draftPhotos.map { photo in
             guard let savedPath = persistedPathsByDraftID[photo.id] else { return photo }
-            return ProfilePhotoDraft(id: photo.id, persistedPath: savedPath)
+            return ProfilePhotoDraft(id: photo.id, persistedPath: savedPath, savedPreview: photo.displayData)
         }
 
         originalState = CanonicalProfileState(

@@ -246,11 +246,14 @@ describe('key rotation', () => {
   it('a new huddle key drops the invite sealing the old one; a fresh invite then carries the new key', async () => {
     const { db, A, h, invite } = await invitedHuddle()
     // Cy joined with the invite but his own copy never reached the server;
-    // then Ada, the only member holding the key, left.
+    // then Ada, the only member holding the key, left (handing Cy the
+    // keeper role first: a keeper can't leave).
     const C = await signUp(db, 'Cy')
     await redeem(db, C, invite.lookup, invite.proof)
     await publishKey(db, C, 'C')
-    await affected(db, A, 'delete from memberships where user_id = $1', [A])
+    await admin(db, `update memberships set role = 'member' where user_id = $1`, [A])
+    await admin(db, `update memberships set role = 'keeper' where user_id = $1`, [C])
+    assert.equal(await affected(db, A, 'delete from memberships where user_id = $1', [A]), 1)
 
     // Nobody left holds the key, so Cy's app makes a new one…
     const [{ ok }] = await q(db, C, 'select init_huddle_key($1, $2, $3, $4) ok', [h.id, 'N'.repeat(80), PUBLIC_KEY('E'), PUBLIC_KEY('C')])
