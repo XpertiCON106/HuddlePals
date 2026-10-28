@@ -95,6 +95,10 @@ protocol PlusServiceProtocol: AnyObject {
     /// Whether this device's Apple Account has a HuddlePals subscription
     /// that will renew: deleting the account doesn't stop Apple's billing.
     func appleSubscriptionWillRenew() async -> Bool
+    /// Whether this device's Apple Account already has HuddlePals+, linked
+    /// to whichever HuddlePals account: the paywall offers Restore Purchases
+    /// then, instead of buying it again.
+    func hasAppleSubscription() async -> Bool
     /// Sign-out: forgets the account's status, cached copy included.
     func reset()
 }
@@ -168,6 +172,10 @@ final class MockPlusService: PlusServiceProtocol {
 
     func appleSubscriptionWillRenew() async -> Bool {
         plans.hasPlus(session.currentUser?.id)
+    }
+
+    func hasAppleSubscription() async -> Bool {
+        plans.purchasesLinkedElsewhere || plans.hasPlus(session.currentUser?.id)
     }
 
     func reset() {}

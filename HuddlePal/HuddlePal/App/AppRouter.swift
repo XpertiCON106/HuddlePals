@@ -1,11 +1,6 @@
 import Foundation
 import Observation
 
-enum AppTab: Hashable {
-    case huddles
-    case profile
-}
-
 /// Typed navigation destinations. @Model classes are Hashable via identity,
 /// so they can ride along in the path.
 enum Route: Hashable {
@@ -16,6 +11,8 @@ enum Route: Hashable {
     case createHuddle
     case joinHuddle
     case userProfile(User)
+    /// Your own profile, from the shelf's top-right button.
+    case profile
 }
 
 /// The shareable invite link, https://huddlepals.com/join#<CODE>: a
@@ -51,60 +48,64 @@ enum InviteLink {
 @MainActor
 @Observable
 final class AppRouter {
-    private(set) var selectedTab: AppTab = .huddles
-    /// Single stack for the Huddles tab: list → huddle home → deeper screens.
+    /// The app's one stack: the huddle shelf, then a huddle, Profile, and
+    /// deeper screens.
     var huddlesPath: [Route] = []
 
-    /// The mounted profile editor installs a synchronous guard. It returns
-    /// before any router state is mutated, so a dirty editor can present its
-    /// warning without the requested destination ever becoming active.
+    /// The mounted profile editor installs a synchronous guard. While Profile
+    /// is on top, every change to the stack asks it first, so a dirty editor
+    /// can present its warning before anything leaves the screen. (Its own
+    /// Back button stands in for the system one while there are unsaved
+    /// changes, which also turns off the swipe back.)
     @ObservationIgnored private var profileNavigationGuardID: UUID?
     @ObservationIgnored private var profileNavigationGuard: (() -> Bool)?
-    /// The tab a blocked attempt was headed for. Saving or discarding the
-    /// profile goes on there (`resumeBlockedNavigation`); Keep Editing drops
-    /// it. Only the tab: a blocked deep link's route isn't replayed.
-    @ObservationIgnored private(set) var blockedTab: AppTab?
+    /// Where a blocked attempt was going. Saving or discarding the profile
+    /// goes on there (`resumeBlockedNavigation`); Keep Editing drops it.
+    @ObservationIgnored private(set) var blockedPath: [Route]?
 
     func installProfileNavigationGuard(id: UUID, handler: @escaping () -> Bool) {
         profileNavigationGuardID = id
         profileNavigationGuard = handler
     }
 
-    /// Returns false without changing selection or path when the mounted
-    /// profile editor blocks the attempt.
+    var isShowingProfile: Bool { huddlesPath.last == .profile }
+
+    func openProfile() {
+        guard !isShowingProfile else { return }
+        huddlesPath.append(.profile)
+    }
+
+    /// Back from Profile, through the guard.
     @discardableResult
-    func selectTab(_ destination: AppTab) -> Bool {
-        guard destination != selectedTab else { return true }
-        guard canNavigateAwayFromProfile(to: destination) else { return false }
-        selectedTab = destination
-        return true
+    func leaveProfile() -> Bool {
+        guard isShowingProfile else { return true }
+        return navigate(to: Array(huddlesPath.dropLast()))
     }
 
     /// The profile was saved or its changes discarded: go where the blocked
     /// attempt was going. The guard runs again, so a still-dirty editor
     /// (a save that failed) keeps the person on Profile.
     func resumeBlockedNavigation() {
-        guard let destination = blockedTab else { return }
-        blockedTab = nil
-        selectTab(destination)
+        guard let path = blockedPath else { return }
+        blockedPath = nil
+        navigate(to: path)
     }
 
     /// Keep Editing: stay on Profile and forget the attempt.
     func cancelBlockedNavigation() {
-        blockedTab = nil
+        blockedPath = nil
     }
 
-    /// Atomically guards both the tab change and the destination route. This
-    /// prevents a deep link from mutating the navigation path before the
-    /// profile editor has approved leaving.
+    /// Opens `route` from wherever the person is (an invite link), leaving
+    /// Profile first if it's showing. False when the profile editor blocks it.
     @discardableResult
     func navigateToHuddles(route: Route? = nil) -> Bool {
-        guard canNavigateAwayFromProfile(to: .huddles) else { return false }
-        selectedTab = .huddles
-        if let route, huddlesPath.last != route {
-            huddlesPath.append(route)
+        var path = huddlesPath
+        if path.last == .profile { path.removeLast() }
+        if let route, path.last != route {
+            path.append(route)
         }
-        return true
+        return navigate(to: path)
     }
 
     /// An invite link that arrived while signed out opens Join once signed in.
@@ -114,27 +115,30 @@ final class AppRouter {
     }
 
     func openHuddle(_ huddle: Huddle) {
-        guard canNavigateAwayFromProfile(to: .huddles) else { return }
-        selectedTab = .huddles
-        huddlesPath = [.huddleHome(huddle)]
+        navigate(to: [.huddleHome(huddle)])
     }
 
     func popToHuddleList() {
-        huddlesPath.removeAll()
+        navigate(to: [])
     }
 
-    private func canNavigateAwayFromProfile(to destination: AppTab) -> Bool {
-        guard selectedTab == .profile, destination != .profile else { return true }
-        let allowed = profileNavigationGuard?() ?? true
-        blockedTab = allowed ? nil : destination
-        return allowed
+    /// Every change made here goes through the profile editor's guard while
+    /// Profile is on top.
+    @discardableResult
+    private func navigate(to path: [Route]) -> Bool {
+        if isShowingProfile, path.last != .profile {
+            let allowed = profileNavigationGuard?() ?? true
+            blockedPath = allowed ? nil : path
+            guard allowed else { return false }
+        }
+        huddlesPath = path
+        return true
     }
 
     func resetAll() {
         huddlesPath.removeAll()
         profileNavigationGuardID = nil
         profileNavigationGuard = nil
-        blockedTab = nil
-        selectedTab = .huddles
+        blockedPath = nil
     }
 }

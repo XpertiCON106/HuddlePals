@@ -31,6 +31,11 @@ struct HuddlePalApp: App {
         // At launch, as StoreKit asks: renewals and purchases finished
         // elsewhere (Ask to Buy, another device) arrive from now on.
         deps.plus.start()
+        // Screen titles in the app's display face (serif), like huddle names.
+        let serif = UIFont.systemFont(ofSize: 34, weight: .bold).fontDescriptor.withDesign(.serif)
+        if let serif {
+            UINavigationBar.appearance().largeTitleTextAttributes = [.font: UIFont(descriptor: serif, size: 34)]
+        }
     }
 
     var body: some Scene {
@@ -60,6 +65,7 @@ struct HuddlePalApp: App {
                             await dependencies.push.refresh()
                             await dependencies.termsRecorder?.refresh()
                             await dependencies.plus.refresh()
+                            await dependencies.plusPromo.refresh()
                         }
                     }
                 }
@@ -72,8 +78,14 @@ struct HuddlePalApp: App {
                             await dependencies.push.refresh()
                             await dependencies.termsRecorder?.refresh()
                             await dependencies.plus.refresh()
+                            await dependencies.plusPromo.refresh()
                         }
                     }
+                }
+                .onChange(of: dependencies.plus.isPremium) {
+                    // Plus on: no more reminders about it. Run out: they
+                    // come back, if asked for.
+                    Task { await dependencies.plusPromo.refresh() }
                 }
                 .onChange(of: dependencies.terms.acceptedAt) {
                     // Agree tapped while signed in (a new version of the Terms).
@@ -87,14 +99,12 @@ struct HuddlePalApp: App {
     private func handleDeepLink(_ url: URL) {
         guard let code = InviteLink.code(from: url) else { return }
         if dependencies.session.currentUser != nil {
-            // `navigateToHuddles` consults the profile guard before mutating
-            // either tab selection or path. A blocked link is canceled; its
-            // code is deliberately not queued for replay after the warning.
-            if router.navigateToHuddles(route: .joinHuddle) {
-                dependencies.session.pendingInviteCode = code
-            }
+            // Join takes it as it opens. From an unsaved Profile, the guard
+            // asks first; saving or discarding then goes on to Join.
+            dependencies.session.pendingInviteCode = code
+            router.navigateToHuddles(route: .joinHuddle)
         } else {
-            // Parked until sign-in; MainTabView then opens Join with it.
+            // Parked until sign-in; MainView then opens Join with it.
             dependencies.session.pendingInviteCode = code
         }
     }

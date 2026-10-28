@@ -125,7 +125,7 @@ private struct CreateHuddleContent: View {
                 Button {
                     showPaywall = true
                 } label: {
-                    Label("Get HuddlePals+", systemImage: "sparkles")
+                    Text("Get HuddlePals+")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                         .padding(.horizontal, 16)
@@ -150,21 +150,16 @@ private struct CreateHuddleContent: View {
             Text(huddle.name)
                 .font(Theme.displayFont(26))
                 .foregroundStyle(Theme.textPrimary)
-            Text("Share this code with up to 7 people you'd trust with the family album.")
+            Text("Share it with the people you'd trust with the family album.")
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
 
             if let code = viewModel.inviteCode {
-                Text(code.displayedOnTwoLines)
-                    .font(.system(size: 20, weight: .bold, design: .monospaced))
-                    .kerning(1)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.accent)
-                    .textSelection(.enabled)
+                CodeTiles(invite: code)
                     .accessibilityLabel(code.displayed)
                     .accessibilityIdentifier("inviteCode")
-                    .padding(.vertical, 14)
+                    .padding(12)
                     .frame(maxWidth: .infinity)
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(

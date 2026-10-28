@@ -25,10 +25,25 @@ struct ProfileView: View {
         .background(Theme.background)
         .navigationTitle("Profile")
         .toolbarBackground(Theme.background, for: .navigationBar)
-        // The guard stays while this tab exists, including while another tab
-        // is showing: the router consults it only when leaving Profile, and
-        // removing it on disappear let a tab switch that the tab bar had
-        // already started slip past it. Sign-out resets the router.
+        // With unsaved changes, Back asks first: the system Back button (and
+        // with it the swipe back) gives way to one that goes through the
+        // router's guard, which shows the warning instead of leaving.
+        .navigationBarBackButtonHidden(viewModel?.hasUnsavedChanges ?? false)
+        .toolbar {
+            if viewModel?.hasUnsavedChanges ?? false {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        router.leaveProfile()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    .accessibilityLabel("Back")
+                }
+            }
+        }
+        // The router consults the guard whenever Profile is on top of the
+        // stack (back, a notification, an invite link). Sign-out resets it.
         .onAppear {
             installNavigationGuard()
         }
@@ -314,11 +329,16 @@ private struct ProfileContent: View {
             }
             .listRowBackground(Theme.surface)
 
-            ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
-                .padding(.vertical, 4)
-                .allowsHitTesting(!viewModel.isWorking)
-                .opacity(viewModel.isWorking ? 0.6 : 1)
-                .listRowBackground(Theme.surface)
+            // A profile picture is the avatar: the colour choices come back
+            // when it's removed. (The colour itself stays, for the places
+            // that use it.)
+            if viewModel.draftPhotos.isEmpty {
+                ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
+                    .padding(.vertical, 4)
+                    .allowsHitTesting(!viewModel.isWorking)
+                    .opacity(viewModel.isWorking ? 0.6 : 1)
+                    .listRowBackground(Theme.surface)
+            }
 
             Button {
                 viewModel.requestSaveConfirmation()
@@ -407,6 +427,21 @@ private struct ProfileContent: View {
                 .listRowBackground(Theme.surface)
             }
 
+            if !viewModel.isPremium {
+                Toggle(isOn: Binding(
+                    get: { viewModel.plusRemindersEnabled },
+                    set: { newValue in Task { await viewModel.setPlusRemindersEnabled(newValue) } }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("HuddlePals+ reminders")
+                        Text("Now and then, every few weeks at most: what HuddlePals+ adds.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                .listRowBackground(Theme.surface)
+            }
+
             if viewModel.reminderPermissionDenied {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Notifications are turned off", systemImage: "bell.slash")
@@ -425,7 +460,7 @@ private struct ProfileContent: View {
         } header: {
             Text("Reminders")
         } footer: {
-            Text("Reminders are sent only on days you haven't uploaded yet, and stop once you do.")
+            Text("Upload reminders come only on days you haven't uploaded yet, and stop once you do. HuddlePals+ reminders stop once you have it.")
         }
     }
 
@@ -447,12 +482,8 @@ private struct ProfileContent: View {
 
     private func keyCodeSection(_ code: String) -> some View {
         Section {
-            Text(KeyCode.twoLines(code))
-                .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Theme.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .textSelection(.enabled)
+            CodeTiles(keyCode: code, fontSize: 18)
+                .padding(.vertical, 4)
                 .accessibilityLabel("Key code \(code)")
                 .accessibilityIdentifier("keyCode")
                 .listRowBackground(Theme.surface)
@@ -466,7 +497,7 @@ private struct ProfileContent: View {
     private var plusSection: some View {
         Section {
             HStack {
-                Label("HuddlePals+", systemImage: "sparkles")
+                Text("HuddlePals+")
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Text(viewModel.plusSummary)

@@ -52,7 +52,7 @@ final class UnhappyPathTests: HuddleUITestCase {
 
     func testRefusingNotificationsShowsHowToTurnThemOn() {
         launchToShelf(arguments: ["-ui-testing-notifications-denied"])
-        openTab("Profile")
+        openProfile()
         let reminder = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Daily upload reminder'")).firstMatch
         scrollTo(reminder)
         reminder.switches.firstMatch.tap()
@@ -66,7 +66,7 @@ final class UnhappyPathTests: HuddleUITestCase {
     /// and the dialog says how to remove HuddlePals from Sign in with Apple.
     func testDeletingWhenAppleCantConfirmStillWorks() {
         launchToShelf(arguments: ["-ui-testing-apple-unavailable"])
-        openTab("Profile")
+        openProfile()
         tapAndConfirm("Delete account")
         waitFor(app.staticTexts["Apple couldn't confirm it's you"], timeout: 10)
         snapshot("24 apple confirmation failed")
@@ -78,6 +78,6 @@ final class UnhappyPathTests: HuddleUITestCase {
         launch()
         waitFor(app.buttons["Decline"], timeout: 20).tap()
         waitFor(app.buttons["Continue"])
-        XCTAssertFalse(app.tabBars.firstMatch.exists, "nothing past the welcome cards without Agree")
+        XCTAssertFalse(app.staticTexts["The Crew"].exists, "nothing past the welcome cards without Agree")
     }
 }

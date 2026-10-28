@@ -15,20 +15,14 @@ final class JourneyTests: HuddleUITestCase {
         snapshot("02 huddle shelf")
     }
 
-    /// QA-31: the day's one action must be on screen, not under the tab bar.
+    /// QA-31: the day's one action must be on screen without scrolling.
     func testTheDepositButtonIsVisibleWithoutScrolling() {
         launchToShelf()
         openHuddle("The Crew")
         let cta = waitFor(app.buttons["Add today's memory"])
-        let tabBar = app.tabBars.firstMatch
-        if tabBar.exists && tabBar.frame.minY > app.frame.midY {
-            // iPhone: the floating tab bar is at the bottom.
-            XCTAssertLessThanOrEqual(cta.frame.maxY, tabBar.frame.minY + 1,
-                                     "the button sits under the floating tab bar")
-        } else {
-            // iPad: the tab bar is at the top; the button must still be on screen.
-            XCTAssertLessThanOrEqual(cta.frame.maxY, app.frame.maxY)
-        }
+        XCTAssertFalse(app.tabBars.firstMatch.exists, "no tab bar: the shelf is the main screen")
+        XCTAssertTrue(cta.isHittable)
+        XCTAssertLessThanOrEqual(cta.frame.maxY, app.frame.maxY)
         XCTAssertGreaterThan(cta.frame.minY, 0)
     }
 
@@ -92,11 +86,12 @@ final class JourneyTests: HuddleUITestCase {
         XCTAssertFalse(app.buttons["Add today's memory"].exists)
 
         // DEBUG: move the mock clock to tomorrow.
-        openTab("Profile")
+        openProfile()
         let advance = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Advance mock day by 1'")).firstMatch
         scrollTo(advance)
         advance.tap()
-        openTab("Huddles")
+        backToShelf()
+        openHuddle("The Crew")
         // Tomorrow, nobody has posted yet in the seeded world.
         waitFor(app.buttons["Deposit the first memory"], timeout: 20, "a new day opens a new check-in")
         depositPhoto(caption: "Day two", ctaLabel: "Deposit the first memory")
@@ -136,7 +131,7 @@ final class JourneyTests: HuddleUITestCase {
     /// permission; appearance switches to dark.
     func testEditingProfileRemindersAndAppearance() {
         launchToShelf()
-        openTab("Profile")
+        openProfile()
         waitFor(app.textFields["Display name"])
         // A vertical TextField is exposed as a text field; it holds the seeded bio.
         let bio = app.textFields.matching(NSPredicate(format: "value BEGINSWITH 'Keeper of the crew'")).firstMatch
@@ -149,7 +144,7 @@ final class JourneyTests: HuddleUITestCase {
         waitFor(app.alerts["Confirm Changes"]).buttons["Save Changes"].tap()
         waitFor(app.staticTexts["Saved"], timeout: 10)
         // QA-33: done typing, a person swipes the list to put the keyboard
-        // away; it covers the tab bar until they can.
+        // away.
         app.swipeDown()
         waitUntilGone(app.otherElements["inputView"], timeout: 5)
 
@@ -164,8 +159,8 @@ final class JourneyTests: HuddleUITestCase {
         scrollTo(dark)
         dark.tap()
         snapshot("12 profile dark")
-        openTab("Huddles")
-        waitFor(app.staticTexts["The Crew"], timeout: 10, "the tab bar must be reachable after editing")
+        backToShelf()
+        waitFor(app.staticTexts["The Crew"], timeout: 10, "Back must work after editing")
         snapshot("13 shelf dark")
     }
 
@@ -181,7 +176,7 @@ final class JourneyTests: HuddleUITestCase {
         signInWithMockApple()
         waitFor(app.staticTexts["No huddles yet"], timeout: 20, "a returning account skips the profile step")
         XCTAssertFalse(app.textFields["Your name"].exists)
-        openTab("Profile")
+        openProfile()
         waitFor(app.textFields["Display name"])
         XCTAssertEqual(app.textFields["Display name"].value as? String, "Bea")
     }
@@ -193,7 +188,7 @@ final class JourneyTests: HuddleUITestCase {
         signInWithMockApple()
         completeProfile(name: "Bea")
         waitFor(app.staticTexts["No huddles yet"], timeout: 20)
-        openTab("Profile")
+        openProfile()
         tapAndConfirm("Delete account")
         waitFor(app.buttons["Continue"], timeout: 20, "back on the welcome cards")
         signInWithMockApple()
@@ -204,7 +199,7 @@ final class JourneyTests: HuddleUITestCase {
     /// contact address are one tap away in Profile → About.
     func testProfileLinksToThePrivacyPolicyAndSupport() {
         launchToShelf()
-        openTab("Profile")
+        openProfile()
         for title in ["Privacy Policy", "Help & Support", "Contact Us", "HuddlePals Website"] {
             // SwiftUI exposes a Link in a List row as a button.
             let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch

@@ -131,7 +131,9 @@ final class HuddleHomeViewModel {
         }
     }
 
+    /// The reveal has played: the first time, HuddlePals+ is introduced.
     func unlockRevealFinished() {
         playUnlockReveal = false
+        deps.plusPromo.postOpenedHuddle()
     }
 }

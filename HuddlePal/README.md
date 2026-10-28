@@ -26,7 +26,7 @@ HuddlePal/
 │   ├── HuddlePalApp.swift                  @main — builds AppDependencies, injects environment
 │   ├── App/
 │   │   ├── AppDependencies.swift       Composition root + AppSession + DebugSettings
-│   │   └── AppRouter.swift             Tab + typed NavigationStack routes
+│   │   └── AppRouter.swift             Typed NavigationStack routes + the unsaved-Profile guard
 │   ├── Models/
 │   │   └── SchemaModels.swift          SwiftData @Models: User, Huddle, Membership,
 │   │                                   Deposit, Reaction, Comment (+ MembershipRole)
@@ -50,6 +50,7 @@ HuddlePal/
 │   │   │                               PhotoCrypto, InviteCrypto, IdentityKeychain,
 │   │   │                               LivePhotoKeyring
 │   │   (notifications: Support/DailyReminders.swift — local reminders;
+│   │    Support/PlusPromotion.swift — the HuddlePals+ intro and opt-in reminders;
 │   │    Support/PushNotifications.swift — server pushes through APNs;
 │   │    Support/InviteCode.swift — the invite code format)
 │   ├── Seeding/
@@ -65,14 +66,15 @@ HuddlePal/
 │   │   ├── PaywallViewModel.swift      ├── ArchiveGate.swift (the free plan's 30 days)
 │   │   └── ProfileViewModel.swift
 │   ├── Views/
-│   │   ├── RootView.swift              Splash → Onboarding → MainTabView router
+│   │   ├── RootView.swift              Splash → Onboarding → MainView (one stack, no tabs)
 │   │   ├── Onboarding/OnboardingView.swift  Terms of Service gate (Agree required) + sign-in steps
 │   │   ├── Home/HuddleHomeView.swift    LOCKED grid / UNLOCKED feed + unlock reveal
 │   │   ├── Compose/ComposeView.swift   Camera capture (photo, or video with Plus) + caption + permanence confirm
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
 │   │   ├── Detail/DepositDetailView.swift  Reactions + comments
 │   │   ├── HuddleManagement/            CreateHuddleView / JoinHuddleView / HuddleSettingsView
-│   │   ├── Plus/PaywallView.swift      HuddlePals+: plans, renewal terms, Restore Purchases
+│   │   ├── Plus/PaywallView.swift      HuddlePals+: plans, renewal terms, Restore Purchases, welcome
+│   │   ├── Plus/PlusIntroSheet.swift   HuddlePals+ intro after a first post (Remind me later)
 │   │   └── Profile/ProfileView.swift   Draft editing + confirmed save, the Plan section,
 │   │                                   sign out + DEBUG tools; TermsReaderView
 │   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
@@ -82,7 +84,7 @@ HuddlePal/
 │   │                                   VideoRecorder + VideoCaptureView (6-second clips),
 │   │                                   DepositVideoPlayer (plays decrypted clips from memory)
 │   ├── Support/                        Theme, Haptics, DateProviding (injectable clock),
-│   │                                   DailyReminders, ImageDownscaler, AppleSignInNonce,
+│   │                                   DailyReminders, PlusPromotion, ImageDownscaler, AppleSignInNonce,
 │   │                                   CaptureFiles + PreparedClip (a recording's short life on disk),
 │   │                                   TermsOfService (bundled text + TermsAcceptance)
 │   ├── Legal/TermsOfService.md         The Terms of Service shown in-app; host it at huddlepals.com/terms

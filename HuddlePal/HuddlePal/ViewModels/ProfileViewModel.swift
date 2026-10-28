@@ -212,6 +212,15 @@ final class ProfileViewModel {
         )
     }
 
+    // MARK: HuddlePals+ reminders surface
+
+    /// Asked for on the intro after a first post; off here stops them.
+    var plusRemindersEnabled: Bool { deps.plusPromo.settings.remindersEnabled }
+
+    func setPlusRemindersEnabled(_ enabled: Bool) async {
+        await deps.plusPromo.setRemindersEnabled(enabled)
+    }
+
     // MARK: Activity notifications surface
 
     var pushEnabled: Bool { deps.push.isOn }

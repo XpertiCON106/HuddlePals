@@ -8,6 +8,8 @@ enum PaywallContext: String, Identifiable {
     case createHuddle
     case invites
     case profile
+    /// The intro after a first post, or a HuddlePals+ reminder.
+    case promotion
 
     var id: String { rawValue }
 
@@ -18,6 +20,7 @@ enum PaywallContext: String, Identifiable {
         case .createHuddle: "Keep up to 10 huddles with HuddlePals+"
         case .invites: "Reopen invites with HuddlePals+"
         case .profile: "HuddlePals+"
+        case .promotion: "More room for your huddles with HuddlePals+"
         }
     }
 
@@ -27,7 +30,7 @@ enum PaywallContext: String, Identifiable {
         case .video: "video.fill"
         case .createHuddle: "square.stack.3d.up.fill"
         case .invites: "person.badge.plus"
-        case .profile: "sparkles"
+        case .profile, .promotion: "person.3.fill"
         }
     }
 }
@@ -53,8 +56,14 @@ final class PaywallViewModel {
     private(set) var isWorking = false
     /// What happened to the last purchase or restore, when it needs saying.
     private(set) var message: String?
-    /// Plus just turned on: the paywall closes itself.
+    /// Plus just turned on: the welcome screen shows until Continue.
     private(set) var didUnlock = false
+    /// This Apple Account already has HuddlePals+ (it may need restoring
+    /// here, or be another account's): Restore takes the buy button's place.
+    private(set) var appleAccountHasPlus = false
+    /// The subscription belongs to another HuddlePals account: said in an
+    /// alert, too easy to miss as a line of text.
+    var isLinkedElsewhereAlertPresented = false
 
     static let linkedElsewhere = "This Apple Account's HuddlePals+ is already linked to another HuddlePals account. Sign in to that account to use it, or write to \(AppLinks.contactEmail) to move it."
 
@@ -72,7 +81,14 @@ final class PaywallViewModel {
         products.first { $0.id == selectedID } ?? products.first
     }
 
+    /// Restore Purchases instead of the plans: buying again would only find
+    /// the subscription this Apple Account already has.
+    var offersRestoreInsteadOfBuying: Bool {
+        appleAccountHasPlus && !isPremium && !didUnlock
+    }
+
     func load() async {
+        if !isPremium { appleAccountHasPlus = await deps.plus.hasAppleSubscription() }
         do {
             products = try await deps.plus.products()
             selectedID = products.first { $0.period == .year }?.id ?? products.first?.id
@@ -96,6 +112,7 @@ final class PaywallViewModel {
             break
         case .linkedToAnotherAccount:
             message = Self.linkedElsewhere
+            isLinkedElsewhereAlertPresented = true
         case .notConfirmed:
             message = "Your purchase went through. HuddlePals is still confirming it, and Plus turns on shortly — there's no need to buy it again."
         case .failed(let reason):
@@ -115,6 +132,7 @@ final class PaywallViewModel {
             message = "No HuddlePals+ subscription was found for this Apple Account."
         case .linkedToAnotherAccount:
             message = Self.linkedElsewhere
+            isLinkedElsewhereAlertPresented = true
         case .cancelled:
             break
         case .failed(let reason):
