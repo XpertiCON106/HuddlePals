@@ -32,6 +32,8 @@ enum AuthError: LocalizedError {
     case invalidPhone
     case invalidCode
     case notAuthenticated
+    /// A birthday under the Terms' minimum age (`Birthday.minimumAge`).
+    case underMinimumAge
     case provider(String)
 
     var errorDescription: String? {
@@ -40,6 +42,7 @@ enum AuthError: LocalizedError {
         case .invalidPhone: "Enter a 10-digit US or Canadian number, or start with + and your country code."
         case .invalidCode: "That code didn't match — or it expired. Check it or request a fresh one."
         case .notAuthenticated: "You're not signed in."
+        case .underMinimumAge: "HuddlePals is for people \(Birthday.minimumAge) and older."
         case .provider(let message): message
         }
     }
@@ -127,6 +130,12 @@ protocol AuthServiceProtocol: AnyObject {
         bio: String?,
         photoPaths: [String]
     ) async throws
+    /// The signed-in account's birthday, which only its owner can read; nil
+    /// when it was never given (accounts from before it was asked for).
+    func birthday() async throws -> Birthday?
+    /// Saves it. Refused under the minimum age (`AuthError.underMinimumAge`),
+    /// here and by the server.
+    func saveBirthday(_ birthday: Birthday) async throws
     func signOut() async throws
     /// Permanently deletes the signed-in account. Deposited photos remain in
     /// shared huddles as "Former member" (the archive is permanent); the
@@ -260,6 +269,29 @@ final class MockAuthService: AuthServiceProtocol {
         try context.save()
     }
 
+    // Birthdays: this device stands in for the server.
+    private static let birthdayPrefix = "huddlepal.mock.birthday."
+
+    /// The seeder gives the seeded accounts theirs.
+    static func storeBirthday(_ birthday: Birthday, for userID: UUID) {
+        UserDefaults.standard.set(birthday.isoDate, forKey: birthdayPrefix + userID.uuidString)
+    }
+
+    func birthday() async throws -> Birthday? {
+        guard let id = UserDefaults.standard.string(forKey: Self.currentUserIDKey) else {
+            throw AuthError.notAuthenticated
+        }
+        return UserDefaults.standard.string(forKey: Self.birthdayPrefix + id).flatMap(Birthday.init(isoDate:))
+    }
+
+    func saveBirthday(_ birthday: Birthday) async throws {
+        guard let id = UserDefaults.standard.string(forKey: Self.currentUserIDKey) else {
+            throw AuthError.notAuthenticated
+        }
+        guard birthday.isOldEnough(on: .now) else { throw AuthError.underMinimumAge }
+        UserDefaults.standard.set(birthday.isoDate, forKey: Self.birthdayPrefix + id)
+    }
+
     func signOut() async throws {
         UserDefaults.standard.removeObject(forKey: Self.currentUserIDKey)
         UserDefaults.standard.set(true, forKey: Self.signedOutKey)
@@ -276,6 +308,7 @@ final class MockAuthService: AuthServiceProtocol {
             where key.hasPrefix(Self.identityPrefix) && (value as? String) == stored {
                 defaults.removeObject(forKey: key)
             }
+            defaults.removeObject(forKey: Self.birthdayPrefix + stored)
         }
         defaults.removeObject(forKey: Self.currentUserIDKey)
         defaults.set(true, forKey: Self.signedOutKey)

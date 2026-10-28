@@ -126,7 +126,8 @@ final class AppRouter {
         navigate(to: [.huddleHome(huddle)])
     }
 
-    func popToHuddleList() {
+    @discardableResult
+    func popToHuddleList() -> Bool {
         navigate(to: [])
     }
 

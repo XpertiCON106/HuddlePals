@@ -1,4 +1,5 @@
 import AuthenticationServices
+import PhotosUI
 import SwiftUI
 
 /// Onboarding: the Terms of Service (Agree required; Decline returns to the
@@ -56,6 +57,7 @@ private struct OnboardingContent: View {
 /// reader has scrolled to the end, and only Agree goes further.
 private struct TermsStep: View {
     @Bindable var viewModel: OnboardingViewModel
+    @State private var confirmsSignOut = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -107,11 +109,42 @@ private struct TermsStep: View {
                 }
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
+
+                if viewModel.isSignedIn {
+                    HStack(spacing: 4) {
+                        Text(viewModel.signedInName.map { "Signed in as \($0)." } ?? "Signed in.")
+                            .foregroundStyle(Theme.textSecondary)
+                            .lineLimit(1)
+                        Button {
+                            confirmsSignOut = true
+                        } label: {
+                            // The frame inside the label: outside it, only
+                            // the words were tappable.
+                            Text("Sign out")
+                                .fontWeight(.semibold)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .foregroundStyle(Theme.accent)
+                    }
+                    .font(.system(size: 13))
+                }
             }
             .padding(.top, 14)
             .padding(.bottom, 8)
             .padding(.horizontal, Theme.screenPadding)
         }
+        .appDialog(
+            "Sign out?",
+            isPresented: $confirmsSignOut,
+            message: "Then sign in with the account you want. The Terms come first.",
+            actions: [
+                DialogAction("Sign out", role: .destructive) {
+                    Task { await viewModel.signOut() }
+                },
+                .cancel(),
+            ]
+        )
     }
 }
 
@@ -121,21 +154,29 @@ private struct WelcomeStep: View {
     @Bindable var viewModel: OnboardingViewModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            TabView(selection: $viewModel.pageIndex) {
-                ForEach(Array(OnboardingViewModel.cards.enumerated()), id: \.element.id) { index, card in
-                    ConceptCard(card: card)
-                        .tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
+        ZStack {
+            // The first card's day goes by behind the whole screen, and
+            // gives way to the others' pictures as they come in.
+            DayGoesByScene(isActive: viewModel.pageIndex == 0)
+                .opacity(viewModel.pageIndex == 0 ? 1 : 0)
+                .animation(.easeInOut(duration: 0.45), value: viewModel.pageIndex)
 
-            PrimaryButton(title: viewModel.isLastWelcomePage ? "Get started" : "Continue") {
-                withAnimation { viewModel.advanceWelcome() }
+            VStack(spacing: 0) {
+                TabView(selection: $viewModel.pageIndex) {
+                    ForEach(Array(OnboardingViewModel.cards.enumerated()), id: \.element.id) { index, card in
+                        ConceptCard(card: card)
+                            .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .indexViewStyle(.page(backgroundDisplayMode: .always))
+
+                PrimaryButton(title: viewModel.isLastWelcomePage ? "Get started" : "Continue") {
+                    withAnimation { viewModel.advanceWelcome() }
+                }
+                .padding(.horizontal, Theme.screenPadding)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, Theme.screenPadding)
-            .padding(.bottom, 24)
         }
     }
 }
@@ -143,22 +184,24 @@ private struct WelcomeStep: View {
 private struct ConceptCard: View {
     let card: OnboardingViewModel.Card
 
+    /// The words sit in the same place on every card; each card's picture
+    /// fills the space above them (the first card's is behind the screen).
     var body: some View {
-        VStack(spacing: 22) {
-            Spacer()
+        VStack(spacing: 0) {
             WelcomeIllustration(kind: card.illustration)
-                .padding(.bottom, 6)
-            Text(card.title)
-                .font(Theme.displayFont(30))
-                .foregroundStyle(Theme.textPrimary)
-            Text(card.message)
-                .font(.system(size: 16))
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .padding(.horizontal, 36)
-            Spacer()
-            Spacer()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 14) {
+                Text(card.title)
+                    .font(Theme.displayFont(30))
+                    .foregroundStyle(Theme.textPrimary)
+                Text(card.message)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .padding(.horizontal, 36)
+            }
+            .padding(.bottom, 64)
         }
     }
 }
@@ -410,66 +453,201 @@ private struct CodeStep: View {
 
 private struct ProfileStep: View {
     @Bindable var viewModel: OnboardingViewModel
-    @FocusState private var nameFocused: Bool
+    @FocusState private var focused: Field?
+
+    private enum Field {
+        case name, bio
+    }
 
     var body: some View {
-        VStack(spacing: 22) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: 22) {
+                VStack(spacing: 14) {
+                    AvatarView(
+                        name: viewModel.displayName.isEmpty ? "?" : viewModel.displayName,
+                        colorHex: viewModel.selectedColorHex,
+                        imageData: viewModel.photos.first,
+                        size: 76
+                    )
+                    Text("Make your profile")
+                        .font(Theme.displayFont(28))
+                        .foregroundStyle(Theme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("This is how your huddle sees you.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .padding(.top, 32)
 
-            AvatarView(
-                name: viewModel.displayName.isEmpty ? "?" : viewModel.displayName,
-                colorHex: viewModel.selectedColorHex,
-                size: 76
-            )
+                photos
 
-            Text("What should the others call you?")
-                .font(Theme.displayFont(24))
-                .foregroundStyle(Theme.textPrimary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 30)
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField("Your name", text: $viewModel.displayName)
+                        .font(.system(size: 17, weight: .medium))
+                        .textContentType(.name)
+                        .focused($focused, equals: .name)
+                        .submitLabel(.next)
+                        .onSubmit { focused = .bio }
+                        .onChange(of: viewModel.displayName) { _, newValue in
+                            if newValue.serverLength > TextLimit.displayName {
+                                viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
+                            }
+                        }
+                        .modifier(FormField())
 
-            TextField("Your name", text: $viewModel.displayName)
-                .font(.system(size: 18, weight: .medium))
-                .textContentType(.name)
-                .onChange(of: viewModel.displayName) { _, newValue in
-                    if newValue.serverLength > TextLimit.displayName {
-                        viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
+                    BirthdayRow(birthday: viewModel.birthday) { viewModel.birthdayPicked($0) }
+                        .font(.system(size: 17))
+                        .modifier(FormField())
+                        .disabled(viewModel.isUnderage || viewModel.isWorking)
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        TextField("A short bio (optional)", text: $viewModel.bio, axis: .vertical)
+                            .font(.system(size: 16))
+                            .lineLimit(1...3)
+                            .focused($focused, equals: .bio)
+                            .onChange(of: viewModel.bio) { _, newValue in
+                                if newValue.serverLength > AuthValidation.bioLimit {
+                                    viewModel.bio = newValue.prefix(serverLength: AuthValidation.bioLimit)
+                                }
+                            }
+                        if viewModel.bio.serverLength > AuthValidation.bioLimit - 15 {
+                            Text("\(AuthValidation.bioLimit - viewModel.bio.serverLength)")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                    .modifier(FormField())
+
+                    Text("Only you can see your birthday.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(.horizontal, 4)
+                }
+
+                // A profile picture is the avatar: the colours come back
+                // when there's none.
+                if viewModel.photos.isEmpty {
+                    ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
+                }
+
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.destructive)
+                        .multilineTextAlignment(.center)
+                }
+
+                if viewModel.isUnderage {
+                    underage
+                } else {
+                    PrimaryButton(
+                        title: "Open my huddle",
+                        systemImage: "lock.open",
+                        isLoading: viewModel.isWorking,
+                        isEnabled: viewModel.canCompleteProfile
+                    ) {
+                        focused = nil
+                        Task { await viewModel.completeProfile() }
                     }
                 }
-                .multilineTextAlignment(.center)
-                .focused($nameFocused)
-                .submitLabel(.done)
-                .padding(14)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Theme.hairline, lineWidth: 1)
-                )
-                .padding(.horizontal, 44)
-
-            ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
-                .padding(.horizontal, Theme.screenPadding)
-                .padding(.top, 4)
-
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.destructive)
-            }
-
-            PrimaryButton(
-                title: "Open my huddle",
-                systemImage: "lock.open",
-                isLoading: viewModel.isWorking,
-                isEnabled: viewModel.canCompleteProfile
-            ) {
-                nameFocused = false
-                Task { await viewModel.completeProfile() }
             }
             .padding(.horizontal, Theme.screenPadding)
-
-            Spacer()
-            Spacer()
+            .padding(.bottom, 36)
         }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// Up to 3 photos; the first is the profile picture.
+    private var photos: some View {
+        HStack(spacing: 10) {
+            ForEach(Array(viewModel.photos.enumerated()), id: \.offset) { index, data in
+                Group {
+                    if let image = UIImage(data: data) {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        Theme.surfaceElevated
+                    }
+                }
+                .frame(width: 80, height: 104)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    Button {
+                        viewModel.removePhoto(at: index)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.white, .black.opacity(0.55))
+                            .padding(10)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Remove photo")
+                }
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
+            }
+            if viewModel.canAddPhotos {
+                PhotosPicker(
+                    selection: $viewModel.photoItems,
+                    maxSelectionCount: AuthValidation.maxProfilePhotos - viewModel.photos.count,
+                    matching: .images
+                ) {
+                    VStack(spacing: 6) {
+                        if viewModel.isProcessingPhotos {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .semibold))
+                        }
+                        Text(viewModel.photos.isEmpty ? "Add photos" : "Add")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: 80, height: 104)
+                    .background(Theme.surfaceElevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [5]))
+                    )
+                }
+                .accessibilityLabel("Add profile photos")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.photos.count)
+    }
+
+    private var underage: some View {
+        VStack(spacing: 12) {
+            Text("HuddlePals is for people \(Birthday.minimumAge) and older.")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .multilineTextAlignment(.center)
+            Text("Thanks for being honest. You can't make a profile yet.")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+            Button {
+                Task { await viewModel.signOutUnderage() }
+            } label: {
+                Text("Sign out")
+            }
+            .buttonStyle(ActionButtonStyle(role: .secondary))
+        }
+        .padding(16)
+        .cardSurface()
+    }
+}
+
+/// A form field on the sign-up profile step: a card the width of the screen.
+private struct FormField: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .frame(minHeight: 50)
+            .padding(.vertical, 2)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Theme.hairline, lineWidth: 1)
+            )
     }
 }

@@ -10,15 +10,50 @@ import UIKit
 /// like an App Store link. The picture is made on this phone, so the code
 /// in the link's fragment is never fetched from anywhere.
 struct InviteShareButton<Label: View>: View {
+    /// Where "Link copied" shows after Copy link: beside the button, or
+    /// inside a wide one at its end.
+    enum CopiedTagPlacement {
+        case leading
+        case inside
+    }
+
     let url: URL
     let huddleName: String
     let emoji: String
+    var copiedTag: CopiedTagPlacement = .leading
     @ViewBuilder let label: () -> Label
 
     @State private var isSharing = false
     @State private var card: UIImage?
+    @State private var copies = 0
+    @State private var showsCopied = false
 
     var body: some View {
+        Group {
+            switch copiedTag {
+            case .leading:
+                HStack(spacing: 8) {
+                    if showsCopied {
+                        LinkCopiedTag()
+                            .transition(.scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
+                    }
+                    shareButton
+                }
+            case .inside:
+                shareButton
+                    .overlay(alignment: .trailing) {
+                        if showsCopied {
+                            LinkCopiedTag()
+                                .padding(.trailing, 8)
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
+                    }
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: showsCopied)
+    }
+
+    private var shareButton: some View {
         Button(action: {
             // Ready before the card rises, so it opens in one smooth move.
             if card == nil { card = InviteCard.image(name: huddleName, emoji: emoji) }
@@ -52,12 +87,47 @@ struct InviteShareButton<Label: View>: View {
         actions.append(DialogAction("Copy link", role: .secondary, systemImage: "link") {
             UIPasteboard.general.url = url
             Haptics.success()
+            linkCopied()
         })
         actions.append(DialogAction("More apps", role: .secondary, systemImage: "square.and.arrow.up") {
             InviteSharing.shareSheet(item: InviteActivityItem(url: url, huddleName: huddleName, card: card))
         })
         actions.append(.cancel())
         return actions
+    }
+
+    /// Shows "Link copied" for a couple of seconds; copying again keeps it up.
+    private func linkCopied() {
+        copies += 1
+        let copy = copies
+        showsCopied = true
+        AccessibilityNotification.Announcement("Link copied").post()
+        Task {
+            try? await Task.sleep(for: .seconds(2.2))
+            if copy == copies { showsCopied = false }
+        }
+    }
+}
+
+/// "✓ Link copied", popping in beside the share button.
+private struct LinkCopiedTag: View {
+    @State private var tick = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark.circle.fill")
+                .symbolEffect(.bounce, value: tick)
+            Text("Link copied")
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(Theme.textPrimary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Theme.surfaceElevated, in: Capsule())
+        .fixedSize()
+        .allowsHitTesting(false)
+        .accessibilityIdentifier("linkCopied")
+        .onAppear { tick.toggle() }
     }
 }
 

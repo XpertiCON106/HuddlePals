@@ -1,6 +1,6 @@
 # HuddlePals — Privacy Policy
 
-_Last updated: 2026-10-28_
+_Last updated: 2026-10-29_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
@@ -20,6 +20,7 @@ described under "How your data is stored and protected."
 | **Apple account identifier**, and any email address Apple shares at sign-in (it may be a private relay address) | To sign you in with Sign in with Apple, the only way to sign in. If Apple shares your name, we use it only to pre-fill your display name, which you can change | Yes |
 | **Display name** | Shown to other members of your huddles | Yes |
 | **Profile photos** (up to 3) and **bio** | Shown on your profile to people you share a huddle with | Yes |
+| **Birthday** | Asked when you make your profile, to make sure everyone using HuddlePals is 13 or older. Only you can see it: it isn't shown to anyone else | Yes |
 | **Deposited photos, videos and captions** | The core function — shared with your huddle's members. Photos and videos are end-to-end encrypted, including a video's sound and the still image made from its first frame; captions are not. A video records sound only if you allow HuddlePals to use the microphone | Yes |
 | **Encryption public key** | Lets your huddle's members share the huddle's photo key with your device. Your private key stays on your devices (iCloud Keychain) | Yes |
 | **Reactions and comments** | The core function | Yes |
@@ -118,9 +119,9 @@ it for a week.
 You can **delete your account at any time** from **Profile → Delete account**.
 When you do:
 
-- Your account, login, display name, bio, profile photos, push notification
-  tokens, encryption keys, Terms agreement records, and subscription records
-  are **permanently removed**, and you are signed out.
+- Your account, login, display name, bio, birthday, profile photos, push
+  notification tokens, encryption keys, Terms agreement records, and
+  subscription records are **permanently removed**, and you are signed out.
 - We ask Apple to revoke the app's access to your Apple Account.
 - **Photos and videos you already deposited remain in your shared huddles**,
   shown as "Former member" rather than under your name. This is required to
@@ -152,7 +153,9 @@ because the law can require us to keep reported material.
 ## Children
 
 HuddlePals is not directed to children under 13 (or the minimum age in your
-country). Do not use the app if you are under that age.
+country). Do not use the app if you are under that age. We ask for your
+birthday when you make your profile; if it shows you're under 13, you can't
+make one.
 
 ## Legal basis and your rights
 

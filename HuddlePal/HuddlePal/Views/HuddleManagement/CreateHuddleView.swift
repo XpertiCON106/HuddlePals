@@ -178,7 +178,7 @@ private struct CreateHuddleContent: View {
             }
 
             if let url = viewModel.shareURL {
-                InviteShareButton(url: url, huddleName: huddle.name, emoji: huddle.emoji) {
+                InviteShareButton(url: url, huddleName: huddle.name, emoji: huddle.emoji, copiedTag: .inside) {
                     Label("Share invite link", systemImage: "square.and.arrow.up")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.background)

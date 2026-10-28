@@ -540,10 +540,12 @@ private final class ProfileAuthSpy: AuthServiceProtocol {
     enum TestError: LocalizedError {
         case updateFailed
         case deleteFailed
+        case birthdayFailed
         var errorDescription: String? {
             switch self {
             case .updateFailed: "The profile couldn't be saved."
             case .deleteFailed: "Something went wrong. Please try again."
+            case .birthdayFailed: "The birthday couldn't be saved."
             }
         }
     }
@@ -592,6 +594,17 @@ private final class ProfileAuthSpy: AuthServiceProtocol {
         user.profilePhotoPaths = photoPaths
     }
 
+    var storedBirthday: Birthday?
+    var failNextBirthdaySave = false
+    func birthday() async throws -> Birthday? { storedBirthday }
+    func saveBirthday(_ birthday: Birthday) async throws {
+        if failNextBirthdaySave {
+            failNextBirthdaySave = false
+            throw TestError.birthdayFailed
+        }
+        guard birthday.isOldEnough(on: .now) else { throw AuthError.underMinimumAge }
+        storedBirthday = birthday
+    }
     func signOut() async throws {}
     private(set) var deleteCodes: [String?] = []
     var failNextDelete = false

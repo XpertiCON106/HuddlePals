@@ -4,6 +4,12 @@ import Foundation
 // convertFromSnakeCase/convertToSnakeCase strategies map them exactly
 // (always `Id`, never `ID`, in multi-word names).
 
+/// `profile_birthdates`: one row per account, readable only by its owner.
+struct BirthdayDTO: Codable {
+    let userId: UUID
+    let birthDate: String
+}
+
 struct ProfileDTO: Codable {
     let id: UUID
     var displayName: String

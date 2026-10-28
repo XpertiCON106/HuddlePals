@@ -285,7 +285,7 @@ describe('keeper succession', () => {
 })
 
 describe('account deletion (what the delete-account function triggers)', () => {
-  it('removes the profile, memberships, keys, devices, reactions, Terms records; keeps photos, comments and reports', async () => {
+  it('removes the profile, birthday, memberships, keys, devices, reactions, Terms records; keeps photos, comments and reports', async () => {
     const db = await freshDatabase()
     const A = await signUp(db, 'Ada')
     const B = await signUp(db, 'Ben')
@@ -300,10 +300,11 @@ describe('account deletion (what the delete-account function triggers)', () => {
     await q(db, B, 'insert into user_keys (user_id, public_key) values ($1, $2)', [B, PUBLIC_KEY('B')])
     await q(db, B, `insert into device_tokens (user_id, token, environment) values ($1, $2, 'production')`, [B, 'b'.repeat(64)])
     await q(db, B, `insert into terms_acceptances (user_id, version, accepted_at) values ($1, '2026-10-25', now())`, [B])
+    await q(db, B, `insert into profile_birthdates (user_id, birth_date) values ($1, '1995-06-14')`, [B])
 
     await admin(db, 'delete from auth.users where id = $1', [B]) // auth.admin.deleteUser
 
-    for (const table of ['profiles where id', 'memberships where user_id', 'reactions where user_id', 'blocks where blocker_id', 'reports where reporter_id', 'user_keys where user_id', 'huddle_keys where user_id', 'device_tokens where user_id', 'terms_acceptances where user_id']) {
+    for (const table of ['profiles where id', 'memberships where user_id', 'reactions where user_id', 'blocks where blocker_id', 'reports where reporter_id', 'user_keys where user_id', 'huddle_keys where user_id', 'device_tokens where user_id', 'terms_acceptances where user_id', 'profile_birthdates where user_id']) {
       assert.deepEqual(await admin(db, `select 1 from ${table} = $1`, [B]), [], table)
     }
     // The report stays, with the photo and its key: only the reporter is gone.

@@ -210,6 +210,13 @@ struct MainView: View {
             case .paywall: PaywallView(context: .promotion)
             }
         }
+        // An account from before birthdays were asked for: once, first.
+        .fullScreenCover(isPresented: Binding(
+            get: { deps.session.needsBirthday },
+            set: { deps.session.needsBirthday = $0 }
+        )) {
+            BirthdayCheckView()
+        }
         .task {
             // An invite link opened before signing in.
             router.openPendingInvite(deps.session)

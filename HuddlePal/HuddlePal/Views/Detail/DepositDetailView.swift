@@ -75,7 +75,7 @@ private struct DetailContent: View {
             VStack(alignment: .leading, spacing: 16) {
                 Group {
                     if deposit.isVideo {
-                        DepositVideoPlayer(deposit: deposit, startsMuted: false)
+                        DepositVideoPlayer(deposit: deposit, startsMuted: false, tapPlaysAndPauses: true)
                     } else {
                         LocalDepositImage(deposit: deposit)
                     }

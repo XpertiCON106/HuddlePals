@@ -117,6 +117,7 @@ private struct ProfileContent: View {
         }
         .task {
             await viewModel.loadInitialState()
+            await viewModel.loadBirthday()
             await viewModel.refreshReminderStatus()
             await viewModel.loadKeyCode()
         }
@@ -226,7 +227,7 @@ private struct ProfileContent: View {
                                         .contentShape(Rectangle())
                                 }
                                 .accessibilityLabel("Remove photo")
-                                .disabled(viewModel.isWorking)
+                                .allowsHitTesting(!viewModel.isWorking)
                             }
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }
@@ -250,7 +251,7 @@ private struct ProfileContent: View {
                                     .strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [5]))
                             )
                         }
-                        .disabled(viewModel.isWorking)
+                        .allowsHitTesting(!viewModel.isWorking)
                     }
                 }
                 .animation(
@@ -278,7 +279,7 @@ private struct ProfileContent: View {
                 )
                 TextField("Display name", text: $viewModel.displayName)
                     .font(.system(size: 17, weight: .medium))
-                    .disabled(viewModel.isWorking)
+                    .allowsHitTesting(!viewModel.isWorking)
                     .onChange(of: viewModel.displayName) { _, newValue in
                         if newValue.serverLength > TextLimit.displayName {
                             viewModel.displayName = newValue.prefix(serverLength: TextLimit.displayName)
@@ -291,7 +292,7 @@ private struct ProfileContent: View {
                 TextField("A short bio…", text: $viewModel.bio, axis: .vertical)
                     .font(.system(size: 15))
                     .lineLimit(2...4)
-                    .disabled(viewModel.isWorking)
+                    .allowsHitTesting(!viewModel.isWorking)
                     .onChange(of: viewModel.bio) { _, newValue in
                         if newValue.serverLength > AuthValidation.bioLimit {
                             viewModel.bio = newValue.prefix(serverLength: AuthValidation.bioLimit)
@@ -305,14 +306,26 @@ private struct ProfileContent: View {
             }
             .listRowBackground(Theme.surface)
 
+            VStack(alignment: .leading, spacing: 4) {
+                BirthdayRow(birthday: viewModel.birthday) { picked in
+                    Task { await viewModel.saveBirthday(picked) }
+                }
+                if let message = viewModel.birthdayMessage {
+                    Text(message)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.destructive)
+                }
+            }
+            .listRowBackground(Theme.surface)
+
             // A profile picture is the avatar: the colour choices come back
             // when it's removed. (The colour itself stays, for the places
-            // that use it.)
+            // that use it.) While a save runs, the editor ignores taps but
+            // looks the same: dimming it made the rows blink on every save.
             if viewModel.draftPhotos.isEmpty {
                 ColorRampPicker(selection: $viewModel.selectedColorHex, singleLine: true)
                     .padding(.vertical, 4)
                     .allowsHitTesting(!viewModel.isWorking)
-                    .opacity(viewModel.isWorking ? 0.6 : 1)
                     .listRowBackground(Theme.surface)
             }
 

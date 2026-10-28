@@ -151,6 +151,10 @@ protocol HuddleServiceProtocol: AnyObject {
     func confirmKeyCheck(_ check: KeyCheck, in huddle: Huddle) async throws
     /// This account's key code, for members checking it. nil in mock mode.
     func ownKeyCode() async -> String?
+    /// Whether `user` is still in `huddle`: false once its keeper deleted it.
+    /// Changes nothing stored on this device, so a screen showing the huddle
+    /// can ask safely (pruning it would pull the huddle out from under it).
+    func isMember(of huddle: Huddle, user: User) async throws -> Bool
 }
 
 // MARK: - Skip ledger
@@ -352,6 +356,10 @@ final class MockHuddleService: HuddleServiceProtocol {
 
     // The offline world has no keys to share or check.
     func keyChecks(for huddle: Huddle) async -> [KeyCheck] { [] }
+
+    func isMember(of huddle: Huddle, user: User) async throws -> Bool {
+        huddle.memberships.contains { $0.user?.id == user.id }
+    }
     func confirmKeyCheck(_ check: KeyCheck, in huddle: Huddle) async throws {}
     func ownKeyCode() async -> String? { nil }
 

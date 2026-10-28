@@ -303,6 +303,8 @@ private final class SignOutOrderAuth: AuthServiceProtocol {
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState { .signedOut }
     func completeProfile(displayName: String, avatarColorHex: String) async throws -> User { throw AuthError.notAuthenticated }
     func updateProfile(user: User, displayName: String, avatarColorHex: String, bio: String?, photoPaths: [String]) async throws {}
+    func birthday() async throws -> Birthday? { nil }
+    func saveBirthday(_ birthday: Birthday) async throws {}
     func signOut() async throws { tokensLeftAtSignOut = tokens.registered.count }
     func deleteAccount(appleAuthorizationCode: String?) async throws {}
     func removeLocalData() throws {}

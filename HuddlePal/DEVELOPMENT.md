@@ -108,6 +108,12 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   one "who posted today" query, a streak recompute at most once per huddle
   per day); full history syncs only when a huddle opens. Don't add a full
   per-huddle sync to the shelf: it runs on every foreground.
+- **Never prune under an open screen**: the shelf's refresh lets go of
+  huddles that are gone (`pruneHuddles`), so it runs on foreground only
+  while the shelf is on top, and a tapped notification goes back to the
+  shelf before checking. A huddle's own screen asks `isMember(of:)` first,
+  which changes nothing stored: a huddle its keeper deleted elsewhere says
+  "This huddle was deleted" and goes back to the shelf.
 
 ## Domain rules
 
@@ -124,8 +130,9 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   Messages, Copy link or More apps). Messages gets the link with that
   picture; More apps opens iOS's share sheet, which hands Messages its own
   preview (`LPLinkMetadata`, a card with the huddle's emoji and name) and
-  other apps a line with the link. `huddlepal://join/<code>` links from
-  before still open.
+  other apps a line with the link. Copy link shows "Link copied" beside
+  Share (inside the wide button on Create Huddle) for a couple of seconds.
+  `huddlepal://join/<code>` links from before still open.
 - **Once and permanent**: one photo per member per huddle per day, never
   edited or deleted (`DepositError.alreadyDepositedToday`; the database has
   no update or delete policy on deposits). Compose asks "This is permanent —
@@ -184,7 +191,19 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   it but not leave it (Huddle Settings shows them Delete huddle only; the
   services refuse, and so does the server's `memberships_delete` policy,
   migration 015). Members leave as before. When a keeper's account is
-  deleted, the member who's been in the huddle longest takes over.
+  deleted, the member who's been in the huddle longest takes over. The
+  others get "… deleted the huddle." (`send-push`, migration 014).
+- **Birthdays** (`Support/Birthday.swift`, a calendar date with no time
+  zone): asked on the profile step, and once, full screen, of an account
+  without one (`AppSession.needsBirthday`, checked at sign-in). Only the
+  owner reads or changes it (`profile_birthdates`, migration 016); Profile
+  shows it and saves a change straight away, outside the draft. Under 13
+  (`Birthday.minimumAge`, the Terms' 2.1) stops there with Sign out, the
+  given age can't be changed to get past, and the server refuses it too,
+  with a day's leeway for time zones.
+- **Videos** play and pause from a button on their corner, next to the
+  sound; on the detail screen a tap on the video does it too (in the feed a
+  tap turns the sound on). One paused by hand stays paused.
 
 ## Encryption and invites (live)
 
@@ -250,7 +269,14 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
   `TermsOfService.version` (a test compares it with "Last updated"), and
   the same text belongs at huddlepals.com/terms.
 - **Onboarding**: Terms → welcome cards → Sign in with Apple → profile
-  (name + colour). `needsProfileSetup` resumes an unfinished sign-up.
+  (photos, name, birthday, bio, colour). `needsProfileSetup` resumes an
+  unfinished sign-up. Someone already signed in (a new Terms version, an
+  unfinished profile) can sign out from the Terms screen. The first welcome
+  card's picture is `DayGoesByScene`, behind the whole screen: a day passes
+  and each day's print clips onto a line, all from one clock (a
+  `TimelineView`), so it loops without drifting. The other two cards have
+  small loops. With Reduce Motion, and in UI tests (`-ui-testing-motion`
+  keeps them moving, for recordings), each holds one frame.
 - **Live**: Apple's id_token goes to `/auth/v1/token?grant_type=id_token`
   with the raw nonce (`Support/AppleSignInNonce.swift`). The session lives
   in the Keychain (`…ThisDeviceOnly`) and refreshes about 60 s before

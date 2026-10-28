@@ -1,6 +1,9 @@
 import AuthenticationServices
 import Foundation
 import Observation
+import PhotosUI
+import SwiftUI
+import UIKit
 
 @MainActor
 @Observable
@@ -74,9 +77,24 @@ final class OnboardingViewModel {
     /// shorter cooldown only lets the user hit the server's refusal.
     static let resendCooldownSeconds = 60
 
-    // Profile step
+    // Profile step: the same profile Profile edits, plus a birthday
     var displayName = ""
     var selectedColorHex = AvatarPalette.hexes[0]
+    var bio = ""
+    private(set) var birthday: Birthday?
+    /// Downscaled, in memory until the profile is made; the first is the
+    /// profile picture.
+    private(set) var photos: [Data] = []
+    var photoItems: [PhotosPickerItem] = [] {
+        didSet { Task { await addPickedPhotos() } }
+    }
+    private(set) var isProcessingPhotos = false
+    /// Under the minimum age: nothing goes past this step, and the birthday
+    /// can't be changed to get past it.
+    private(set) var isUnderage = false
+    /// Made already (a later step failed): a retry picks up from there.
+    private var createdUser: User?
+    private var uploadedPhotoPaths: [String] = []
 
     private(set) var isWorking = false
     var errorMessage: String?
@@ -106,8 +124,13 @@ final class OnboardingViewModel {
 
     var canCompleteProfile: Bool {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (1...TextLimit.displayName).contains(name.serverLength) && !isWorking
+        return (1...TextLimit.displayName).contains(name.serverLength)
+            && bio.serverLength <= AuthValidation.bioLimit
+            && birthday != nil && !isUnderage
+            && !isWorking && !isProcessingPhotos
     }
+
+    var canAddPhotos: Bool { photos.count < AuthValidation.maxProfilePhotos }
 
     init(deps: AppDependencies) {
         self.deps = deps
@@ -149,6 +172,23 @@ final class OnboardingViewModel {
         deps.terms.accept(at: .now)
         step = stepAfterTerms
         Haptics.light()
+    }
+
+    /// Someone is already signed in here: the Terms changed since they
+    /// agreed, or their profile isn't finished. The Terms screen lets them
+    /// sign out, to sign in with a different account.
+    var isSignedIn: Bool {
+        deps.session.currentUser != nil || deps.session.needsProfileSetup
+    }
+
+    var signedInName: String? { deps.session.currentUser?.displayName }
+
+    /// Signs out and stays on the Terms, which come before signing in again.
+    func signOut() async {
+        await deps.signOut()
+        hasReachedEndOfTerms = false
+        stepAfterTerms = .welcome
+        step = .terms
     }
 
     /// Back to the first welcome card. "Get started" brings the Terms back,
@@ -301,21 +341,93 @@ final class OnboardingViewModel {
 
     // MARK: - Profile step
 
+    func birthdayPicked(_ picked: Birthday) {
+        guard !isUnderage else { return }
+        birthday = picked
+        isUnderage = !picked.isOldEnough(on: .now)
+        if isUnderage { Haptics.light() }
+    }
+
+    /// Adds already downscaled JPEG bytes (the picker's, or a test's).
+    func addPhotoData(_ data: Data) {
+        guard canAddPhotos, !data.isEmpty else { return }
+        photos.append(data)
+    }
+
+    func removePhoto(at index: Int) {
+        guard photos.indices.contains(index), !isWorking else { return }
+        photos.remove(at: index)
+        // Uploads from a failed try are for the old set: start over.
+        uploadedPhotoPaths = []
+        Haptics.light()
+    }
+
+    private func addPickedPhotos() async {
+        guard !photoItems.isEmpty else { return }
+        let items = photoItems
+        photoItems = []
+        isProcessingPhotos = true
+        defer { isProcessingPhotos = false }
+        for item in items {
+            guard canAddPhotos,
+                  let data = try? await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let scaled = ImageDownscaler.jpegData(from: image, maxDimension: ImageDownscaler.avatarMaxDimension)
+            else { continue }
+            addPhotoData(scaled)
+        }
+    }
+
+    /// Makes the profile, then saves the birthday, the photos and the bio.
+    /// A failed step can be retried without making the profile twice or
+    /// uploading the same photos again.
     func completeProfile() async {
-        guard canCompleteProfile else { return }
+        guard canCompleteProfile, let birthday else { return }
         errorMessage = nil
         isWorking = true
         defer { isWorking = false }
         do {
-            let user = try await deps.auth.completeProfile(
-                displayName: displayName,
-                avatarColorHex: selectedColorHex
-            )
+            let isRetry = createdUser != nil
+            let user: User
+            if let createdUser {
+                user = createdUser
+            } else {
+                user = try await deps.auth.completeProfile(displayName: displayName, avatarColorHex: selectedColorHex)
+                createdUser = user
+            }
+            try await deps.auth.saveBirthday(birthday)
+            let trimmedBio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isRetry || !photos.isEmpty || !trimmedBio.isEmpty {
+                for data in photos.dropFirst(uploadedPhotoPaths.count) {
+                    let path = try await deps.mediaService.saveImageData(
+                        data,
+                        preferredName: "avatars/\(user.id.uuidString.lowercased())/\(UUID().uuidString).jpg"
+                    )
+                    uploadedPhotoPaths.append(path)
+                }
+                try await deps.auth.updateProfile(
+                    user: user,
+                    displayName: displayName,
+                    avatarColorHex: selectedColorHex,
+                    bio: trimmedBio,
+                    photoPaths: uploadedPhotoPaths
+                )
+            }
             deps.session.needsProfileSetup = false
             await finishSignIn(user)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Under the minimum age: signs out of the account just made, and back
+    /// to the start. The age stays as given.
+    func signOutUnderage() async {
+        await deps.signOut()
+        createdUser = nil
+        uploadedPhotoPaths = []
+        pageIndex = 0
+        step = deps.terms.hasAcceptedCurrentVersion ? .welcome : .terms
     }
 
     // MARK: - Shared

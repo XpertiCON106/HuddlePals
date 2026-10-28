@@ -200,12 +200,29 @@ class HuddleUITestCase: XCTestCase {
         if choice.waitForExistence(timeout: timeout) { choice.tap() }
     }
 
-    /// The onboarding profile step after a first sign-in.
+    /// The onboarding profile step after a first sign-in: a name and the
+    /// birthday the wheel starts on (over 13).
     func completeProfile(name: String) {
         let field = waitFor(app.textFields["Your name"], timeout: 20, "the profile step")
         field.tap()
         field.typeText(name)
-        waitFor(app.buttons["Open my huddle"]).tap()
+        pickBirthday()
+        let open = app.buttons["Open my huddle"]
+        waitUntilEnabled(open)
+        open.tap()
+    }
+
+    /// Birthday → the wheel → Done; `year`, when given, set on the wheel first.
+    func pickBirthday(year: Int? = nil) {
+        waitFor(app.buttons["Birthday"]).tap()
+        let card = dialog("Your birthday")
+        if let year {
+            let wheels = card.pickerWheels
+            waitFor(wheels.element(boundBy: 2))
+            wheels.element(boundBy: 2).adjust(toPickerWheelValue: String(year))
+        }
+        card.buttons["Done"].tap()
+        waitUntilGone(card)
     }
 
     /// The shelf's + menu.

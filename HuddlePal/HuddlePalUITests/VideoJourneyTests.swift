@@ -22,6 +22,15 @@ final class VideoJourneyTests: HuddleUITestCase {
         // Long enough for the clip to start looping from memory.
         sleep(2)
         snapshot("video detail playing")
+
+        // A tap pauses it, with a play button on it; another tap plays it.
+        player.tap()
+        let paused = expectation(for: NSPredicate(format: "value == 'Paused'"), evaluatedWith: player)
+        wait(for: [paused], timeout: 5)
+        snapshot("video detail paused")
+        player.tap()
+        let playing = expectation(for: NSPredicate(format: "value != 'Paused'"), evaluatedWith: player)
+        wait(for: [playing], timeout: 5)
     }
 
     /// With Plus (Profile → DEBUG), Compose offers Video; the stand-in camera

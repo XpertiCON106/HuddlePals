@@ -21,6 +21,8 @@ final class TermsAgreementTests: XCTestCase {
 
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
+        // The mock keeps its session in the standard defaults: leave it as found.
+        UserDefaults.standard.removeObject(forKey: "huddlepal.mock.signedOutExplicitly")
         try await super.tearDown()
     }
 
@@ -92,6 +94,23 @@ final class TermsAgreementTests: XCTestCase {
         XCTAssertFalse(onboarding.hasReachedEndOfTerms)
         onboarding.agreeToTerms()
         XCTAssertEqual(onboarding.step, .terms, "the earlier scroll doesn't count")
+    }
+
+    func testSomeoneSignedInCanSignOutFromTheTermsToUseAnotherAccount() async {
+        let deps = makeDeps()
+        deps.session.currentUser = User(displayName: "Ada", avatarColorHex: "E5484D")
+        let onboarding = OnboardingViewModel(deps: deps)
+        XCTAssertEqual(onboarding.step, .terms)
+        XCTAssertTrue(onboarding.isSignedIn)
+        XCTAssertEqual(onboarding.signedInName, "Ada")
+
+        await onboarding.signOut()
+
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertFalse(onboarding.isSignedIn)
+        XCTAssertEqual(onboarding.step, .terms, "the Terms still come first")
+        readAndAgree(onboarding)
+        XCTAssertEqual(onboarding.step, .welcome, "then signing in, with any account")
     }
 
     func testAnInterruptedSignUpResumesAtTheProfileAfterAgreeing() {

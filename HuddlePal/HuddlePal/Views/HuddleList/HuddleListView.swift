@@ -119,7 +119,10 @@ private struct HuddleListContent: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            // Only while the shelf is on screen: a refresh lets go of
+            // huddles that are gone, which mustn't happen under an open one.
+            // The shelf refreshes anyway when it's back on top.
+            if phase == .active, router.huddlesPath.isEmpty {
                 Task { await viewModel.refresh() }
             }
         }
@@ -131,7 +134,16 @@ private struct HuddleListContent: View {
         }
     }
 
+    /// A tapped notification: back to the shelf first (the huddle may be
+    /// gone, and checking lets go of it), then into the huddle if it's there.
     private func openNotifiedHuddle() async {
+        guard deps.session.pendingHuddleID != nil else { return }
+        if !router.huddlesPath.isEmpty {
+            // Blocked by unsaved Profile changes: once they're answered, the
+            // shelf appears and this runs again.
+            guard router.popToHuddleList() else { return }
+            try? await Task.sleep(for: .milliseconds(450))
+        }
         if let huddle = await viewModel.takeNotifiedHuddle() {
             router.openHuddle(huddle)
         }
