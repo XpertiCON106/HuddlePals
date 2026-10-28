@@ -238,8 +238,9 @@ class HuddleUITestCase: XCTestCase {
         start.tap()
         waitFor(app.buttons["Continue"]).tap()
         waitFor(app.buttons["Get started"]).tap()
-        if app.buttons["Agree"].waitForExistence(timeout: 3) { agreeToTerms() }
         waitFor(app.buttons["Continue with Apple"]).tap()
+        // The Terms come right after signing in, unless already agreed.
+        if app.buttons["Agree"].waitForExistence(timeout: 3) { agreeToTerms() }
     }
 
     /// Swipes the screen until `element` exists and can be tapped (lists

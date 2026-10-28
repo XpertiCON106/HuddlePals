@@ -77,6 +77,7 @@ final class UnhappyPathTests: HuddleUITestCase {
     func testDecliningTheTermsGoesNowhere() {
         launch()
         waitFor(app.buttons["Decline"], timeout: 20).tap()
+        // Signed out, back on the first welcome card.
         waitFor(app.buttons["Continue"])
         XCTAssertFalse(app.staticTexts["The Crew"].exists, "nothing past the welcome cards without Agree")
     }

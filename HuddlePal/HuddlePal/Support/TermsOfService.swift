@@ -67,10 +67,10 @@ struct TermsOfService {
 }
 
 /// Whether this device's user has agreed to the current Terms. Stored
-/// locally, because the gate stands in front of sign-in, before any account
-/// exists. Persisted like the other settings objects. `TermsRecorder` then
-/// ties the agreement to the account that signs in and records it on the
-/// server.
+/// locally, because the gate stands right after sign-in, before a new
+/// account's profile exists. Persisted like the other settings objects.
+/// `TermsRecorder` then ties the agreement to the account and records it on
+/// the server.
 @Observable
 final class TermsAcceptance {
     private static let versionKey = "huddlepal.terms.acceptedVersion"
@@ -139,9 +139,9 @@ final class TermsAcceptance {
 /// Puts the agreement on the server for the account that's signed in: which
 /// version, when Agree was tapped, and the app build (`terms_acceptances`).
 /// Runs on launch, foreground, sign-in and Agree; a failure waits for the next
-/// of those. The gate stands before sign-in, so the first account signed in
-/// after Agree claims that agreement, and any other account signing in on
-/// this device sees the Terms again and agrees for itself.
+/// of those. The first account signed in after Agree claims that agreement;
+/// any other account signing in on this device sees the Terms again (the
+/// sign-in step withdraws it at once) and agrees for itself.
 @MainActor
 final class TermsRecorder {
     private let terms: TermsAcceptance

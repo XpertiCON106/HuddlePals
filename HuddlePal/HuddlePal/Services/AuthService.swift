@@ -42,7 +42,7 @@ enum AuthError: LocalizedError {
         case .invalidPhone: "Enter a 10-digit US or Canadian number, or start with + and your country code."
         case .invalidCode: "That code didn't match — or it expired. Check it or request a fresh one."
         case .notAuthenticated: "You're not signed in."
-        case .underMinimumAge: "HuddlePals is for people \(Birthday.minimumAge) and older."
+        case .underMinimumAge: "HuddlePals is for people \(Birthday.minimumAge) or older."
         case .provider(let message): message
         }
     }

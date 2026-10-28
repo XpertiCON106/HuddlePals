@@ -136,27 +136,24 @@ final class OnboardingViewModel {
         self.deps = deps
         // Authenticated on a previous run but never finished the profile.
         let start: Step = deps.session.needsProfileSetup ? .profile : .welcome
-        if deps.terms.hasAcceptedCurrentVersion {
-            step = start
-        } else {
-            // The Terms are the first screen anyone sees.
+        let signedIn = deps.session.currentUser != nil || deps.session.needsProfileSetup
+        if signedIn, !deps.terms.hasAcceptedCurrentVersion {
+            // Signed in, but not agreed to these Terms (new ones, or the
+            // sign-up stopped there): they come first.
             stepAfterTerms = start
             step = .terms
+        } else {
+            step = start
         }
     }
 
+    /// The welcome cards lead to sign-in; the Terms come right after it.
     func advanceWelcome() {
         guard isLastWelcomePage else {
             pageIndex += 1
             return
         }
-        if deps.terms.hasAcceptedCurrentVersion {
-            step = .method
-        } else {
-            // Declined earlier: nothing past the welcome cards until Agree.
-            stepAfterTerms = deps.session.needsProfileSetup ? .profile : .method
-            step = .terms
-        }
+        step = .method
     }
 
     // MARK: - Terms of Service
@@ -183,20 +180,19 @@ final class OnboardingViewModel {
 
     var signedInName: String? { deps.session.currentUser?.displayName }
 
-    /// Signs out and stays on the Terms, which come before signing in again.
+    /// Signs out, back to the first welcome card: signing in again (with
+    /// any account) brings the Terms back, to be read to the end again.
     func signOut() async {
         await deps.signOut()
         hasReachedEndOfTerms = false
+        pageIndex = 0
         stepAfterTerms = .welcome
-        step = .terms
+        step = .welcome
     }
 
-    /// Back to the first welcome card. "Get started" brings the Terms back,
-    /// to be read to the end again.
-    func declineTerms() {
-        hasReachedEndOfTerms = false
-        pageIndex = 0
-        step = .welcome
+    /// Not agreeing: nothing goes past the Terms, so this signs out.
+    func declineTerms() async {
+        await signOut()
     }
 
     // MARK: - Email / phone code flow
@@ -423,11 +419,9 @@ final class OnboardingViewModel {
     /// Under the minimum age: signs out of the account just made, and back
     /// to the start. The age stays as given.
     func signOutUnderage() async {
-        await deps.signOut()
         createdUser = nil
         uploadedPhotoPaths = []
-        pageIndex = 0
-        step = deps.terms.hasAcceptedCurrentVersion ? .welcome : .terms
+        await signOut()
     }
 
     // MARK: - Shared
@@ -441,10 +435,28 @@ final class OnboardingViewModel {
             if let suggestedName, displayName.isEmpty {
                 displayName = suggestedName
             }
-            step = .profile
+            // A new account agrees for itself: an agreement this device has
+            // already tied to an account is someone else's.
+            if deps.terms.claimedBy != nil { deps.terms.withdraw() }
+            afterSignIn(go: .profile)
             Haptics.light()
         case .signedIn(let user):
+            if let claimant = deps.terms.claimedBy, claimant != user.id { deps.terms.withdraw() }
+            // Not agreed yet: the Terms show (RootView keeps onboarding up
+            // until Agree), then the app. Agreed: straight in.
+            if !deps.terms.hasAcceptedCurrentVersion { afterSignIn(go: .welcome) }
             await finishSignIn(user)
+        }
+    }
+
+    /// Right after sign-in: the Terms if they aren't agreed to yet, then `next`.
+    private func afterSignIn(go next: Step) {
+        if deps.terms.hasAcceptedCurrentVersion {
+            step = next
+        } else {
+            hasReachedEndOfTerms = false
+            stepAfterTerms = next
+            step = .terms
         }
     }
 

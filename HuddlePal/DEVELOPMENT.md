@@ -198,9 +198,10 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   without one (`AppSession.needsBirthday`, checked at sign-in). Only the
   owner reads or changes it (`profile_birthdates`, migration 016); Profile
   shows it and saves a change straight away, outside the draft. Under 13
-  (`Birthday.minimumAge`, the Terms' 2.1) stops there with Sign out, the
-  given age can't be changed to get past, and the server refuses it too,
-  with a day's leeway for time zones.
+  (`Birthday.minimumAge`, the Terms' 2.1), only "HuddlePals is for people
+  13 or older." shows (`UnderageNotice`), with Sign out: nothing of the
+  page, so the given age can't be changed to get past. The server refuses
+  it too, with a day's leeway for time zones.
 - **Videos** play and pause from a button on their corner, next to the
   sound; on the detail screen a tap on the video does it too (in the feed a
   tap turns the sound on). One paused by hand stays paused.
@@ -268,10 +269,13 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
   the Terms again. Live only. A material change to the Terms must bump
   `TermsOfService.version` (a test compares it with "Last updated"), and
   the same text belongs at huddlepals.com/terms.
-- **Onboarding**: Terms → welcome cards → Sign in with Apple → profile
-  (photos, name, birthday, bio, colour). `needsProfileSetup` resumes an
-  unfinished sign-up. Someone already signed in (a new Terms version, an
-  unfinished profile) can sign out from the Terms screen. The first welcome
+- **Onboarding**: welcome cards → Sign in with Apple → Terms → profile
+  (photos, name, birthday, bio, colour). The Terms come right after
+  sign-in, before the profile or the app, for each account (an agreement
+  this device already tied to another account is withdrawn at sign-in);
+  Decline signs out. `needsProfileSetup` resumes an unfinished sign-up,
+  Terms first if they aren't agreed. Someone already signed in (a new Terms
+  version, an unfinished profile) can also sign out from the Terms screen. The first welcome
   card's picture is `DayGoesByScene`, behind the whole screen: a day passes
   and each day's print clips onto a line, all from one clock (a
   `TimelineView`), so it loops without drifting. The other two cards have

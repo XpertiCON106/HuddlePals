@@ -11,6 +11,16 @@ struct BirthdayCheckView: View {
     @State private var errorMessage: String?
 
     var body: some View {
+        if isUnderage {
+            UnderageNotice {
+                Task { await deps.signOut() }
+            }
+        } else {
+            question
+        }
+    }
+
+    private var question: some View {
         ScrollView {
             VStack(spacing: 22) {
                 Image(systemName: "gift.fill")
@@ -30,43 +40,22 @@ struct BirthdayCheckView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                if isUnderage {
-                    VStack(spacing: 12) {
-                        Text("HuddlePals is for people \(Birthday.minimumAge) and older.")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .multilineTextAlignment(.center)
-                        Text("Thanks for being honest. This account can't be used yet.")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Theme.textSecondary)
-                            .multilineTextAlignment(.center)
-                        Button {
-                            Task { await deps.signOut() }
-                        } label: {
-                            Text("Sign out")
-                        }
-                        .buttonStyle(ActionButtonStyle(role: .secondary))
-                    }
-                    .padding(16)
+                DatePicker("Birthday", selection: $wheel, in: ...Date.now, displayedComponents: .date)
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
                     .cardSurface()
-                } else {
-                    DatePicker("Birthday", selection: $wheel, in: ...Date.now, displayedComponents: .date)
-                        .datePickerStyle(.wheel)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
-                        .cardSurface()
 
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Theme.destructive)
-                            .multilineTextAlignment(.center)
-                    }
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.destructive)
+                        .multilineTextAlignment(.center)
+                }
 
-                    PrimaryButton(title: "Continue", isLoading: isSaving) {
-                        Task { await save() }
-                    }
+                PrimaryButton(title: "Continue", isLoading: isSaving) {
+                    Task { await save() }
                 }
             }
             .padding(.horizontal, Theme.screenPadding)
@@ -91,5 +80,31 @@ struct BirthdayCheckView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+/// Under the minimum age: only this, and a way out. Shown in place of the
+/// whole page, on the sign-up profile step and the one-time birthday question.
+struct UnderageNotice: View {
+    let signOut: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text("HuddlePals is for people \(Birthday.minimumAge) or older.")
+                .font(Theme.displayFont(24))
+                .foregroundStyle(Theme.textPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Button(action: signOut) {
+                Text("Sign out")
+            }
+            .buttonStyle(ActionButtonStyle(role: .secondary))
+        }
+        .padding(20)
+        .cardSurface()
+        .padding(.horizontal, Theme.screenPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
     }
 }

@@ -3,11 +3,10 @@ import XCTest
 
 @testable import HuddlePal
 
-/// The Terms of Service gate: the Terms come first, Agree works only after
-/// scrolling to the end, Decline returns to the first welcome card, nothing
-/// past the welcome cards opens until Agree, and the agreement is remembered
-/// per Terms version. Uses its own defaults
-/// suite so the test host's real acceptance is never touched.
+/// The Terms of Service gate: right after sign-in, before the profile or the
+/// app, Agree works only after scrolling to the end, Decline signs out, and
+/// the agreement is remembered per Terms version and per account. Uses its
+/// own defaults suite so the test host's real acceptance is never touched.
 @MainActor
 final class TermsAgreementTests: XCTestCase {
     private var suiteName: String!
@@ -22,7 +21,9 @@ final class TermsAgreementTests: XCTestCase {
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
         // The mock keeps its session in the standard defaults: leave it as found.
-        UserDefaults.standard.removeObject(forKey: "huddlepal.mock.signedOutExplicitly")
+        for key in ["huddlepal.mock.signedOutExplicitly", "huddlepal.mock.pendingIdentity", "huddlepal.mock.currentUserID"] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
         try await super.tearDown()
     }
 
@@ -38,41 +39,60 @@ final class TermsAgreementTests: XCTestCase {
 
     // MARK: Gate
 
-    func testTermsAreTheFirstScreenUntilAgreed() {
-        XCTAssertEqual(OnboardingViewModel(deps: makeDeps()).step, .terms)
-    }
-
-    func testDeclineReturnsToTheFirstWelcomeCardWithoutAgreeing() {
+    /// Someone already signed in who hasn't agreed (new Terms, or the
+    /// sign-up stopped at them).
+    private func signedInOnboarding() -> (AppDependencies, OnboardingViewModel) {
         let deps = makeDeps()
-        let onboarding = OnboardingViewModel(deps: deps)
-        onboarding.pageIndex = 2
-        onboarding.declineTerms()
-        XCTAssertEqual(onboarding.step, .welcome)
-        XCTAssertEqual(onboarding.pageIndex, 0, "back to \"One photo a day\"")
-        XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
+        deps.session.currentUser = User(displayName: "Ada", avatarColorHex: "E5484D")
+        return (deps, OnboardingViewModel(deps: deps))
     }
 
-    func testGetStartedAfterDecliningAsksAgainThenContinuesToSignIn() {
+    func testSignedOutTheWelcomeCardsLeadStraightToSignIn() {
         let onboarding = OnboardingViewModel(deps: makeDeps())
-        onboarding.declineTerms()
+        XCTAssertEqual(onboarding.step, .welcome, "no Terms before signing in")
         onboarding.pageIndex = OnboardingViewModel.cards.count - 1
         onboarding.advanceWelcome()
-        XCTAssertEqual(onboarding.step, .terms, "no way past the welcome cards without Agree")
-        readAndAgree(onboarding)
         XCTAssertEqual(onboarding.step, .method)
     }
 
-    func testAgreeingFirstShowsTheWelcomeCards() {
-        let onboarding = OnboardingViewModel(deps: makeDeps())
+    func testANewAccountAgreesRightAfterSignInThenMakesItsProfile() async {
+        let deps = makeDeps()
+        let onboarding = OnboardingViewModel(deps: deps)
+        onboarding.pageIndex = OnboardingViewModel.cards.count - 1
+        onboarding.advanceWelcome()
+        await onboarding.mockAppleSignIn()
+        XCTAssertEqual(onboarding.step, .terms, "the Terms before the profile")
+        XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
         readAndAgree(onboarding)
+        XCTAssertEqual(onboarding.step, .profile)
+        XCTAssertTrue(deps.terms.hasAcceptedCurrentVersion)
+    }
+
+    func testANewAccountAgreesForItselfEvenIfThisDeviceAgreedForAnother() async {
+        let deps = makeDeps()
+        deps.terms.accept(at: .now)
+        deps.terms.claim(for: UUID()) // someone else's agreement
+        let onboarding = OnboardingViewModel(deps: deps)
+        await onboarding.mockAppleSignIn()
+        XCTAssertEqual(onboarding.step, .terms)
+        XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
+    }
+
+    func testDeclineSignsOutBackToTheFirstWelcomeCard() async {
+        let (deps, onboarding) = signedInOnboarding()
+        XCTAssertEqual(onboarding.step, .terms)
+        onboarding.pageIndex = 2
+        await onboarding.declineTerms()
         XCTAssertEqual(onboarding.step, .welcome)
+        XCTAssertEqual(onboarding.pageIndex, 0, "back to \"One photo a day\"")
+        XCTAssertNil(deps.session.currentUser, "signed out")
+        XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
     }
 
     // MARK: Scroll to the end
 
     func testAgreeDoesNothingUntilTheTermsAreScrolledToTheEnd() {
-        let deps = makeDeps()
-        let onboarding = OnboardingViewModel(deps: deps)
+        let (deps, onboarding) = signedInOnboarding()
         XCTAssertFalse(onboarding.hasReachedEndOfTerms, "Agree starts disabled")
         onboarding.agreeToTerms()
         XCTAssertEqual(onboarding.step, .terms)
@@ -84,12 +104,13 @@ final class TermsAgreementTests: XCTestCase {
         XCTAssertTrue(deps.terms.hasAcceptedCurrentVersion)
     }
 
-    func testDecliningMeansScrollingToTheEndAgain() {
-        let onboarding = OnboardingViewModel(deps: makeDeps())
+    func testDecliningMeansScrollingToTheEndAgain() async {
+        let (_, onboarding) = signedInOnboarding()
         onboarding.termsReachedEnd()
-        onboarding.declineTerms()
+        await onboarding.declineTerms()
         onboarding.pageIndex = OnboardingViewModel.cards.count - 1
         onboarding.advanceWelcome()
+        await onboarding.mockAppleSignIn()
         XCTAssertEqual(onboarding.step, .terms)
         XCTAssertFalse(onboarding.hasReachedEndOfTerms)
         onboarding.agreeToTerms()
@@ -97,9 +118,7 @@ final class TermsAgreementTests: XCTestCase {
     }
 
     func testSomeoneSignedInCanSignOutFromTheTermsToUseAnotherAccount() async {
-        let deps = makeDeps()
-        deps.session.currentUser = User(displayName: "Ada", avatarColorHex: "E5484D")
-        let onboarding = OnboardingViewModel(deps: deps)
+        let (deps, onboarding) = signedInOnboarding()
         XCTAssertEqual(onboarding.step, .terms)
         XCTAssertTrue(onboarding.isSignedIn)
         XCTAssertEqual(onboarding.signedInName, "Ada")
@@ -108,9 +127,7 @@ final class TermsAgreementTests: XCTestCase {
 
         XCTAssertNil(deps.session.currentUser)
         XCTAssertFalse(onboarding.isSignedIn)
-        XCTAssertEqual(onboarding.step, .terms, "the Terms still come first")
-        readAndAgree(onboarding)
-        XCTAssertEqual(onboarding.step, .welcome, "then signing in, with any account")
+        XCTAssertEqual(onboarding.step, .welcome, "back to the start, to sign in with any account")
     }
 
     func testAnInterruptedSignUpResumesAtTheProfileAfterAgreeing() {
@@ -133,13 +150,15 @@ final class TermsAgreementTests: XCTestCase {
         XCTAssertTrue(relaunched.hasAcceptedCurrentVersion)
         XCTAssertEqual(relaunched.acceptedVersion, TermsOfService.version)
         XCTAssertGreaterThanOrEqual(try XCTUnwrap(relaunched.acceptedAt), before.addingTimeInterval(-1))
-        XCTAssertEqual(OnboardingViewModel(deps: makeDeps()).step, .welcome, "agreed once, not asked again")
+        let returning = makeDeps()
+        returning.session.needsProfileSetup = true
+        XCTAssertEqual(OnboardingViewModel(deps: returning).step, .profile, "agreed once, not asked again")
     }
 
     func testAgreementToAnEarlierVersionAsksAgain() {
         defaults.set("2000-01-01", forKey: "huddlepal.terms.acceptedVersion")
         XCTAssertFalse(TermsAcceptance(defaults: defaults).hasAcceptedCurrentVersion)
-        XCTAssertEqual(OnboardingViewModel(deps: makeDeps()).step, .terms)
+        XCTAssertEqual(signedInOnboarding().1.step, .terms)
     }
 
     // MARK: Server record

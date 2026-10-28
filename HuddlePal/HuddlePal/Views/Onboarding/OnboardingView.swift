@@ -2,11 +2,11 @@ import AuthenticationServices
 import PhotosUI
 import SwiftUI
 
-/// Onboarding: the Terms of Service (Agree required; Decline returns to the
-/// first concept card) → concept cards → sign-in method (Apple; email /
-/// phone only when `FeatureFlags.emailAndPhoneSignInEnabled`) → code →
-/// profile (name + avatar). Returning accounts skip the profile step
-/// automatically.
+/// Onboarding: concept cards → sign-in method (Apple; email / phone only
+/// when `FeatureFlags.emailAndPhoneSignInEnabled`) → code → the Terms of
+/// Service (Agree required; Decline signs out, back to the first card) →
+/// profile. Returning accounts skip the profile step, and the Terms once
+/// they've agreed to the current ones.
 struct OnboardingView: View {
     @Environment(AppDependencies.self) private var deps
     @State private var viewModel: OnboardingViewModel?
@@ -99,7 +99,7 @@ private struct TermsStep: View {
                     withAnimation { viewModel.agreeToTerms() }
                 }
                 Button {
-                    withAnimation { viewModel.declineTerms() }
+                    Task { await viewModel.declineTerms() }
                 } label: {
                     // The frame inside the label: outside it, only the
                     // word itself was tappable.
@@ -460,6 +460,17 @@ private struct ProfileStep: View {
     }
 
     var body: some View {
+        if viewModel.isUnderage {
+            // Under 13: nothing of the profile page, just this and a way out.
+            UnderageNotice {
+                Task { await viewModel.signOutUnderage() }
+            }
+        } else {
+            form
+        }
+    }
+
+    private var form: some View {
         ScrollView {
             VStack(spacing: 22) {
                 VStack(spacing: 14) {
@@ -498,7 +509,7 @@ private struct ProfileStep: View {
                     BirthdayRow(birthday: viewModel.birthday) { viewModel.birthdayPicked($0) }
                         .font(.system(size: 17))
                         .modifier(FormField())
-                        .disabled(viewModel.isUnderage || viewModel.isWorking)
+                        .disabled(viewModel.isWorking)
 
                     VStack(alignment: .trailing, spacing: 4) {
                         TextField("A short bio (optional)", text: $viewModel.bio, axis: .vertical)
@@ -537,18 +548,14 @@ private struct ProfileStep: View {
                         .multilineTextAlignment(.center)
                 }
 
-                if viewModel.isUnderage {
-                    underage
-                } else {
-                    PrimaryButton(
-                        title: "Open my huddle",
-                        systemImage: "lock.open",
-                        isLoading: viewModel.isWorking,
-                        isEnabled: viewModel.canCompleteProfile
-                    ) {
-                        focused = nil
-                        Task { await viewModel.completeProfile() }
-                    }
+                PrimaryButton(
+                    title: "Open my huddle",
+                    systemImage: "lock.open",
+                    isLoading: viewModel.isWorking,
+                    isEnabled: viewModel.canCompleteProfile
+                ) {
+                    focused = nil
+                    Task { await viewModel.completeProfile() }
                 }
             }
             .padding(.horizontal, Theme.screenPadding)
@@ -613,27 +620,6 @@ private struct ProfileStep: View {
         }
         .frame(maxWidth: .infinity)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.photos.count)
-    }
-
-    private var underage: some View {
-        VStack(spacing: 12) {
-            Text("HuddlePals is for people \(Birthday.minimumAge) and older.")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .multilineTextAlignment(.center)
-            Text("Thanks for being honest. You can't make a profile yet.")
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-            Button {
-                Task { await viewModel.signOutUnderage() }
-            } label: {
-                Text("Sign out")
-            }
-            .buttonStyle(ActionButtonStyle(role: .secondary))
-        }
-        .padding(16)
-        .cardSurface()
     }
 }
 

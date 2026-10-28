@@ -10,7 +10,7 @@ Every service is a protocol with two implementations — a seeded offline **mock
 
 1. Open `HuddlePal.xcodeproj` in **Xcode 16**.
 2. Select the **HuddlePal** scheme and any **iOS 17+** simulator.
-3. ⌘R. A hug-mark launch animation, then the **Terms of Service** (first launch, or after the Terms' version changes): scroll to the end, then tap **Agree** to continue (Decline returns to the welcome cards). It lands on the **Huddles** shelf: two seeded huddles ("The Crew" 🏔 and "Sunday Dinners" 🍝), both LOCKED — the other members deposited today; you haven't.
+3. ⌘R. A hug-mark launch animation, then the **Terms of Service** (the mock signs the seeded account in on first launch, and the Terms come right after sign-in; again after the Terms' version changes): scroll to the end, then tap **Agree** to continue (Decline signs out, back to the welcome cards). It lands on the **Huddles** shelf: two seeded huddles ("The Crew" 🏔 and "Sunday Dinners" 🍝), both LOCKED — the other members deposited today; you haven't.
 4. Tap **Add today's memory** → take a photo with the camera (deposits are camera-only; on the Simulator, which has no camera, Compose shows a "no camera" state — run on a device to deposit), confirm the permanence prompt → the lock springs open and today is revealed.
 5. ⌘U runs the test suite (engine rules, critical mock flows, live sync reconciliation, sign-in input, profile editor, photo encryption).
 
@@ -100,7 +100,7 @@ HuddlePal/
     ├── AuthInputTests.swift            Session persistence, phone input, code length
     ├── ProfileConfirmationTests.swift  Profile editor's confirmed-draft rules
     ├── PhotoEncryptionTests.swift      E2EE: key wrap, photo seal/open, report disclosure
-    ├── TermsAgreementTests.swift       Terms gate: first screen, Decline, re-ask per version
+    ├── TermsAgreementTests.swift       Terms gate: after sign-in, Decline signs out, re-ask per version
     ├── PlanRulesTests.swift            The free plan's and Plus's rules, the archive window
     ├── PlusServiceTests.swift          StoreKit 2 via SKTestSession (StoreKit/HuddlePalsPlus.storekit)
     ├── PlusGateTests.swift             The paywall and every gate's view model
@@ -198,4 +198,4 @@ It builds with `Supabase.plist` excluded, so a test run can never reach the live
 - `ProfileConfirmationTests` covers the profile editor's confirmed-draft and dirty-exit rules.
 - `PhotoEncryptionTests` covers the E2EE crypto: huddle-key wrap/unwrap, photo seal/open, wrong keys failing cleanly, a report's key opening only that photo, the identity key's Keychain round-trip, and the store carrying the wrapped photo key.
 - `PlanRulesTests`, `PlanLimitTests`, `PlusServiceTests` and `PlusGateTests` cover HuddlePals+ and the free plan: the rules, the mock server's caps, StoreKit 2 through `SKTestSession` (purchase, restore, renewals and refunds while the app runs), and the paywall and gates. `VideoDropTests` covers video drops from recording to playback. `PlusJourneyTests` and `VideoJourneyTests` walk them in the UI.
-- `TermsAgreementTests` covers the Terms of Service gate: the Terms come first, Agree works only after scrolling to the end, Decline returns to the first welcome card, nothing past the cards opens without Agree, and agreement persists per `TermsOfService.version` (which must match the Terms' "Last updated" date).
+- `TermsAgreementTests` covers the Terms of Service gate: the Terms come right after sign-in (before the profile or the app, for each account), Agree works only after scrolling to the end, Decline signs out back to the first welcome card, and agreement persists per `TermsOfService.version` (which must match the Terms' "Last updated" date).
