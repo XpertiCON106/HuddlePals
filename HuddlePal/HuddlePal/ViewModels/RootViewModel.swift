@@ -42,5 +42,7 @@ final class RootViewModel {
         await deps.push.refresh()
         await deps.termsRecorder?.refresh()
         await deps.plus.refresh()
+        // After Plus is known: nobody with it gets a reminder about it.
+        await deps.plusPromo.refresh()
     }
 }

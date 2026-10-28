@@ -8,11 +8,21 @@ final class PlusJourneyTests: HuddleUITestCase {
         app.staticTexts[text]
     }
 
+    /// Bought: the welcome stays up until Continue.
+    private func continueFromWelcome(file: StaticString = #filePath, line: UInt = #line) {
+        let welcome = waitFor(app.staticTexts["Welcome to HuddlePals+"], timeout: 10, "the welcome screen", file: file, line: line)
+        XCTAssertFalse(app.buttons["Close"].exists, "the welcome closes with Continue", file: file, line: line)
+        sleep(2)
+        XCTAssertTrue(welcome.exists, "the welcome doesn't close by itself", file: file, line: line)
+        app.buttons["welcomeContinue"].tap()
+        waitUntilGone(welcome, timeout: 10, file: file, line: line)
+    }
+
     /// Price, period, renewal terms, the Terms of Use / Terms / Privacy links
     /// and Restore Purchases (guideline 3.1.2); buying turns Plus on.
     func testThePaywallShowsWhatAppleAsksAndBuyingTurnsPlusOn() {
         launchToShelf()
-        openTab("Profile")
+        openProfile()
         let getPlus = app.buttons["Get HuddlePals+"]
         scrollTo(getPlus)
         getPlus.tap()
@@ -30,9 +40,9 @@ final class PlusJourneyTests: HuddleUITestCase {
         snapshot("paywall")
 
         app.buttons["Try it free for 1 week"].tap()
-        // It says so for a moment, then closes itself.
         waitUntilGone(terms, timeout: 10)
-        waitUntilGone(app.buttons["Close"], timeout: 10)
+        snapshot("plus welcome")
+        continueFromWelcome()
         let summary = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Current period ends'")).firstMatch
         XCTAssertTrue(summary.waitForExistence(timeout: 5), "Profile shows Plus on, with its period")
         XCTAssertFalse(app.buttons["Get HuddlePals+"].exists)
@@ -54,9 +64,8 @@ final class PlusJourneyTests: HuddleUITestCase {
         waitFor(paywallHeadline("Unlock your full huddle archive with HuddlePals+"))
         snapshot("archive paywall")
 
-        let terms = app.staticTexts["renewalTerms"]
         app.buttons["Try it free for 1 week"].tap()
-        waitUntilGone(terms, timeout: 10)
+        continueFromWelcome()
         let opened = expectation(for: NSPredicate(format: "count == 0"), evaluatedWith: lockedTiles)
         wait(for: [opened], timeout: 10)
         // The same tile, where it was, now opens.
@@ -75,6 +84,7 @@ final class PlusJourneyTests: HuddleUITestCase {
         waitFor(app.buttons["Video · Plus"]).tap()
         waitFor(paywallHeadline("Post 6-second video drops with HuddlePals+"))
         app.buttons["Try it free for 1 week"].tap()
+        continueFromWelcome()
         waitFor(app.buttons["Record test video"], timeout: 15)
     }
 
@@ -110,13 +120,13 @@ final class PlusJourneyTests: HuddleUITestCase {
             waitFor(app.buttons["Back to my huddles"], timeout: 15).tap()
         }
 
-        openTab("Profile")
+        openProfile()
         let plus = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: HuddlePals+'")).firstMatch
         scrollTo(plus, maxSwipes: 25)
         plus.switches.firstMatch.tap()
         XCTAssertEqual(plus.switches.firstMatch.value as? String, "0", "Plus has ended")
 
-        openTab("Huddles")
+        backToShelf()
         openHuddle("Fourth")
         waitFor(app.buttons["Huddle settings"]).tap()
         let paused = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'invites to this one are paused'")).firstMatch
@@ -132,7 +142,7 @@ final class PlusJourneyTests: HuddleUITestCase {
     /// confirmation says so (App Review 5.1.1(v)).
     func testDeletingTheAccountWithPlusWarnsThatAppleKeepsBilling() {
         launchToShelf(arguments: ["-ui-testing-plus"])
-        openTab("Profile")
+        openProfile()
         let delete = app.buttons["Delete account"]
         scrollTo(delete, maxSwipes: 25)
         delete.tap()
@@ -149,6 +159,68 @@ final class PlusJourneyTests: HuddleUITestCase {
         }
         waitUntilGone(warning)
         XCTAssertTrue(app.buttons["Delete account"].exists, "still signed in")
+    }
+
+    /// This Apple Account already has Plus (here, another account's): the
+    /// paywall puts Restore Purchases where buying was, and restoring says
+    /// where the subscription is, in an alert that can't be missed.
+    func testAnAppleAccountWithPlusIsOfferedRestoreNotBuying() {
+        launchToShelf()
+        openProfile()
+        let elsewhere = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: subscription linked elsewhere'")).firstMatch
+        scrollTo(elsewhere, maxSwipes: 25)
+        elsewhere.switches.firstMatch.tap()
+        // The Plan section is further up: back to the top of Profile.
+        openProfile()
+        let getPlus = app.buttons["Get HuddlePals+"]
+        scrollTo(getPlus)
+        getPlus.tap()
+
+        waitFor(app.staticTexts["You already have HuddlePals+"], timeout: 10)
+        XCTAssertFalse(app.buttons["Try it free for 1 week"].exists, "nothing to buy twice")
+        XCTAssertFalse(app.staticTexts["renewalTerms"].exists)
+        snapshot("paywall restore instead")
+        app.buttons["restoreInstead"].tap()
+        let alert = waitFor(app.alerts["This Apple Account already has HuddlePals+"], timeout: 10)
+        XCTAssertTrue(alert.staticTexts.matching(NSPredicate(format: "label CONTAINS 'linked to another HuddlePals account'")).firstMatch.exists)
+        alert.buttons["OK"].tap()
+        waitUntilGone(alert)
+        waitFor(app.descendants(matching: .any)["paywallMessage"], timeout: 5, "and it stays said on the page")
+    }
+
+    /// After the first post opens a huddle, HuddlePals+ is introduced once;
+    /// "Remind me later" asks for notifications, and Profile can turn the
+    /// reminders off again.
+    func testTheFirstPostIntroducesPlusOnceAndRemindersAreOptIn() {
+        launchToShelf(arguments: ["-ui-testing-plus-intro"])
+        openHuddle("The Crew")
+        depositPhoto(caption: "First")
+        waitFor(app.staticTexts["Your huddle is open"], timeout: 20, "the intro")
+        snapshot("plus intro")
+        waitFor(app.buttons["Remind me later"]).tap()
+        answerSystemAlert("Allow", timeout: 5)
+        waitUntilGone(app.staticTexts["Your huddle is open"], timeout: 10)
+        waitFor(app.staticTexts["First"], timeout: 10)
+
+        openProfile()
+        let reminders = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'HuddlePals+ reminders'")).firstMatch
+        scrollTo(reminders)
+        XCTAssertEqual(reminders.switches.firstMatch.value as? String, "1", "asked for on the intro")
+        reminders.switches.firstMatch.tap()
+        XCTAssertEqual(reminders.switches.firstMatch.value as? String, "0", "and off again")
+    }
+
+    /// See HuddlePals+ on the intro leads to the plans, in the same sheet.
+    func testTheIntroLeadsToThePlans() {
+        launchToShelf(arguments: ["-ui-testing-plus-intro"])
+        openHuddle("The Crew")
+        depositPhoto()
+        waitFor(app.buttons["See HuddlePals+"], timeout: 20).tap()
+        waitFor(paywallHeadline("More room for your huddles with HuddlePals+"))
+        waitFor(app.staticTexts["renewalTerms"])
+        app.buttons["Close"].tap()
+        waitUntilGone(app.staticTexts["renewalTerms"])
+        waitFor(app.buttons["Archive"], timeout: 10, "back in the huddle")
     }
 
     /// The Crew is 4 people: full on the free plan, so its settings explain

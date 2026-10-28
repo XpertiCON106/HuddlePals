@@ -401,7 +401,7 @@ private struct ComposeContent: View {
                     Button {
                         paywall = .video
                     } label: {
-                        Label("Renew Plus", systemImage: "sparkles")
+                        Label("Renew Plus", systemImage: "arrow.clockwise")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Theme.textPrimary)
                             .padding(.horizontal, 16)

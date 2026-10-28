@@ -163,6 +163,16 @@ final class LivePlusService: PlusServiceProtocol {
         return false
     }
 
+    func hasAppleSubscription() async -> Bool {
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result, PlusCatalog.productIDs.contains(transaction.productID),
+               transaction.revocationDate == nil {
+                return true
+            }
+        }
+        return false
+    }
+
     func reset() {
         status = nil
         statusUserID = nil

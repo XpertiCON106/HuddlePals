@@ -217,16 +217,15 @@ private struct SettingsContent: View {
                     Button {
                         showPaywall = true
                     } label: {
-                        Label("Get HuddlePals+", systemImage: "sparkles")
+                        Text("Get HuddlePals+")
                     }
                     .listRowBackground(Theme.surface)
                 }
             } else if let code = viewModel.inviteCode {
-                Text(code.displayed)
-                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Theme.accent)
-                    .textSelection(.enabled)
+                CodeTiles(invite: code, fontSize: 15)
+                    .accessibilityLabel(code.displayed)
                     .accessibilityIdentifier("inviteCode")
+                    .padding(.vertical, 4)
                     .listRowBackground(Theme.surface)
                 HStack {
                     Button {
@@ -353,13 +352,9 @@ private struct KeyCheckSheet: View {
                 Text("Before \(name)'s phone gets this huddle's key, make sure it's really them. In person or on a call, ask them to open Profile and read you their key code. It should match this one exactly:")
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.textSecondary)
-                Text(KeyCode.twoLines(check.code))
-                    .font(.system(size: 26, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
+                CodeTiles(keyCode: check.code, fontSize: 22)
+                    .padding(12)
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
-                    .textSelection(.enabled)
                     .accessibilityLabel("Key code \(check.code)")
                     .accessibilityIdentifier("keyCheckCode")
                 Text("If the codes are different, don't share. Ask \(name) to try again later, and tell us at hello@huddlepals.com if they still don't match.")

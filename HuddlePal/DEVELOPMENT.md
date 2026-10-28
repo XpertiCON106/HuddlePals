@@ -60,7 +60,7 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   `HuddlePalApp.init` and passed through the environment. It holds the
   model container, engine, clock (`AppDateProvider`), `AppSession`, debug
   and appearance settings, Terms acceptance, the services, the seeder,
-  `reminders` and `push`.
+  `reminders`, `push` and `plusPromo`.
 - **`AppSession`**: `currentUser`, `blockedUserIDs`, `pendingInviteCode`
   (from an invite link, `InviteLink`), `pendingHuddleID` (from a tapped
   notification), `needsProfileSetup`, `isReady`, and `photoKeysVersion`
@@ -81,10 +81,14 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   Live also has `LivePhotoKeyring` (identity key, huddle keys, invites),
   shared by the live services and deliberately not a protocol: the mock has
   nothing to hide photos from.
-- **Navigation**: two tabs, Huddles and Profile. Huddles is one
-  `NavigationStack` (`router.huddlesPath` of typed `Route`s): shelf → huddle
-  home → archive / photo / settings / member profile. Home, Archive and
-  Compose view models take their huddle in `init`.
+- **Navigation**: no tabs. One `NavigationStack` (`router.huddlesPath` of
+  typed `Route`s, in `MainView`): the shelf → huddle home → archive / photo
+  / settings / member profile, and Profile (`.profile`) from the shelf's
+  top right, next to + (create or join). Every way off an unsaved Profile
+  (Back, a deep link, a tapped notification) goes through the router's
+  guard, which shows Unsaved Changes first; while there are unsaved
+  changes, Profile swaps the system Back for its own and swipe-back is off.
+  Home, Archive and Compose view models take their huddle in `init`.
 - **View pattern**: the screen holds `@State var viewModel: VM?`, creates it
   in `.onAppear` with `deps`, and an inner `…Content` view takes
   `@Bindable var viewModel`.
@@ -242,6 +246,17 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
   nudge plus up to two follow-ups a day), rebuilt on launch, foreground,
   after posting and on settings change, and silent today once you've posted
   everywhere.
+- **HuddlePals+ intro and reminders** are local too
+  (`Support/PlusPromotion.swift`, `deps.plusPromo`). After the unlock reveal
+  of a first post, `PlusIntroSheet` introduces Plus once (never to someone
+  who has it): See HuddlePals+ (the paywall, in the same sheet), Remind me
+  later, or Not now. Remind me later is the opt-in that promotional
+  notifications need (guideline 4.5.4): it asks for notification permission
+  and keeps one reminder pending, on a random day 14 to 28 days out at a
+  random time from 10:00 to 18:59. When the app opens after it came due, it
+  picks the next. Plus, sign-out, or Profile → Reminders → HuddlePals+
+  reminders cancels it; tapping one opens the paywall. UI tests see the
+  intro only with `-ui-testing-plus-intro`.
 - **Activity pushes** come from the server (`Support/PushNotifications.swift`,
   `deps.push`): a new photo (every other member), a comment or reaction on
   your photo (you), someone joining (the members already there). Never the
@@ -319,8 +334,11 @@ codes, tokens and keys are never logged.
   real server refuses, so it's no use against Supabase.
 - **Where the free plan shows** (never with Plus): every gate opens `PaywallView` for its `PaywallContext`
   (price, period, trial, renewal terms, Terms of Use / Terms / Privacy links,
-  Restore Purchases, as guideline 3.1.2 asks), which closes itself once Plus
-  is on. Archive days past the last 30 show who posted, locked, and never
+  Restore Purchases, as guideline 3.1.2 asks). Once Plus is on, it shows a
+  welcome with what's unlocked until Continue. When this Apple Account
+  already has Plus (`hasAppleSubscription()`), Restore Purchases takes the
+  plans' place, so nobody buys it twice; a subscription linked to another
+  account is also said in an alert. Archive days past the last 30 show who posted, locked, and never
   load their media (`ArchiveGate`, which takes "today" as the latest of the
   phone's day, the server's and the newest deposit's, so setting the clock
   back opens nothing; the server doesn't hold these back). Compose shows

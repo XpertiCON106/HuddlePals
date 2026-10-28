@@ -49,7 +49,6 @@ final class KeyCheckTests: XCTestCase {
         XCTAssertEqual(code, KeyCode.code(for: benIdentity.publicKey, userID: benID), "the same every time")
         XCTAssertNotEqual(code, KeyCode.code(for: adaIdentity.publicKey, userID: benID), "another key, another code")
         XCTAssertNotEqual(code, KeyCode.code(for: benIdentity.publicKey, userID: adaID), "another account, another code")
-        XCTAssertEqual(KeyCode.twoLines("11111 22222 33333 44444 55555 66666"), "11111 22222 33333\n44444 55555 66666")
     }
 
     func testCheckedKeysSurviveInTheKeychainUntilTheAccountGoes() {

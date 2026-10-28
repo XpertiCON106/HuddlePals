@@ -14,7 +14,7 @@ enum PlaceholderImageGenerator {
 
     private static let symbols = [
         "mountain.2.fill", "sun.max.fill", "leaf.fill", "cup.and.saucer.fill",
-        "pawprint.fill", "figure.hiking", "sparkles", "camera.macro",
+        "pawprint.fill", "figure.hiking", "leaf.fill", "camera.macro",
         "moon.stars.fill", "bicycle", "music.note", "book.fill",
         "fork.knife", "tree.fill", "cloud.sun.fill", "wand.and.stars",
     ]

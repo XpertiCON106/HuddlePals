@@ -229,7 +229,7 @@ private struct HomeContent: View {
         VStack(alignment: .leading, spacing: 18) {
             if viewModel.todayDeposits.isEmpty {
                 EmptyHuddleState(
-                    systemImage: "sparkles",
+                    systemImage: "lock.open.fill",
                     title: "Today is open",
                     message: "You're in — deposits from the others will appear here as they arrive."
                 )

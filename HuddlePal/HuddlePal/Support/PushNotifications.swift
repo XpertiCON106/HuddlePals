@@ -208,10 +208,12 @@ final class PushCoordinator {
 }
 
 /// UNUserNotificationCenter's delegate: activity notifications show even
-/// while the app is open, and a tap opens the huddle it's about. Local
-/// reminders keep iOS's default, which shows nothing in the foreground.
+/// while the app is open, and a tap opens the huddle it's about (or, for a
+/// HuddlePals+ reminder, the paywall). Local reminders keep iOS's default,
+/// which shows nothing in the foreground.
 final class NotificationCenterRelay: NSObject, UNUserNotificationCenterDelegate {
     @MainActor weak var coordinator: PushCoordinator?
+    @MainActor weak var promotion: PlusPromotion?
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -227,8 +229,13 @@ final class NotificationCenterRelay: NSObject, UNUserNotificationCenterDelegate 
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let huddleID = response.notification.request.content.userInfo["huddle_id"] as? String
+        let isPlusReminder = response.notification.request.identifier == PlusReminderScheduler.identifier
         Task { @MainActor in
-            self.coordinator?.notificationTapped(huddleID: huddleID)
+            if isPlusReminder {
+                self.promotion?.reminderTapped()
+            } else {
+                self.coordinator?.notificationTapped(huddleID: huddleID)
+            }
             completionHandler()
         }
     }

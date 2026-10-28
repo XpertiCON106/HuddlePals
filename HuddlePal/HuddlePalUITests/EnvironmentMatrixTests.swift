@@ -26,7 +26,7 @@ final class EnvironmentMatrixTests: HuddleUITestCase {
         openHuddle("The Crew")
         waitFor(app.buttons["Add today's memory"])
         snapshot("a11y XXXL home")
-        openTab("Profile")
+        openProfile()
         snapshot("a11y XXXL profile")
     }
 

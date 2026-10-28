@@ -23,13 +23,6 @@ enum KeyCode {
         }
         .joined(separator: " ")
     }
-
-    /// Three groups per line, so the code reads out in two breaths.
-    static func twoLines(_ code: String) -> String {
-        let groups = code.split(separator: " ")
-        guard groups.count == 6 else { return code }
-        return groups[0..<3].joined(separator: " ") + "\n" + groups[3..<6].joined(separator: " ")
-    }
 }
 
 /// The member keys an account has confirmed by comparing key codes. The

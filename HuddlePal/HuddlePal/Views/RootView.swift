@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Root router: launch reveal while bootstrapping → onboarding when signed
-/// out or the current Terms aren't agreed to yet → the main tab UI once a
+/// out or the current Terms aren't agreed to yet → the huddle shelf once a
 /// session exists and the Terms are accepted.
 struct RootView: View {
     @Environment(AppDependencies.self) private var deps
@@ -18,7 +18,7 @@ struct RootView: View {
                     if deps.session.currentUser == nil || !deps.terms.hasAcceptedCurrentVersion {
                         OnboardingView()
                     } else {
-                        MainTabView()
+                        MainView()
                     }
                 } else {
                     Theme.background.ignoresSafeArea()
@@ -189,42 +189,31 @@ private struct HugArm: Shape {
     }
 }
 
-// MARK: - Main tabs
+// MARK: - Main
 
-struct MainTabView: View {
+/// One stack, no tabs: the huddle shelf, with Profile and Create or join at
+/// its top right.
+struct MainView: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(AppRouter.self) private var router
 
     var body: some View {
         @Bindable var router = router
-        TabView(selection: tabSelection) {
-            NavigationStack(path: $router.huddlesPath) {
-                HuddleListView()
-                    .navigationDestination(for: Route.self) { RouteView(route: $0) }
+        @Bindable var promo = deps.plusPromo
+        NavigationStack(path: $router.huddlesPath) {
+            HuddleListView()
+                .navigationDestination(for: Route.self) { RouteView(route: $0) }
+        }
+        .sheet(item: $promo.sheet) { sheet in
+            switch sheet {
+            case .intro: PlusIntroSheet()
+            case .paywall: PaywallView(context: .promotion)
             }
-            .tabItem { Label("Huddles", systemImage: "square.stack.3d.up") }
-            .tag(AppTab.huddles)
-
-            NavigationStack {
-                ProfileView()
-            }
-            .tabItem { Label("Profile", systemImage: "person.crop.circle") }
-            .tag(AppTab.profile)
         }
         .task {
             // An invite link opened before signing in.
             router.openPendingInvite(deps.session)
         }
-    }
-
-    /// The router invokes the mounted profile editor's guard synchronously.
-    /// A rejected selection never changes `selectedTab`, so the destination
-    /// tab cannot render even briefly.
-    private var tabSelection: Binding<AppTab> {
-        Binding(
-            get: { router.selectedTab },
-            set: { destination in router.selectTab(destination) }
-        )
     }
 }
 
@@ -248,6 +237,8 @@ struct RouteView: View {
             JoinHuddleView()
         case .userProfile(let user):
             UserProfileView(user: user)
+        case .profile:
+            ProfileView()
         }
     }
 }

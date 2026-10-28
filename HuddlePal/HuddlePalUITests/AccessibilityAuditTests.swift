@@ -19,10 +19,10 @@ final class AccessibilityAuditTests: HuddleUITestCase {
     ///   the audit measures the glyph box, and the screenshots show them whole.
     /// - "Contrast nearly passed": Apple's near-threshold warning, reported
     ///   in the attachment, not failed.
-    /// - Contrast / clipping on content under the floating tab bar or in the
-    ///   band just above it (comment bar, the bar's glass): the audit measures
-    ///   it against the overlay; scrolled clear, it's the same text that passes
-    ///   higher up the screen.
+    /// - Contrast / clipping on content under the bar at the bottom (the
+    ///   deposit button, the comment bar) and the home indicator: the audit
+    ///   measures it against the overlay; scrolled clear, it's the same text
+    ///   that passes higher up the screen.
     ///   Same at the top, under the translucent navigation bar (pinned
     ///   section headers), and at the sides, on text a horizontal row has
     ///   scrolled part-way off the screen (the archive's day strips).
@@ -70,24 +70,22 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         snapshot("audit \(screen)")
         var found: [String] = []
         var failing: [String] = []
-        // The bottom chrome: the floating tab bar and the 64 pt above it.
-        let tabBar = app.tabBars.firstMatch
-        // (On iPad the tab bar is at the top: no bottom chrome then.)
-        let bottomBar = tabBar.exists && tabBar.frame.minY > app.frame.midY
-        let chromeTop = (bottomBar ? tabBar.frame.minY : app.frame.maxY) - 64
+        // The bottom chrome: a bar over the content (the deposit button, the
+        // comment bar), with the home indicator under it.
+        let chromeTop = app.frame.maxY - 120
         let navBar = app.navigationBars.firstMatch
         let chromeBottom = navBar.exists ? navBar.frame.maxY + 40 : 0
         // Looked up per issue: the keyboard may still be animating in when
         // the audit starts. Its host view is `inputView`.
         let keyboardHost = app.otherElements["inputView"]
-        let screen = app.frame
+        let screenFrame = app.frame
         try app.performAccessibilityAudit { [knownOpen] issue in
             let keyboard = keyboardHost.exists ? keyboardHost.frame : nil
             let element = issue.element.map { "type \($0.elementType.rawValue) '\($0.label)' id '\($0.identifier)' at \($0.frame)" } ?? "-"
             let entry = "[\(screen)] \(issue.compactDescription) — \(element)"
             found.append(entry)
             if !Self.isAccepted(issue, knownOpen: knownOpen, chromeTop: chromeTop,
-                                chromeBottom: chromeBottom, keyboard: keyboard, screen: screen) { failing.append(entry) }
+                                chromeBottom: chromeBottom, keyboard: keyboard, screen: screenFrame) { failing.append(entry) }
             return true
         }
         let report = XCTAttachment(string: found.isEmpty ? "[\(screen)] no issues" : found.joined(separator: "\n"))
@@ -134,7 +132,7 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         waitFor(app.buttons["Huddle settings"]).tap()
         waitFor(app.staticTexts["Members"])
         try audit("huddle settings")
-        openTab("Profile")
+        openProfile()
         waitFor(app.textFields["Display name"])
         try audit("profile")
     }
@@ -158,6 +156,20 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         let closed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'full on the free plan'")).firstMatch
         scrollTo(closed)
         try audit("invite closed")
+    }
+
+    /// The intro after a first post, and the welcome after buying.
+    func testPlusIntroAndWelcome() throws {
+        launchToShelf(arguments: ["-ui-testing-plus-intro"])
+        openHuddle("The Crew")
+        depositPhoto()
+        XCTAssertTrue(isHittable(waitFor(app.buttons["Not now"], timeout: 20), within: 5))
+        try audit("plus intro")
+        app.buttons["See HuddlePals+"].tap()
+        waitFor(app.staticTexts["renewalTerms"])
+        app.buttons["Try it free for 1 week"].tap()
+        XCTAssertTrue(isHittable(waitFor(app.buttons["welcomeContinue"], timeout: 10), within: 5))
+        try audit("plus welcome")
     }
 
     func testCreateJoinAndCompose() throws {

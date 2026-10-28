@@ -93,15 +93,32 @@ class HuddleUITestCase: XCTestCase {
         app.buttons.containing(.staticText, identifier: name).firstMatch.tap()
     }
 
-    /// iPhone has a tab bar at the bottom; iPadOS puts the tabs in a bar at
-    /// the top that isn't exposed as a tab bar. Both carry the tab's icon.
-    func openTab(_ name: String) {
-        let icons = ["Huddles": "square.stack.3d.up", "Profile": "person.crop.circle"]
-        if app.tabBars.firstMatch.exists {
-            app.tabBars.buttons[name].tap()
-        } else {
-            app.buttons.matching(identifier: icons[name] ?? name).firstMatch.tap()
+    /// Profile, from the shelf's top right (back on the shelf first).
+    func openProfile() {
+        backToShelf()
+        waitFor(app.navigationBars.buttons["Profile"]).tap()
+        waitFor(app.navigationBars["Profile"], timeout: 10, "Profile")
+    }
+
+    /// Back, one screen at a time, until the huddle shelf shows. Stops at a
+    /// warning (an unsaved Profile), for the test to answer.
+    func backToShelf(file: StaticString = #filePath, line: UInt = #line) {
+        let shelf = app.navigationBars.buttons["Create or join a huddle"]
+        for _ in 0..<5 {
+            if isHittable(shelf, within: 2) || app.alerts.firstMatch.exists { return }
+            app.navigationBars.buttons.firstMatch.tap()
         }
+        XCTAssertTrue(isHittable(shelf, within: 5), "never got back to the shelf", file: file, line: line)
+    }
+
+    /// The top bar's Back.
+    func tapBack() {
+        app.navigationBars.buttons.firstMatch.tap()
+    }
+
+    func isHittable(_ element: XCUIElement, within timeout: TimeInterval) -> Bool {
+        let hittable = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: element)
+        return XCTWaiter.wait(for: [hittable], timeout: timeout) == .completed
     }
 
     /// Compose → stand-in camera → caption → confirm → post.
@@ -148,7 +165,7 @@ class HuddleUITestCase: XCTestCase {
 
     /// Profile → Sign out → confirm.
     func signOut() {
-        openTab("Profile")
+        openProfile()
         tapAndConfirm("Sign out")
         waitFor(app.buttons["Continue"], timeout: 20, "back on the welcome cards")
     }

@@ -28,12 +28,12 @@ final class VideoJourneyTests: HuddleUITestCase {
     /// "records" a clip, it previews looping, posts, and loops in the feed.
     func testAPlusMemberPostsAVideoAndItLoopsInTheFeed() {
         launchToShelf()
-        openTab("Profile")
+        openProfile()
         let plus = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Simulate: HuddlePals+'")).firstMatch
         scrollTo(plus)
         plus.switches.firstMatch.tap()
         XCTAssertEqual(plus.switches.firstMatch.value as? String, "1", "Plus is on")
-        openTab("Huddles")
+        backToShelf()
         openHuddle("The Crew")
 
         waitFor(app.buttons["Add today's memory"]).tap()

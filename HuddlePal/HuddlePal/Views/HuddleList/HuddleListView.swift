@@ -68,7 +68,21 @@ private struct HuddleListContent: View {
         .navigationTitle("Huddles")
         .toolbarBackground(Theme.background, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    router.openProfile()
+                } label: {
+                    if let user = deps.session.currentUser {
+                        AvatarView(
+                            name: user.displayName, colorHex: user.avatarColorHex,
+                            imagePath: user.profilePhotoPaths.first, size: 30
+                        )
+                    } else {
+                        Image(systemName: "person.crop.circle")
+                    }
+                }
+                .accessibilityLabel("Profile")
+
                 Menu {
                     Button {
                         router.huddlesPath.append(.createHuddle)

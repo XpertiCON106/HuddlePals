@@ -13,6 +13,8 @@ import UIKit
 ///   -ui-testing-apple-unavailable   Apple can't confirm the account at
 ///                               deletion (no Apple Account, no network)
 ///   -ui-testing-plus            the seeded "You" has HuddlePals+
+///   -ui-testing-plus-intro      a first post introduces HuddlePals+ (other
+///                               runs skip it, so it never covers a tap)
 enum UITestHooks {
     #if DEBUG
     private static let arguments = ProcessInfo.processInfo.arguments
@@ -23,6 +25,7 @@ enum UITestHooks {
     static let notificationsDenied = arguments.contains("-ui-testing-notifications-denied")
     static let appleUnavailable = arguments.contains("-ui-testing-apple-unavailable")
     static let plus = arguments.contains("-ui-testing-plus")
+    static let plusIntro = arguments.contains("-ui-testing-plus-intro")
     #else
     static let isUITesting = false
     static let resetsState = false
@@ -31,6 +34,7 @@ enum UITestHooks {
     static let notificationsDenied = false
     static let appleUnavailable = false
     static let plus = false
+    static let plusIntro = false
     #endif
 
     /// Wipes what the app persists (settings, the local store, cached

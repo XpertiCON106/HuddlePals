@@ -93,6 +93,9 @@ final class AppDependencies {
     /// Activity notifications pushed by the server: permission, this
     /// device's token, and opening the huddle a notification is about.
     let push: PushCoordinator
+    /// HuddlePals+ introduced once after a first post, and the occasional
+    /// reminder about it for those who asked (local notifications).
+    let plusPromo: PlusPromotion
 
     init(
         isLive: Bool = false,
@@ -114,7 +117,9 @@ final class AppDependencies {
         mockPlans: MockPlanLedger? = nil,
         seeder: SeedDataService,
         reminders: ReminderCoordinator,
-        push: PushCoordinator? = nil
+        push: PushCoordinator? = nil,
+        plusPromoSettings: PlusPromoSettings = PlusPromoSettings(),
+        plusReminders: any PlusReminderScheduling = PlusReminderScheduler()
     ) {
         self.isLive = isLive
         self.modelContainer = modelContainer
@@ -138,6 +143,15 @@ final class AppDependencies {
         self.push = push ?? PushCoordinator(
             registrar: SystemPushRegistrar(), tokens: MockPushTokenService(), session: session
         )
+        self.plusPromo = PlusPromotion(
+            settings: plusPromoSettings,
+            scheduler: plusReminders,
+            session: session,
+            plus: self.plus,
+            calendar: engine.calendar,
+            dateProvider: dateProvider
+        )
+        self.push.centerDelegate.promotion = self.plusPromo
     }
 
     /// Ends the session on this device (sign-out, account deletion, or the
@@ -156,6 +170,7 @@ final class AppDependencies {
         // reads a model after it's deleted.
         try? auth.removeLocalData()
         await reminders.refresh()
+        await plusPromo.refresh()
     }
 
     /// Live only with a filled-in config, and never inside a test run: the

@@ -274,51 +274,68 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
-    func testRouterBlocksBeforeMutationAndNeverReplaysDestination() {
+    func testRouterBlocksBeforeMutationThenGoesOnOnceResolved() {
         let router = AppRouter()
-        XCTAssertTrue(router.selectTab(.profile))
+        router.openProfile()
+        XCTAssertTrue(router.isShowingProfile)
         var allowNavigation = false
         var guardChecks = 0
-        let guardID = UUID()
-        router.installProfileNavigationGuard(id: guardID) {
+        router.installProfileNavigationGuard(id: UUID()) {
             guardChecks += 1
             return allowNavigation
         }
 
         XCTAssertFalse(router.navigateToHuddles(route: .joinHuddle))
-        XCTAssertEqual(router.selectedTab, .profile)
-        XCTAssertTrue(router.huddlesPath.isEmpty, "the destination was never rendered")
+        XCTAssertEqual(router.huddlesPath, [.profile], "the destination was never rendered")
         XCTAssertEqual(guardChecks, 1)
 
-        // Resolving the warning goes on to the tab, never the deep link's
-        // route: only the tab was kept.
+        // Resolving the warning goes on to where it was headed.
         allowNavigation = true
-        XCTAssertEqual(router.selectedTab, .profile)
         router.resumeBlockedNavigation()
-        XCTAssertEqual(router.selectedTab, .huddles)
-        XCTAssertTrue(router.huddlesPath.isEmpty)
-
-        XCTAssertTrue(router.navigateToHuddles(route: .joinHuddle))
         XCTAssertEqual(router.huddlesPath, [.joinHuddle])
+        XCTAssertFalse(router.isShowingProfile)
+    }
+
+    func testProfileOpensFromTheShelfOnceAndBackIsTheShelf() {
+        let router = AppRouter()
+        router.openProfile()
+        router.openProfile()
+        XCTAssertEqual(router.huddlesPath, [.profile], "never two Profiles on the stack")
+        XCTAssertTrue(router.leaveProfile())
+        XCTAssertTrue(router.huddlesPath.isEmpty)
+        XCTAssertTrue(router.leaveProfile(), "nothing to leave")
+    }
+
+    func testEveryWayOffAnUnsavedProfileAsksFirst() {
+        let router = dirtyProfileRouter()
+        viewModel.keepEditing()
+        router.cancelBlockedNavigation()
+        let huddle = Huddle(name: "Crew", emoji: "🏔", inviteCode: "CREW42")
+        router.openHuddle(huddle)
+        router.popToHuddleList()
+        XCTAssertFalse(router.navigateToHuddles())
+        XCTAssertEqual(router.huddlesPath, [.profile])
+        XCTAssertTrue(viewModel.isUnsavedChangesWarningPresented)
     }
 
     private func dirtyProfileRouter() -> AppRouter {
         let router = AppRouter()
-        XCTAssertTrue(router.selectTab(.profile))
+        router.openProfile()
         router.installProfileNavigationGuard(id: UUID()) { [weak viewModel] in
             viewModel?.requestNavigation() ?? true
         }
         viewModel.bio = "Dirty"
-        XCTAssertFalse(router.selectTab(.huddles))
+        XCTAssertFalse(router.leaveProfile())
         XCTAssertTrue(viewModel.isUnsavedChangesWarningPresented)
         return router
     }
 
-    func testDiscardGoesOnToTheTabThatWasTapped() {
+    func testDiscardGoesOnBackToTheShelf() {
         let router = dirtyProfileRouter()
         viewModel.discardChanges()
         router.resumeBlockedNavigation()
-        XCTAssertEqual(router.selectedTab, .huddles)
+        XCTAssertFalse(router.isShowingProfile)
+        XCTAssertTrue(router.huddlesPath.isEmpty)
         XCTAssertEqual(viewModel.bio, "Original bio")
     }
 
@@ -332,7 +349,7 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertFalse(viewModel.hasUnsavedChanges)
         XCTAssertFalse(viewModel.isUnsavedChangesWarningPresented)
         router.resumeBlockedNavigation()
-        XCTAssertEqual(router.selectedTab, .huddles)
+        XCTAssertFalse(router.isShowingProfile)
     }
 
     func testAFailedSaveFromTheWarningStaysOnProfile() async {
@@ -344,7 +361,7 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertNotNil(viewModel.statusMessage)
         router.cancelBlockedNavigation()
         router.resumeBlockedNavigation()
-        XCTAssertEqual(router.selectedTab, .profile)
+        XCTAssertTrue(router.isShowingProfile)
     }
 
     func testKeepEditingForgetsTheAttempt() {
@@ -353,7 +370,7 @@ final class ProfileConfirmationTests: XCTestCase {
         router.cancelBlockedNavigation()
         viewModel.discardChanges()
         router.resumeBlockedNavigation()
-        XCTAssertEqual(router.selectedTab, .profile, "nothing left to go on to")
+        XCTAssertTrue(router.isShowingProfile, "nothing left to go on to")
     }
 
     func testANameThatCantBeSavedOffersOnlyDiscard() async {
@@ -366,24 +383,23 @@ final class ProfileConfirmationTests: XCTestCase {
 
     func testRepeatedNavigationAttemptsCannotStackOrBypassWarning() {
         let router = AppRouter()
-        XCTAssertTrue(router.selectTab(.profile))
+        router.openProfile()
         let guardID = UUID()
         router.installProfileNavigationGuard(id: guardID) { [weak viewModel] in
             viewModel?.requestNavigation() ?? true
         }
         viewModel.bio = "Dirty"
 
-        XCTAssertFalse(router.selectTab(.huddles))
-        XCTAssertFalse(router.selectTab(.huddles))
+        XCTAssertFalse(router.leaveProfile())
+        XCTAssertFalse(router.leaveProfile())
         XCTAssertFalse(router.navigateToHuddles(route: .joinHuddle))
-        XCTAssertEqual(router.selectedTab, .profile)
-        XCTAssertTrue(router.huddlesPath.isEmpty)
+        XCTAssertEqual(router.huddlesPath, [.profile])
         XCTAssertTrue(viewModel.isUnsavedChangesWarningPresented)
 
         viewModel.keepEditing()
-        XCTAssertEqual(router.selectedTab, .profile)
+        XCTAssertTrue(router.isShowingProfile)
         XCTAssertTrue(viewModel.hasUnsavedChanges)
-        XCTAssertTrue(router.huddlesPath.isEmpty)
+        XCTAssertEqual(router.huddlesPath, [.profile])
     }
 
     // MARK: Ending the session (QA-10)
