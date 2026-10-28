@@ -226,7 +226,7 @@ private struct MethodStep: View {
                     .font(Theme.displayFont(28))
                     .foregroundStyle(Theme.textPrimary)
 
-                Text("Sign in so your huddle follows you — not your phone.")
+                Text("Sign in to keep up with your huddles!")
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
