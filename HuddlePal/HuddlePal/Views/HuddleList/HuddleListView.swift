@@ -46,7 +46,7 @@ private struct HuddleListContent: View {
                         .buttonStyle(.plain)
                         .transition(.scale(scale: 0.97).combined(with: .opacity))
                     }
-                } else if !viewModel.isLoading {
+                } else if viewModel.showsEmptyState {
                     emptyState
                 }
 
@@ -64,13 +64,14 @@ private struct HuddleListContent: View {
             .huddleRefreshSpinner()
         }
         .overlay {
-            // While the huddles load, in the middle of the screen.
-            if viewModel.isLoading && !viewModel.hasHuddles {
+            // Until the huddles first load (a fresh launch included), in
+            // the middle of the screen: never "No huddles yet" meanwhile.
+            if viewModel.isWaitingForFirstLoad {
                 HuddleSpinner(label: "Loading your huddles")
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.35), value: viewModel.isLoading)
+        .animation(.easeOut(duration: 0.35), value: viewModel.hasLoaded)
         .refreshable { await viewModel.refresh() }
         .refreshesLive(huddleID: nil) { await viewModel.refresh() }
         .navigationTitle("Huddles")

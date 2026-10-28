@@ -19,11 +19,19 @@ final class HuddleListViewModel {
     private(set) var rows: [Row] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    /// A load has finished for this account. Until then no rows means
+    /// "not here yet" (a fresh launch has none for a moment), never "no
+    /// huddles": the shelf shows its spinner, not "No huddles yet".
+    private(set) var hasLoaded = false
 
     /// Huddle id → the dayKey its streak was last recomputed for.
     @ObservationIgnored private var streakRecomputedDay: [UUID: String] = [:]
 
     var hasHuddles: Bool { !rows.isEmpty }
+    /// The spinner: nothing to show yet, and nothing has gone wrong.
+    var isWaitingForFirstLoad: Bool { !hasLoaded && rows.isEmpty && errorMessage == nil }
+    /// "No huddles yet": only once a load has said so.
+    var showsEmptyState: Bool { hasLoaded && rows.isEmpty }
 
     init(deps: AppDependencies) {
         self.deps = deps
@@ -35,6 +43,7 @@ final class HuddleListViewModel {
     func refresh() async {
         guard let user = deps.session.currentUser else {
             rows = []
+            hasLoaded = false
             return
         }
         if rows.isEmpty { isLoading = true }
@@ -58,6 +67,7 @@ final class HuddleListViewModel {
                 )
             }
             errorMessage = nil
+            hasLoaded = true
         } catch where error.isCancellation {
             // Left the tab mid-load: the next appear refreshes again.
         } catch {

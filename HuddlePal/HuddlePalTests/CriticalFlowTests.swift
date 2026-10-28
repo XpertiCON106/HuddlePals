@@ -95,6 +95,28 @@ final class CriticalFlowTests: XCTestCase {
 
     // MARK: Huddle list — the light "who posted today" read
 
+    /// A fresh launch has no rows for a moment: until a load has finished
+    /// the shelf is loading, never "No huddles yet". Only a finished load
+    /// with nothing in it is an empty shelf.
+    func testTheShelfIsEmptyOnlyOnceALoadSaysSo() async throws {
+        deps.session.currentUser = try await signedInUser()
+        let list = HuddleListViewModel(deps: deps)
+        XCTAssertTrue(list.isWaitingForFirstLoad, "just opened: the spinner")
+        XCTAssertFalse(list.showsEmptyState, "not \"No huddles yet\"")
+        await list.refresh()
+        XCTAssertTrue(list.hasHuddles)
+        XCTAssertFalse(list.isWaitingForFirstLoad)
+        XCTAssertFalse(list.showsEmptyState)
+
+        let fresh = AppDependencies.makeMock(inMemory: true)
+        fresh.session.currentUser = try await fresh.auth.completeProfile(displayName: "New", avatarColorHex: "E5484D")
+        let empty = HuddleListViewModel(deps: fresh)
+        XCTAssertFalse(empty.showsEmptyState, "not until it's loaded")
+        await empty.refresh()
+        XCTAssertTrue(empty.showsEmptyState, "loaded, and no huddles")
+        XCTAssertFalse(empty.isWaitingForFirstLoad)
+    }
+
     func testHuddleListRowsReflectWhoPostedToday() async throws {
         let user = try await signedInUser()
         deps.session.currentUser = user
