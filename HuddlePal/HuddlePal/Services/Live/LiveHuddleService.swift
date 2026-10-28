@@ -168,6 +168,10 @@ final class LiveHuddleService: HuddleServiceProtocol {
     }
 
     func leaveHuddle(_ huddle: Huddle, user: User) async throws {
+        // The server's rule would quietly keep the row: say why instead.
+        if huddle.memberships.contains(where: { $0.user?.id == user.id && $0.role == .keeper }) {
+            throw HuddleServiceError.keeperCannotLeave
+        }
         try await client.delete("memberships", query: [
             URLQueryItem(name: "huddle_id", value: "eq.\(huddle.id.uuidString)"),
             URLQueryItem(name: "user_id", value: "eq.\(user.id.uuidString)"),

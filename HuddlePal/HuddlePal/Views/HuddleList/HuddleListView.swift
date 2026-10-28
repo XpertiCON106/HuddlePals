@@ -28,6 +28,7 @@ struct HuddleListView: View {
 private struct HuddleListContent: View {
     @Environment(AppDependencies.self) private var deps
     @Environment(AppRouter.self) private var router
+    @State private var showAddChoices = false
     @Environment(\.scenePhase) private var scenePhase
     @Bindable var viewModel: HuddleListViewModel
 
@@ -83,17 +84,8 @@ private struct HuddleListContent: View {
                 }
                 .accessibilityLabel("Profile")
 
-                Menu {
-                    Button {
-                        router.huddlesPath.append(.createHuddle)
-                    } label: {
-                        Label("Create a Huddle", systemImage: "plus.circle")
-                    }
-                    Button {
-                        router.huddlesPath.append(.joinHuddle)
-                    } label: {
-                        Label("Join with a code", systemImage: "person.badge.plus")
-                    }
+                Button {
+                    showAddChoices = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 15, weight: .semibold))
@@ -102,6 +94,20 @@ private struct HuddleListContent: View {
                 .accessibilityLabel("Create or join a huddle")
             }
         }
+        .appDialog(
+            "Add a huddle",
+            isPresented: $showAddChoices,
+            message: "Start your own, or join one with the code someone shared.",
+            actions: [
+                DialogAction("Create a Huddle", systemImage: "plus.circle") {
+                    router.huddlesPath.append(.createHuddle)
+                },
+                DialogAction("Join with a code", role: .secondary, systemImage: "person.badge.plus") {
+                    router.huddlesPath.append(.joinHuddle)
+                },
+                .cancel(),
+            ]
+        )
         .task {
             await viewModel.refresh()
             // A notification tap that launched the app.

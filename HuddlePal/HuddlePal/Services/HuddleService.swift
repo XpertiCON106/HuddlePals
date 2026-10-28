@@ -12,6 +12,8 @@ enum HuddleServiceError: LocalizedError {
     case alreadyMember
     case notAMember
     case notKeeper
+    /// A huddle always has its keeper: they can delete it, not leave it.
+    case keeperCannotLeave
     /// Its keeper is on the free plan: 4 members.
     case huddleFullFree
     /// Its keeper is on the free plan, and it isn't one of the 3 huddles
@@ -39,6 +41,7 @@ enum HuddleServiceError: LocalizedError {
         case .alreadyMember: "You're already a member of this huddle."
         case .notAMember: "You're not a member of this huddle."
         case .notKeeper: "Only the huddle's keeper can do that."
+        case .keeperCannotLeave: "The keeper can't leave a huddle, only delete it."
         case .huddleFullFree: "This huddle is full for now — free huddles hold 4 people. Its keeper can make room or get HuddlePals+ for up to 10."
         case .invitesPaused: "This huddle isn't taking new members right now. Ask its keeper."
         case .huddleAtMaximum: "This huddle has 10 members — the most a huddle can have."
@@ -289,18 +292,11 @@ final class MockHuddleService: HuddleServiceProtocol {
     }
 
     func leaveHuddle(_ huddle: Huddle, user: User) async throws {
-        // Live: deleting the membership row fires the server's
-        // memberships_after_delete trigger, which hands the keeper role to
-        // the longest-standing remaining member. Mirrored here.
+        // Live, the server refuses the keeper too (memberships_delete).
         guard let membership = huddle.memberships.first(where: { $0.user?.id == user.id }) else {
             throw HuddleServiceError.notAMember
         }
-        let remaining = huddle.sortedMemberships.filter { $0.id != membership.id }
-        if membership.role == .keeper, !remaining.contains(where: { $0.role == .keeper }),
-           let successor = remaining.min(by: { $0.joinedAt < $1.joinedAt }) {
-            successor.role = .keeper
-            successor.keeperSince = .now
-        }
+        guard membership.role != .keeper else { throw HuddleServiceError.keeperCannotLeave }
         context.delete(membership)
         try context.save()
     }

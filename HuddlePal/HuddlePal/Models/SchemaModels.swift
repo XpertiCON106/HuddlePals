@@ -9,7 +9,8 @@ final class User {
     var displayName: String
     /// Identity color token: solid hex or "hex-hex" gradient (AvatarStyle).
     var avatarColorHex: String
-    /// Short bio, max 160 chars (enforced in UI + DB check).
+    /// Short bio: 50 characters in the app (the database check allows 160,
+    /// which bios from before may still use).
     var bio: String?
     /// Up to 3 profile photos, Documents-relative cache paths
     /// ("Media/avatars/<user_id>/<file>.jpg").

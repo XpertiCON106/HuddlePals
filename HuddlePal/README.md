@@ -68,6 +68,7 @@ HuddlePal/
 │   ├── Views/
 │   │   ├── RootView.swift              Splash → Onboarding → MainView (one stack, no tabs)
 │   │   ├── Onboarding/OnboardingView.swift  Terms of Service gate (Agree required) + sign-in steps
+│   │   ├── Onboarding/WelcomeIllustrations.swift  The welcome cards' looping illustrations
 │   │   ├── Home/HuddleHomeView.swift    LOCKED grid / UNLOCKED feed + unlock reveal
 │   │   ├── Compose/ComposeView.swift   Camera capture (photo, or video with Plus) + caption + permanence confirm
 │   │   ├── Archive/ArchiveView.swift   Month → day → horizontal photo rows + backfill
@@ -75,9 +76,11 @@ HuddlePal/
 │   │   ├── HuddleManagement/            CreateHuddleView / JoinHuddleView / HuddleSettingsView
 │   │   ├── Plus/PaywallView.swift      HuddlePals+: plans, renewal terms, Restore Purchases, welcome
 │   │   ├── Plus/PlusIntroSheet.swift   HuddlePals+ intro after a first post (Remind me later)
+│   │   ├── Profile/DeleteAccountView.swift  Delete account: what goes, then DELETE typed
 │   │   └── Profile/ProfileView.swift   Draft editing + confirmed save, the Plan section,
 │   │                                   sign out + DEBUG tools; TermsReaderView
-│   ├── Components/                     BlurredDepositCard, DepositCard, AvatarStack,
+│   ├── Components/                     AppDialog (the app's own alerts and choices),
+│   │                                   BlurredDepositCard, DepositCard, AvatarStack,
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,
 │   │                                   CaptionTextField (80-char enforcement),
 │   │                                   CodeEntryField, CameraPicker, TermsDocumentView,

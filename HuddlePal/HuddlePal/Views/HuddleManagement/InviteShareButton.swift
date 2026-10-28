@@ -1,12 +1,14 @@
 import LinkPresentation
+import MessageUI
 import SwiftUI
 import UIKit
 
-/// Shares a huddle's invite link. Messages gets it as a rich link, a card
-/// with the huddle's emoji and name titled "Join “<name>” on HuddlePals",
-/// like an App Store link; Mail and other apps get a line with the link.
-/// The preview is made on this phone, so the code in the link's fragment is
-/// never fetched from anywhere.
+/// Shares a huddle's invite link through the app's own card: the invite as
+/// it will look, then Messages, Copy link, or More apps. Messages sends the
+/// link with the invite's picture; More apps opens iOS's share sheet, where
+/// Messages shows the link as a rich card with the huddle's emoji and name,
+/// like an App Store link. The picture is made on this phone, so the code
+/// in the link's fragment is never fetched from anywhere.
 struct InviteShareButton<Label: View>: View {
     let url: URL
     let huddleName: String
@@ -14,21 +16,91 @@ struct InviteShareButton<Label: View>: View {
     @ViewBuilder let label: () -> Label
 
     @State private var isSharing = false
+    @State private var card: UIImage?
 
     var body: some View {
-        Button(action: { isSharing = true }, label: label)
-            .sheet(isPresented: $isSharing) {
-                ActivitySheet(
-                    item: InviteActivityItem(
-                        url: url,
-                        huddleName: huddleName,
-                        card: InviteCard.image(name: huddleName, emoji: emoji)
-                    ),
-                    onDone: { isSharing = false }
-                )
-                .presentationDetents([.medium, .large])
-                .ignoresSafeArea()
+        Button(action: {
+            // Ready before the card rises, so it opens in one smooth move.
+            if card == nil { card = InviteCard.image(name: huddleName, emoji: emoji) }
+            isSharing = true
+        }, label: label)
+        .appDialog(
+            "Invite to \u{201C}\(huddleName)\u{201D}",
+            isPresented: $isSharing,
+            message: "Anyone with the link can join and see every photo in it, so send it only to your people.",
+            actions: actions
+        ) {
+            if let card {
+                Image(uiImage: card)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(color: Theme.shadow, radius: 10, x: 0, y: 4)
+                    .frame(maxHeight: 170)
+                    .accessibilityHidden(true)
             }
+        }
+    }
+
+    private var actions: [DialogAction] {
+        var actions: [DialogAction] = []
+        if MFMessageComposeViewController.canSendText() {
+            actions.append(DialogAction("Messages", systemImage: "message.fill") {
+                InviteSharing.sendMessage(url: url, card: card)
+            })
+        }
+        actions.append(DialogAction("Copy link", role: .secondary, systemImage: "link") {
+            UIPasteboard.general.url = url
+            Haptics.success()
+        })
+        actions.append(DialogAction("More apps", role: .secondary, systemImage: "square.and.arrow.up") {
+            InviteSharing.shareSheet(item: InviteActivityItem(url: url, huddleName: huddleName, card: card))
+        })
+        actions.append(.cancel())
+        return actions
+    }
+}
+
+/// Apple's own screens for sending an invite, once the app's card has gone:
+/// the Messages composer, or the share sheet for every other app.
+@MainActor
+enum InviteSharing {
+    private static let messageDelegate = MessageComposeDismisser()
+
+    static func sendMessage(url: URL, card: UIImage?) {
+        let composer = MFMessageComposeViewController()
+        composer.messageComposeDelegate = messageDelegate
+        composer.body = url.absoluteString
+        if let data = card?.pngData() {
+            composer.addAttachmentData(data, typeIdentifier: "public.png", filename: "Invite.png")
+        }
+        present(composer)
+    }
+
+    static func shareSheet(item: InviteActivityItem) {
+        let controller = UIActivityViewController(activityItems: [item], applicationActivities: nil)
+        present(controller)
+    }
+
+    private static func present(_ controller: UIViewController) {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let window = scenes.first(where: { $0.activationState == .foregroundActive })?.keyWindow
+                ?? scenes.first?.keyWindow,
+              var top = window.rootViewController else { return }
+        while let presented = top.presentedViewController { top = presented }
+        // iPad shows the share sheet as a popover: from the bottom middle.
+        if let popover = controller.popoverPresentationController {
+            popover.sourceView = top.view
+            popover.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.maxY - 80, width: 0, height: 0)
+            popover.permittedArrowDirections = []
+        }
+        top.present(controller, animated: true)
+    }
+}
+
+private final class MessageComposeDismisser: NSObject, MFMessageComposeViewControllerDelegate {
+    func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
+        controller.dismiss(animated: true)
     }
 }
 
@@ -118,18 +190,4 @@ private struct InviteCardView: View {
         .frame(width: InviteCard.size.width, height: InviteCard.size.height)
         .environment(\.colorScheme, .light)
     }
-}
-
-/// UIActivityViewController in a SwiftUI sheet, which closes with it.
-private struct ActivitySheet: UIViewControllerRepresentable {
-    let item: InviteActivityItem
-    let onDone: () -> Void
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: [item], applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, _, _, _ in onDone() }
-        return controller
-    }
-
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

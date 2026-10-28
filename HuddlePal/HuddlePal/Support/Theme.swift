@@ -57,6 +57,11 @@ enum Theme {
         light: (0.62, 0.21, 0.16),
         dark: (0.88, 0.42, 0.36)
     )
+    /// Text on a `destructive` fill (≈ 7:1 light, 5.5:1 dark).
+    static let onDestructive = dynamic(
+        light: (1.0, 1.0, 1.0),
+        dark: (0.090, 0.088, 0.082)
+    )
 
     /// Hairline edges that define layering in both modes.
     static let hairline = Color(uiColor: UIColor { traits in

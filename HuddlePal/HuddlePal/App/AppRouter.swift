@@ -13,6 +13,8 @@ enum Route: Hashable {
     case userProfile(User)
     /// Your own profile, from the shelf's top-right button.
     case profile
+    /// Deleting your account, from Profile.
+    case deleteAccount
 }
 
 /// The shareable invite link, https://huddlepals.com/join#<CODE>: a
@@ -73,6 +75,12 @@ final class AppRouter {
     func openProfile() {
         guard !isShowingProfile else { return }
         huddlesPath.append(.profile)
+    }
+
+    /// Delete account, from Profile: unsaved changes are asked about first.
+    @discardableResult
+    func openDeleteAccount() -> Bool {
+        navigate(to: huddlesPath + [.deleteAccount])
     }
 
     /// Back from Profile, through the guard.

@@ -100,10 +100,10 @@ final class PlanLimitTests: XCTestCase {
         XCTAssertEqual(intoFourth?.errorDescription, HuddleServiceError.invitesPaused.errorDescription)
         XCTAssertEqual(you.memberships.filter { $0.role == .keeper }.count, 4, "every huddle stays")
 
-        // Leaving an earlier one moves the 4th into the first 3.
-        try await deps.huddleService.leaveHuddle(try huddle("Sunday Dinners"), user: you)
-        let intoFourthAfterLeaving = await refusal(joining: fourth)
-        XCTAssertNil(intoFourthAfterLeaving)
+        // Deleting an earlier one moves the 4th into the first 3.
+        try await deps.huddleService.deleteHuddle(try huddle("Sunday Dinners"), by: you)
+        let intoFourthAfterDeleting = await refusal(joining: fourth)
+        XCTAssertNil(intoFourthAfterDeleting)
     }
 
     func testAnInheritedHuddleGoesToTheBackOfTheHeirsQueue() async throws {
@@ -112,10 +112,13 @@ final class PlanLimitTests: XCTestCase {
         var own: [Huddle] = []
         for index in 0..<3 { own.append(try await create("Heir's \(index)", by: heir)) }
 
-        try await deps.huddleService.leaveHuddle(crew, user: you)
+        // The keeper's account goes, and the server hands the huddle on
+        // (memberships_after_delete): done here by hand.
+        let keeperRow = try XCTUnwrap(crew.memberships.first { $0.user?.id == you.id })
         let membership = try XCTUnwrap(crew.memberships.first { $0.user?.id == heir.id })
-        XCTAssertEqual(membership.role, .keeper)
-        XCTAssertNotNil(membership.keeperSince, "keeper from the moment they took over")
+        deps.modelContainer.mainContext.delete(keeperRow)
+        membership.role = .keeper
+        membership.keeperSince = .now
 
         for huddle in own {
             let intoOwn = await refusal(joining: huddle)

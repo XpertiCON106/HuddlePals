@@ -65,6 +65,8 @@ private struct DetailContent: View {
     @FocusState private var commentFocused: Bool
 
     @State private var showBlockConfirmation = false
+    @State private var showOptions = false
+    @State private var reportingComment: Comment?
 
     private var deposit: Deposit { viewModel.deposit }
 
@@ -132,16 +134,8 @@ private struct DetailContent: View {
         .toolbar {
             if viewModel.canReport {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button(viewModel.didReport ? "Reported" : "Report photo", systemImage: "flag") {
-                            Task { await viewModel.report() }
-                        }
-                        .disabled(viewModel.didReport)
-                        if let author = viewModel.blockableAuthor {
-                            Button("Block \(author.displayName)", systemImage: "hand.raised", role: .destructive) {
-                                showBlockConfirmation = true
-                            }
-                        }
+                    Button {
+                        showOptions = true
                     } label: {
                         Image(systemName: "ellipsis.circle").foregroundStyle(Theme.textSecondary)
                     }
@@ -149,28 +143,65 @@ private struct DetailContent: View {
                 }
             }
         }
-        .confirmationDialog(
+        .appDialog(
+            viewModel.blockableAuthor.map { "\($0.displayName)'s post" } ?? "This post",
+            isPresented: $showOptions,
+            actions: optionActions
+        )
+        .appDialog(
             viewModel.blockableAuthor.map { "Block \($0.displayName)?" } ?? "Block?",
             isPresented: $showBlockConfirmation,
-            titleVisibility: .visible
-        ) {
-            if let author = viewModel.blockableAuthor {
-                Button("Block", role: .destructive) {
+            message: "You won't see their photos, videos or comments anymore. They won't be told.",
+            actions: [
+                DialogAction("Block", role: .destructive) {
+                    guard let author = viewModel.blockableAuthor else { return }
                     Task {
                         await viewModel.block(author)
                         dismiss() // their content is now hidden from you
                     }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You won't see their photos, videos or comments anymore. They won't be told.")
+                },
+                .cancel(),
+            ]
+        )
+        .appDialog(
+            "Report this comment?",
+            isPresented: Binding(get: { reportingComment != nil }, set: { if !$0 { reportingComment = nil } }),
+            message: reportingComment.map { "\u{201C}\($0.text)\u{201D}" },
+            actions: [
+                DialogAction("Report comment", role: .destructive) {
+                    guard let comment = reportingComment else { return }
+                    Task { await viewModel.report(comment) }
+                },
+                .cancel(),
+            ]
+        )
+        .appDialog(
+            ReportFeedback.title,
+            isPresented: $viewModel.isReportConfirmationPresented,
+            message: ReportFeedback.message,
+            actions: [DialogAction("Done", role: .cancel)]
+        )
+    }
+
+    /// Report the post, and block its author while they still have an account.
+    private var optionActions: [DialogAction] {
+        var actions = [
+            DialogAction(
+                viewModel.didReport ? "Reported" : "Report photo",
+                role: .secondary,
+                systemImage: "flag",
+                isEnabled: !viewModel.didReport
+            ) {
+                Task { await viewModel.report() }
+            },
+        ]
+        if let author = viewModel.blockableAuthor {
+            actions.append(DialogAction("Block \(author.displayName)", role: .destructive, systemImage: "hand.raised") {
+                showBlockConfirmation = true
+            })
         }
-        .alert(ReportFeedback.title, isPresented: $viewModel.isReportConfirmationPresented) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(ReportFeedback.message)
-        }
+        actions.append(.cancel())
+        return actions
     }
 
     private var reactionRow: some View {
@@ -241,13 +272,16 @@ private struct DetailContent: View {
                                 .foregroundStyle(Theme.textPrimary.opacity(0.9))
                         }
                     }
-                    .contextMenu {
-                        if viewModel.canReport(comment) {
-                            let reported = viewModel.reportedCommentIDs.contains(comment.id)
-                            Button(reported ? "Reported" : "Report comment", systemImage: "flag") {
-                                Task { await viewModel.report(comment) }
-                            }
-                            .disabled(reported)
+                    .contentShape(Rectangle())
+                    .onLongPressGesture {
+                        guard viewModel.canReport(comment),
+                              !viewModel.reportedCommentIDs.contains(comment.id) else { return }
+                        Haptics.light()
+                        reportingComment = comment
+                    }
+                    .accessibilityActions {
+                        if viewModel.canReport(comment), !viewModel.reportedCommentIDs.contains(comment.id) {
+                            Button("Report comment") { reportingComment = comment }
                         }
                     }
                 }

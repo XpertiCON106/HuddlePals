@@ -118,7 +118,7 @@ protocol AuthServiceProtocol: AnyObject {
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState
     /// Creates the profile for a freshly authenticated account.
     func completeProfile(displayName: String, avatarColorHex: String) async throws -> User
-    /// Updates the editable profile: name, identity color, bio (≤160),
+    /// Updates the editable profile: name, identity color, bio (≤50),
     /// and up to 3 profile photo paths.
     func updateProfile(
         user: User,
@@ -143,7 +143,9 @@ protocol AuthServiceProtocol: AnyObject {
 }
 
 extension AuthValidation {
-    static let bioLimit = 160
+    /// The app's limit; the database allows 160, which older bios may use
+    /// until they're next edited.
+    static let bioLimit = 50
     static let maxProfilePhotos = 3
 
     static func sanitizedBio(_ raw: String?) -> String? {

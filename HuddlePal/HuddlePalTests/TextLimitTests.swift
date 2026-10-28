@@ -29,6 +29,8 @@ final class TextLimitTests: XCTestCase {
         XCTAssertEqual(caption?.count, 40)
         let bio = AuthValidation.sanitizedBio(String(repeating: "👨‍👩‍👧‍👦", count: 40))
         XCTAssertLessThanOrEqual(bio?.serverLength ?? 0, AuthValidation.bioLimit)
+        XCTAssertEqual(AuthValidation.bioLimit, 50)
+        XCTAssertEqual(AuthValidation.sanitizedBio(String(repeating: "a", count: 60))?.count, 50)
     }
 
     func testHuddleNamesOverTheServerLimitCannotBeCreated() {

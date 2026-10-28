@@ -74,6 +74,13 @@ final class JourneyTests: HuddleUITestCase {
         waitFor(app.buttons["Step inside"]).tap()
         waitFor(app.staticTexts["🏔 QA Huddle"], timeout: 15)
         waitFor(app.staticTexts["Nobody has posted yet"])
+
+        // 5. A member can leave, and the huddle goes from their shelf.
+        waitFor(app.buttons["Huddle settings"]).tap()
+        scrollTo(app.buttons["Leave huddle"])
+        XCTAssertFalse(app.buttons["Delete huddle"].exists, "only the keeper can delete it")
+        tapAndConfirm("Leave huddle")
+        waitFor(app.staticTexts["No huddles yet"], timeout: 15)
     }
 
     /// 4. The day's photo is once; the next day opens a new one; history
@@ -103,15 +110,16 @@ final class JourneyTests: HuddleUITestCase {
         XCTAssertTrue(app.staticTexts["Day one"].exists || app.images.count > 0)
     }
 
-    /// 5. Leaving a huddle removes it, and everything in it, from this account.
-    func testLeavingAHuddleRemovesIt() {
+    /// 5. A huddle's keeper can't leave it, only delete it.
+    func testTheKeeperCanDeleteButNotLeave() {
         launchToShelf()
         openHuddle("The Crew")
         waitFor(app.buttons["Huddle settings"]).tap()
         snapshot("10 huddle settings")
-        tapAndConfirm("Leave huddle")
-        waitFor(app.staticTexts["Sunday Dinners"], timeout: 15)
-        waitUntilGone(app.staticTexts["The Crew"])
+        let delete = app.buttons["Delete huddle"]
+        scrollTo(delete)
+        XCTAssertTrue(delete.exists)
+        XCTAssertFalse(app.buttons["Leave huddle"].exists, "the keeper can't leave")
     }
 
     /// 5b. Its keeper deletes a huddle: it's gone, for everyone.
@@ -141,7 +149,7 @@ final class JourneyTests: HuddleUITestCase {
         let save = app.buttons["Save changes"]
         scrollTo(save)
         save.tap()
-        waitFor(app.alerts["Confirm Changes"]).buttons["Save Changes"].tap()
+        dialog("Save your changes?").buttons["Save Changes"].tap()
         waitFor(app.staticTexts["Saved"], timeout: 10)
         // QA-33: done typing, a person swipes the list to put the keyboard
         // away.
@@ -188,8 +196,9 @@ final class JourneyTests: HuddleUITestCase {
         signInWithMockApple()
         completeProfile(name: "Bea")
         waitFor(app.staticTexts["No huddles yet"], timeout: 20)
-        openProfile()
-        tapAndConfirm("Delete account")
+        openDeleteAccount()
+        snapshot("27 delete account")
+        app.buttons["Delete my account"].tap()
         waitFor(app.buttons["Continue"], timeout: 20, "back on the welcome cards")
         signInWithMockApple()
         waitFor(app.textFields["Your name"], timeout: 20, "the deleted account is gone; this is a new one")

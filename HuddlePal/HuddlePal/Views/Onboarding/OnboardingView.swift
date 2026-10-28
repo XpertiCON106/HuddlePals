@@ -84,7 +84,7 @@ private struct TermsStep: View {
             VStack(spacing: 8) {
                 Group {
                     if viewModel.hasReachedEndOfTerms {
-                        Text("By tapping Agree, you accept these Terms, including binding individual arbitration and a class action waiver (Section 13).")
+                        Text("By tapping Agree, you accept these Terms.")
                     } else {
                         Label("Scroll to the end of the Terms to enable Agree.", systemImage: "arrow.down")
                     }
@@ -146,10 +146,8 @@ private struct ConceptCard: View {
     var body: some View {
         VStack(spacing: 22) {
             Spacer()
-            Image(systemName: card.systemImage)
-                .font(.system(size: 64, weight: .light))
-                .foregroundStyle(Theme.accent)
-                .accessibilityHidden(true)
+            WelcomeIllustration(kind: card.illustration)
+                .padding(.bottom, 6)
             Text(card.title)
                 .font(Theme.displayFont(30))
                 .foregroundStyle(Theme.textPrimary)

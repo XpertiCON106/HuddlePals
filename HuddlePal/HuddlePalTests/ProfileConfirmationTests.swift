@@ -126,6 +126,21 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertEqual(auth.updateCalls, 1)
         XCTAssertEqual(auth.lastPhotoPaths?.count, 3)
         XCTAssertFalse(viewModel.hasUnsavedChanges)
+        // Saved, it keeps showing the picked image: the tile doesn't go
+        // blank while the saved copy loads.
+        XCTAssertNotNil(viewModel.draftPhotos.last?.persistedPath)
+        XCTAssertNil(viewModel.draftPhotos.last?.previewData)
+        XCTAssertEqual(viewModel.draftPhotos.last?.displayData, stagedData)
+    }
+
+    func testTheAddTileStaysWhileSaving() async {
+        viewModel.removePhoto(at: 0)
+        viewModel.requestSaveConfirmation()
+        XCTAssertTrue(viewModel.canAddPhotos)
+        async let saving = viewModel.confirmAndSave()
+        XCTAssertTrue(viewModel.canAddPhotos, "disabled while saving, never gone: the row keeps its shape")
+        _ = await saving
+        XCTAssertTrue(viewModel.canAddPhotos)
     }
 
     func testRemovedAndReplacedPhotosAreOneConfirmedUpdate() async {
@@ -296,6 +311,17 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertFalse(router.isShowingProfile)
     }
 
+    func testDeleteAccountOpensFromProfileOnlyPastTheGuard() {
+        let router = dirtyProfileRouter()
+        viewModel.keepEditing()
+        router.cancelBlockedNavigation()
+        XCTAssertFalse(router.openDeleteAccount(), "unsaved changes are asked about first")
+        XCTAssertEqual(router.huddlesPath, [.profile])
+        viewModel.discardChanges()
+        router.resumeBlockedNavigation()
+        XCTAssertEqual(router.huddlesPath, [.profile, .deleteAccount], "then it goes on to the page")
+    }
+
     func testProfileOpensFromTheShelfOnceAndBackIsTheShelf() {
         let router = AppRouter()
         router.openProfile()
@@ -416,9 +442,31 @@ final class ProfileConfirmationTests: XCTestCase {
         XCTAssertEqual(auth.removeLocalDataCalls, 1, "synced rows and cached photos are forgotten")
     }
 
+    /// The Delete account page, with DELETE typed.
+    private func confirmedDeletion() -> DeleteAccountViewModel {
+        let deletion = DeleteAccountViewModel(deps: deps)
+        deletion.confirmation = "DELETE"
+        return deletion
+    }
+
+    func testOnlyDELETEExactlyLetsTheAccountBeDeleted() async {
+        let deletion = DeleteAccountViewModel(deps: deps)
+        for typed in ["", "delete", "Delete", "DELET", "DELETE NOW"] {
+            deletion.confirmation = typed
+            XCTAssertFalse(deletion.canDelete, typed)
+        }
+        let deleted = await deletion.delete()
+        XCTAssertFalse(deleted)
+        XCTAssertEqual(appleReauth.calls, 0, "Apple isn't even asked")
+        XCTAssertTrue(auth.deleteCodes.isEmpty)
+
+        deletion.confirmation = " DELETE "
+        XCTAssertTrue(deletion.canDelete, "spaces around it don't matter")
+    }
+
     func testDeletingTheAccountAlsoForgetsLocalData() async {
         deps.session.pendingInviteCode = "CREW42"
-        let deleted = await viewModel.deleteAccount()
+        let deleted = await confirmedDeletion().delete()
         XCTAssertTrue(deleted)
         XCTAssertNil(deps.session.currentUser)
         XCTAssertNil(deps.session.pendingInviteCode)
@@ -429,7 +477,7 @@ final class ProfileConfirmationTests: XCTestCase {
 
     func testDeletingTheAccountSendsAFreshAppleCode() async {
         appleReauth.result = .success("fresh-code")
-        let deleted = await viewModel.deleteAccount()
+        let deleted = await confirmedDeletion().delete()
         XCTAssertTrue(deleted)
         XCTAssertEqual(appleReauth.calls, 1, "Apple is asked at the moment of deletion")
         XCTAssertEqual(auth.deleteCodes, ["fresh-code"], "the server gets the code to revoke with")
@@ -438,26 +486,27 @@ final class ProfileConfirmationTests: XCTestCase {
 
     func testClosingApplesSheetDeletesNothing() async {
         appleReauth.result = .failure(CancellationError())
-        let deleted = await viewModel.deleteAccount()
+        let deletion = confirmedDeletion()
+        let deleted = await deletion.delete()
         XCTAssertFalse(deleted)
         XCTAssertTrue(auth.deleteCodes.isEmpty)
-        XCTAssertFalse(viewModel.isAppleConfirmationFailurePresented, "backing out isn't an error")
-        XCTAssertNil(viewModel.statusMessage)
+        XCTAssertFalse(deletion.isAppleConfirmationFailurePresented, "backing out isn't an error")
+        XCTAssertNil(deletion.errorMessage)
         XCTAssertNotNil(deps.session.currentUser)
         XCTAssertEqual(auth.removeLocalDataCalls, 0)
-        XCTAssertFalse(viewModel.isWorking)
+        XCTAssertFalse(deletion.isDeleting)
     }
 
     func testWhenAppleCantConfirmTheAccountCanStillBeDeleted() async {
         appleReauth.result = .failure(ASAuthorizationError(.failed))
-        let firstTry = await viewModel.deleteAccount()
+        let deletion = confirmedDeletion()
+        let firstTry = await deletion.delete()
         XCTAssertFalse(firstTry)
-        XCTAssertTrue(viewModel.isAppleConfirmationFailurePresented, "offers to delete anyway")
+        XCTAssertTrue(deletion.isAppleConfirmationFailurePresented, "offers to delete anyway")
         XCTAssertTrue(auth.deleteCodes.isEmpty, "nothing is deleted until they choose to")
         XCTAssertNotNil(deps.session.currentUser)
 
-        XCTAssertEqual(viewModel.requestExit(.deleteAccountWithoutApple), .deleteAccountWithoutApple)
-        let deleted = await viewModel.deleteAccountWithoutApple()
+        let deleted = await deletion.deleteWithoutApple()
         XCTAssertTrue(deleted)
         XCTAssertEqual(auth.deleteCodes, [nil], "deleted without a code to revoke with")
         XCTAssertNil(deps.session.currentUser)
@@ -466,9 +515,10 @@ final class ProfileConfirmationTests: XCTestCase {
 
     func testAFailedDeletionKeepsTheAccountSignedInAndSaysSo() async {
         auth.failNextDelete = true
-        let deleted = await viewModel.deleteAccount()
+        let deletion = confirmedDeletion()
+        let deleted = await deletion.delete()
         XCTAssertFalse(deleted)
-        XCTAssertEqual(viewModel.statusMessage, "Something went wrong. Please try again.")
+        XCTAssertEqual(deletion.errorMessage, "Something went wrong. Please try again.")
         XCTAssertNotNil(deps.session.currentUser)
         XCTAssertEqual(auth.removeLocalDataCalls, 0)
     }

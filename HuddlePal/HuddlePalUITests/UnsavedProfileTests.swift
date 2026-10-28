@@ -9,7 +9,7 @@ final class UnsavedProfileTests: HuddleUITestCase {
         let original = editDisplayName(adding: " QA")
 
         tapBack()
-        var warning = waitFor(app.alerts["Unsaved Changes"])
+        var warning = dialog("Unsaved Changes")
         XCTAssertFalse(app.staticTexts["The Crew"].isHittable, "the shelf mustn't show behind the warning")
         warning.buttons["Keep Editing"].tap()
         waitUntilGone(warning)
@@ -17,7 +17,7 @@ final class UnsavedProfileTests: HuddleUITestCase {
         XCTAssertEqual(app.textFields["Display name"].value as? String, original + " QA", "the edit is kept")
 
         tapBack()
-        warning = waitFor(app.alerts["Unsaved Changes"])
+        warning = dialog("Unsaved Changes")
         warning.buttons["Discard Changes"].tap()
         waitFor(app.staticTexts["The Crew"], timeout: 10, "Discard goes on back to the shelf")
 
@@ -29,14 +29,14 @@ final class UnsavedProfileTests: HuddleUITestCase {
         let original = editDisplayName(adding: " QA")
 
         tapBack()
-        waitFor(app.alerts["Unsaved Changes"]).buttons["Save Changes"].tap()
+        dialog("Unsaved Changes").buttons["Save Changes"].tap()
         waitFor(app.staticTexts["The Crew"], timeout: 10, "Save goes on back to the shelf")
 
         openProfile()
         XCTAssertEqual(waitFor(app.textFields["Display name"]).value as? String, original + " QA", "the edit was saved")
         tapBack()
         waitFor(app.staticTexts["The Crew"], timeout: 10, "nothing unsaved now: no warning")
-        XCTAssertFalse(app.alerts["Unsaved Changes"].exists)
+        XCTAssertFalse(app.otherElements["appDialog"].exists)
     }
 
     /// A swipe from the left edge would leave without asking: it's off

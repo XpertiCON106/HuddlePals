@@ -92,7 +92,7 @@ final class SeedDataService {
         let maya = User(
             displayName: "Maya",
             avatarColorHex: "12A594",
-            bio: "Plant mom, trail snob, professional golden-hour chaser."
+            bio: "Plant mom, trail snob, golden-hour chaser."
         )
         let sam = User(
             displayName: "Sam",

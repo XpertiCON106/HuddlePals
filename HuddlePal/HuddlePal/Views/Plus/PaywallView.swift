@@ -77,11 +77,12 @@ private struct PaywallContent: View {
         }
         .task { await viewModel.load() }
         .manageSubscriptionsSheet(isPresented: $showManageSubscription)
-        .alert("This Apple Account already has HuddlePals+", isPresented: $viewModel.isLinkedElsewhereAlertPresented) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(PaywallViewModel.linkedElsewhere)
-        }
+        .appDialog(
+            "This Apple Account already has HuddlePals+",
+            isPresented: $viewModel.isLinkedElsewhereAlertPresented,
+            message: PaywallViewModel.linkedElsewhere,
+            actions: [DialogAction("OK", role: .cancel)]
+        )
     }
 
     @ViewBuilder
@@ -190,7 +191,7 @@ private struct PaywallContent: View {
             }
             PlusFeatureList()
             if let until = viewModel.premiumUntil, until != .distantFuture {
-                Text("Current period ends \(until, format: .dateTime.month().day().year()). Manage it any time in Profile.")
+                Text("Current period ends \(until, format: .dateTime.month().day().year()).\nManage it any time in Profile.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
