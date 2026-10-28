@@ -24,6 +24,8 @@ that both end up identical (`npm test`).
 | `014_delete_huddle.sql` | A keeper deletes their huddle: `delete_huddle(huddle, user)` (service role only, for the `delete-huddle` function) keeps any reported deposit in `preserved_photos`, records the deletion in `huddle_deletions` for the members' notification (`queue_push`, `push_targets` learns `huddle_deleted`), and deletes the huddle with everything in it |
 | `015_keeper_cannot_leave.sql` | A keeper can't leave their huddle, only delete it: leaving (deleting your own `memberships` row) is for members. The keeper's row still goes with their account, and the longest-standing member takes over |
 | `016_birthdays.sql` | Birthdays (`profile_birthdates`): one per account, readable and writable only by its owner, refused under 13, gone with the profile |
+| `017_live_updates.sql` | Live updates: deposits, comments and reactions join the `supabase_realtime` publication, so an open huddle updates as members post, comment and react |
+| `018_delete_sole_huddles.sql` | Account deletion removes a huddle the user was the only member of: `delete_sole_huddles(user)` (service role only, for the `delete-account` function) keeps any reported deposit in `preserved_photos` and deletes the huddle with everything in it. Huddles that still have other members stay |
 
 Ship the app build with 008 and 009: run them first, and older builds keep
 working (they keep joining with old codes until someone on the new build
@@ -55,3 +57,7 @@ Run 017 for live updates: it puts deposits, comments and reactions in the
 `supabase_realtime` publication, so an open huddle updates as members post,
 comment and react. Until it runs, the app still refreshes an open huddle
 every half minute, so it can go before or after the build ships.
+
+Run 018 before deploying the `delete-account` function that calls it.
+Until then, deleting an account leaves a huddle behind when that person
+was its only member, along with that huddle's files in Storage.

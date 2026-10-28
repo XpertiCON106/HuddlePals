@@ -25,6 +25,12 @@ export interface DeleteAccountServices {
   removeDeviceTokens(userId: string): Promise<void>;
   /** Deletes the user's profile photos (avatars/<user id>/...). */
   removeAvatars(userId: string): Promise<void>;
+  /**
+   * Deletes every huddle in which this user is the only member, and that
+   * huddle's Storage files, keeping a reported deposit's files. Huddles
+   * that still have other members are left alone.
+   */
+  removeSoleHuddles(userId: string): Promise<void>;
   /** Leaves the user's remaining Storage objects (deposit photos) unowned. */
   releaseStorageObjects(userId: string): Promise<void>;
   /** auth.admin.deleteUser. Throws on failure. */
@@ -66,15 +72,24 @@ export async function handleDeleteAccount(req: Request, services: DeleteAccountS
     services.log("device_token_cleanup_failed", errorName(e));
   }
 
-  // 3. Delete the profile photos. Deposit photos stay on purpose: the
-  //    huddle's archive is permanent.
+  // 3. Delete the profile photos. Deposit photos in a huddle that still
+  //    has other members stay on purpose: that archive is permanent.
   try {
     await services.removeAvatars(user.id);
   } catch (e) {
     services.log("avatar_cleanup_failed", errorName(e));
   }
 
-  // 4. Release the deposit photos the user uploaded. Where storage.objects
+  // 4. Delete huddles this person is the only member of, including their
+  //    files. A reported deposit's files are kept. Best effort: a failure
+  //    is logged and the account deletion goes on.
+  try {
+    await services.removeSoleHuddles(user.id);
+  } catch (e) {
+    services.log("sole_huddle_cleanup_failed", errorName(e));
+  }
+
+  // 5. Release the deposit photos the user uploaded. Where storage.objects
   //    .owner still references auth.users, deleteUser fails for anyone who
   //    owns an object.
   try {
@@ -83,9 +98,10 @@ export async function handleDeleteAccount(req: Request, services: DeleteAccountS
     services.log("storage_release_failed", errorName(e));
   }
 
-  // 5. Delete the auth user. FKs cascade the profile, memberships, device
-  //    tokens and the user's E2EE keys; deposits and comments keep their rows
-  //    with a null author ("Former member").
+  // 6. Delete the auth user. FKs cascade the profile, memberships, device
+  //    tokens and the user's E2EE keys. In a huddle that still has other
+  //    members, deposits and comments keep their rows with a null author
+  //    ("Former member").
   try {
     await services.deleteUser(user.id);
   } catch (e) {

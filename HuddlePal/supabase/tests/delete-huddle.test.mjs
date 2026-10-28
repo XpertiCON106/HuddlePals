@@ -18,9 +18,13 @@ function request(body = { huddle_id: HUDDLE }, { token = 'access', method = 'POS
   })
 }
 
-/** Fake services: `files` in the huddle's folder, `kept` returned by delete_huddle. */
-function fake({ user = KEEPER, refusal = null, kept = [], files = [], failRemove = false, failList = false } = {}) {
-  const calls = { deleteRows: [], removed: [], logs: [] }
+/**
+ * Fake services. `files` live in the lowercase folder. `filesByFolder`
+ * maps a folder name to the file names in it (the uppercase folder the app
+ * writes, or the lowercase one). `kept` is what delete_huddle returns.
+ */
+function fake({ user = KEEPER, refusal = null, kept = [], files = [], filesByFolder = null, failRemove = false, failList = false } = {}) {
+  const calls = { deleteRows: [], removed: [], listed: [], logs: [] }
   const services = {
     async authenticate(token) { return token === 'access' ? user : null },
     async deleteRows(huddleId, userId) {
@@ -28,9 +32,13 @@ function fake({ user = KEEPER, refusal = null, kept = [], files = [], failRemove
       if (refusal) throw new Error(refusal)
       return kept
     },
-    async listFiles(huddleId) {
+    async listFiles(folder) {
+      calls.listed.push(folder)
       if (failList) throw new Error('storage down')
-      return files.map((name) => `${huddleId}/${name}`)
+      const names = filesByFolder
+        ? (filesByFolder[folder] ?? [])
+        : (folder === folder.toLowerCase() ? files : [])
+      return names.map((name) => `${folder}/${name}`)
     },
     async removeFiles(paths) {
       if (failRemove) throw new Error('storage down')
@@ -57,8 +65,23 @@ describe('delete-huddle', () => {
     const response = await handleDeleteHuddle(request({ huddle_id: HUDDLE.toUpperCase() }), services)
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), { deleted: true })
-    assert.deepEqual(calls.deleteRows, [[HUDDLE, KEEPER]], 'the lowercase id the folders use')
+    assert.deepEqual(calls.deleteRows, [[HUDDLE, KEEPER]], 'the id passed to delete_huddle')
+    assert.deepEqual(calls.listed, [HUDDLE, HUDDLE.toUpperCase()])
     assert.deepEqual(calls.removed, [`${HUDDLE}/a.jpg`, `${HUDDLE}/b.jpg`, `${HUDDLE}/b.mp4`])
+  })
+
+  it('removes files in the uppercase folder the app writes, and keeps a reported one there', async () => {
+    const upper = HUDDLE.toUpperCase()
+    const { services, calls } = fake({
+      filesByFolder: {
+        [HUDDLE]: ['old.jpg'],
+        [upper]: ['NEW.jpg', 'KEEP.jpg', 'KEEP.mp4'],
+      },
+      kept: [`${upper}/KEEP.jpg`, `${upper}/KEEP.mp4`],
+    })
+    const response = await handleDeleteHuddle(request({ huddle_id: upper }), services)
+    assert.equal(response.status, 200)
+    assert.deepEqual(calls.removed, [`${HUDDLE}/old.jpg`, `${upper}/NEW.jpg`])
   })
 
   it("keeps a reported deposit's files", async () => {

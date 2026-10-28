@@ -10,14 +10,21 @@
 //   2. Deletes the user's registered devices (device_tokens), so no push
 //      notification reaches them.
 //   3. Deletes the user's avatar Storage objects (PII).
-//   4. Releases ownership of the deposit photos they uploaded
+//   4. Deletes every huddle in which this user is the only member
+//      (public.delete_sole_huddles, migration 018), then every file in that
+//      huddle's Storage folder, in both the uppercase id the app writes and
+//      the lowercase id, except a reported deposit's poster and clip (kept
+//      in preserved_photos). Huddles that still have other members stay.
+//      Best effort: a failure is logged and the deletion still completes.
+//   5. Releases ownership of the deposit photos they uploaded
 //      (public.release_storage_objects, migration 007), so deleteUser isn't
 //      blocked by storage.objects.owner → auth.users.
-//   5. Deletes the auth user. FKs then cascade: profile is removed, and so
-//      are the user's E2EE keys (user_keys, huddle_keys); deposits/comments
-//      keep their rows with a null author ("Former member") — the huddle's
-//      archive stays permanent, and stays readable to members, who hold
-//      their own copies of the huddle key.
+//   6. Deletes the auth user. FKs then cascade: profile is removed, and so
+//      are the user's E2EE keys (user_keys, huddle_keys). In a huddle that
+//      still has other members, deposits/comments keep their rows with a
+//      null author ("Former member") — that archive stays permanent, and
+//      stays readable to the members, who hold their own copies of the
+//      huddle key.
 //
 // Secrets: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected
 // automatically. Apple revocation needs APPLE_TEAM_ID, APPLE_KEY_ID,
@@ -26,12 +33,15 @@
 // DEVELOPMENT.md ("Backend setup and deploys") has the key setup, the
 // `supabase secrets set` command and the deploy command.
 //
-// The logic lives in handler.ts and apple.ts, tested on Node by
+// The request order lives in handler.ts, and which files a sole huddle
+// loses lives in sole-huddles.ts. Both are tested on Node by
 // supabase/tests/delete-account.test.mjs; this file only wires Supabase in.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
+import { listStorageFolder } from "../_shared/huddle-storage.ts";
 import { appleConfigFromEnv } from "./apple.ts";
 import { handleDeleteAccount } from "./handler.ts";
+import { removeSoleHuddleFiles, soleHuddleDeletions } from "./sole-huddles.ts";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -60,6 +70,21 @@ Deno.serve((req) =>
         const { error: removeError } = await bucket.remove(files.map((f) => `${prefix}/${f.name}`));
         if (removeError) throw removeError;
       }
+    },
+    async removeSoleHuddles(userId) {
+      const { data, error } = await admin.rpc("delete_sole_huddles", { p_user: userId });
+      if (error) throw new Error(error.message);
+      const bucket = admin.storage.from("deposits");
+      await removeSoleHuddleFiles(soleHuddleDeletions(data), async (folder) => {
+        return listStorageFolder(folder, async (name, offset, limit) => {
+          const { data: files, error: listError } = await bucket.list(name, { limit, offset });
+          if (listError) throw listError;
+          return files ?? [];
+        });
+      }, async (paths) => {
+        const { error: removeError } = await bucket.remove(paths);
+        if (removeError) throw removeError;
+      });
     },
     async releaseStorageObjects(userId) {
       const { error } = await admin.rpc("release_storage_objects", { p_user_id: userId });

@@ -7,7 +7,8 @@
 //      it (send-push, 'huddle_deleted'), and deletes the huddle; its
 //      memberships, deposits, reactions, comments, skips, keys and invite
 //      go with it.
-//   2. Every file in Storage under "<huddle id>/" is deleted, except a
+//   2. Every file in Storage under the huddle's folder is deleted, in both
+//      the uppercase id the app writes and the lowercase id, except a
 //      reported deposit's poster and clip.
 //
 // Secrets: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY only (injected
@@ -18,6 +19,7 @@
 // supabase/tests/delete-huddle.test.mjs; this file only wires Supabase in.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
+import { listStorageFolder } from "../_shared/huddle-storage.ts";
 import { handleDeleteHuddle } from "./handler.ts";
 
 const admin = createClient(
@@ -38,15 +40,12 @@ Deno.serve((req) =>
       if (error) throw new Error(error.message);
       return (data as string[] | null) ?? [];
     },
-    async listFiles(huddleId) {
-      const paths: string[] = [];
-      for (let offset = 0;; offset += 1000) {
-        const { data, error } = await bucket().list(huddleId, { limit: 1000, offset });
+    async listFiles(folder) {
+      return listStorageFolder(folder, async (name, offset, limit) => {
+        const { data, error } = await bucket().list(name, { limit, offset });
         if (error) throw error;
-        // Folders come back with no id; a huddle's folder has only files.
-        for (const file of data ?? []) if (file.id) paths.push(`${huddleId}/${file.name}`);
-        if (!data || data.length < 1000) return paths;
-      }
+        return data ?? [];
+      });
     },
     async removeFiles(paths) {
       const { error } = await bucket().remove(paths);

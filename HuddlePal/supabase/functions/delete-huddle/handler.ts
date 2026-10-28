@@ -2,6 +2,8 @@
 // delete a huddle and which files go are testable on their own
 // (supabase/tests/delete-huddle.test.mjs). index.ts wires the real services.
 
+import { listHuddleFolderFiles, STORAGE_REMOVE_BATCH } from "../_shared/huddle-storage.ts";
+
 export interface DeleteHuddleServices {
   /** The caller's user id, from their access token; null if it isn't valid. */
   authenticate(accessToken: string): Promise<string | null>;
@@ -11,8 +13,8 @@ export interface DeleteHuddleServices {
    * deposit's files). Throws with the database's message on a refusal.
    */
   deleteRows(huddleId: string, userId: string): Promise<string[]>;
-  /** Every file in the deposits bucket under "<huddle id>/". */
-  listFiles(huddleId: string): Promise<string[]>;
+  /** Every file directly inside this deposits folder, as "<folder>/<name>". */
+  listFiles(folder: string): Promise<string[]>;
   /** Deletes these paths from the deposits bucket. */
   removeFiles(paths: string[]): Promise<void>;
   /** Server-side log. Never handed a token. */
@@ -26,8 +28,6 @@ const cors = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** Storage deletes per request. */
-const BATCH = 100;
 
 export async function handleDeleteHuddle(req: Request, services: DeleteHuddleServices): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -44,7 +44,8 @@ export async function handleDeleteHuddle(req: Request, services: DeleteHuddleSer
     return json({ error: "bad_request" }, 400);
   }
   if (typeof requested !== "string" || !UUID.test(requested)) return json({ error: "bad_request" }, 400);
-  // Storage folders use the lowercase id, as the app writes them.
+  // UUIDs compare either way in the database. Storage names do not: the app
+  // writes the uppercase id, and older files may sit under the lowercase one.
   const huddleId = requested.toLowerCase();
 
   // 1. The rows, in one transaction: only the keeper gets past this.
@@ -59,16 +60,17 @@ export async function handleDeleteHuddle(req: Request, services: DeleteHuddleSer
     return json({ error: "delete_failed" }, 500);
   }
 
-  // 2. The files: everything in the huddle's folder but what a report keeps.
-  //    The huddle is already gone, so a file that can't be deleted now is
-  //    unreadable anyway (Storage lets only its members read it): logged
-  //    for the operator, not an error for the keeper.
+  // 2. The files: everything in either casing of the huddle's folder, except
+  //    what a report keeps. The huddle is already gone, so a file that
+  //    can't be deleted now is unreadable anyway (Storage lets only its
+  //    members read it): logged for the operator, not an error for the keeper.
   const keep = new Set(kept);
   let removed = 0, failed = 0;
   try {
-    const paths = (await services.listFiles(huddleId)).filter((path) => !keep.has(path));
-    for (let i = 0; i < paths.length; i += BATCH) {
-      const batch = paths.slice(i, i + BATCH);
+    const paths = (await listHuddleFolderFiles(huddleId, (folder) => services.listFiles(folder)))
+      .filter((path) => !keep.has(path));
+    for (let i = 0; i < paths.length; i += STORAGE_REMOVE_BATCH) {
+      const batch = paths.slice(i, i + STORAGE_REMOVE_BATCH);
       try {
         await services.removeFiles(batch);
         removed += batch.length;

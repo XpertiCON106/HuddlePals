@@ -9,6 +9,8 @@ import {
   AppleError, appleConfigFromEnv, makeClientSecret, revokeWithAuthorizationCode,
 } from '../functions/delete-account/apple.ts'
 import { handleDeleteAccount } from '../functions/delete-account/handler.ts'
+import { removeSoleHuddleFiles, soleHuddleDeletions } from '../functions/delete-account/sole-huddles.ts'
+import { huddleStorageFolders, listHuddleFolderFiles } from '../functions/_shared/huddle-storage.ts'
 
 const APPLE_USER = '000123.abcdef0123456789.0042'
 const CODE = 'c0de.from.apple'
@@ -145,6 +147,7 @@ describe('delete-account handler', () => {
       },
       removeDeviceTokens: step('removeDeviceTokens'),
       removeAvatars: step('removeAvatars'),
+      removeSoleHuddles: step('removeSoleHuddles'),
       releaseStorageObjects: step('releaseStorageObjects'),
       deleteUser: step('deleteUser'),
       log: (event, detail) => logs.push(detail ? `${event} ${detail}` : event),
@@ -161,10 +164,11 @@ describe('delete-account handler', () => {
 
   const allSteps = [
     'apple /auth/token', 'apple /auth/revoke',
-    'removeDeviceTokens user-1', 'removeAvatars user-1', 'releaseStorageObjects user-1', 'deleteUser user-1',
+    'removeDeviceTokens user-1', 'removeAvatars user-1', 'removeSoleHuddles user-1',
+    'releaseStorageObjects user-1', 'deleteUser user-1',
   ]
 
-  it('revokes the Apple tokens, forgets the devices, removes avatars, releases photos, then deletes the user', async () => {
+  it('revokes the Apple tokens, forgets the devices, removes avatars, deletes sole huddles, releases photos, then deletes the user', async () => {
     const { services, steps, logs } = await setUp()
     const response = await handleDeleteAccount(request(), services)
     assert.equal(response.status, 200)
@@ -223,20 +227,24 @@ describe('delete-account handler', () => {
     assert.deepEqual(steps, allSteps.slice(2))
   })
 
-  it('a failed device, avatar or photo cleanup is logged and the deletion goes on', async () => {
+  it('a failed device, avatar, sole-huddle or photo cleanup is logged and the deletion goes on', async () => {
     const { services, steps, logs } = await setUp({
       fail: {
         removeDeviceTokens: new Error('table missing'),
         removeAvatars: new Error('storage down'),
+        removeSoleHuddles: new Error('function missing'),
         releaseStorageObjects: new Error('function missing'),
       },
     })
     const response = await handleDeleteAccount(request(), services)
     assert.equal(response.status, 200)
     assert.deepEqual(steps, allSteps)
+    assert.ok(steps.indexOf('removeSoleHuddles user-1') < steps.indexOf('releaseStorageObjects user-1'))
+    assert.ok(steps.indexOf('removeSoleHuddles user-1') < steps.indexOf('deleteUser user-1'))
     assert.deepEqual(logs.slice(1), [
       'device_token_cleanup_failed Error: table missing',
       'avatar_cleanup_failed Error: storage down',
+      'sole_huddle_cleanup_failed Error: function missing',
       'storage_release_failed Error: function missing',
     ])
   })
@@ -263,5 +271,92 @@ describe('delete-account handler', () => {
     assert.equal((await handleDeleteAccount(request(undefined, { method: 'GET' }), services)).status, 405)
     assert.equal((await handleDeleteAccount(request(undefined, { method: 'OPTIONS' }), services)).status, 200)
     assert.deepEqual(steps, [])
+  })
+})
+
+const SOLE = 'f7cf016d-16d9-455e-8bf7-88e1d1b633c7'
+
+describe('sole huddle files on account deletion', () => {
+  it('reads the jsonb delete_sole_huddles returns', () => {
+    assert.deepEqual(soleHuddleDeletions(null), [])
+    assert.deepEqual(soleHuddleDeletions('not json'), [])
+    assert.deepEqual(soleHuddleDeletions({}), [])
+    assert.deepEqual(
+      soleHuddleDeletions(JSON.stringify([
+        { huddle_id: SOLE, kept_paths: [`${SOLE}/keep.jpg`, 1] },
+        { huddle_id: 4 },
+      ])),
+      [{ huddle_id: SOLE, kept_paths: [`${SOLE}/keep.jpg`] }],
+    )
+  })
+
+  it('deletes a sole-member huddle’s files in both folder casings and keeps a reported one', async () => {
+    const upper = SOLE.toUpperCase()
+    const listed = []
+    const removed = []
+    await removeSoleHuddleFiles(
+      [{ huddle_id: SOLE, kept_paths: [`${upper}/KEEP.jpg`, `${upper}/KEEP.mp4`] }],
+      async (folder) => {
+        listed.push(folder)
+        if (folder === upper) return [`${folder}/KEEP.jpg`, `${folder}/KEEP.mp4`, `${folder}/GONE.jpg`]
+        if (folder === SOLE) return [`${folder}/old.jpg`]
+        return []
+      },
+      async (paths) => { removed.push(...paths) },
+    )
+    assert.deepEqual(listed, [SOLE, upper])
+    assert.deepEqual(removed, [`${SOLE}/old.jpg`, `${upper}/GONE.jpg`])
+  })
+
+  it('leaves files alone when no sole huddle was deleted', async () => {
+    let listed = 0
+    await removeSoleHuddleFiles([], async () => { listed += 1; return ['x'] }, async () => { throw new Error('removed') })
+    assert.equal(listed, 0)
+  })
+
+  it('removes a sole huddle’s files a hundred at a time', async () => {
+    const upper = SOLE.toUpperCase()
+    const names = Array.from({ length: 250 }, (_, i) => `${upper}/${i}.jpg`)
+    const batches = []
+    await removeSoleHuddleFiles(
+      [{ huddle_id: SOLE, kept_paths: [] }],
+      async (folder) => (folder === upper ? names : []),
+      async (paths) => { assert.ok(paths.length <= 100); batches.push(paths.length) },
+    )
+    assert.deepEqual(batches, [100, 100, 50])
+  })
+
+  it('still removes the next sole huddle when one listing fails', async () => {
+    const other = 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    const removed = []
+    await assert.rejects(
+      removeSoleHuddleFiles(
+        [
+          { huddle_id: SOLE, kept_paths: [] },
+          { huddle_id: other, kept_paths: [] },
+        ],
+        async (folder) => {
+          if (folder === SOLE) throw new Error('storage down')
+          if (folder === other.toUpperCase()) return [`${folder}/b.jpg`]
+          return []
+        },
+        async (paths) => { removed.push(...paths) },
+      ),
+      /storage down/,
+    )
+    assert.deepEqual(removed, [`${other.toUpperCase()}/b.jpg`])
+  })
+
+  it('lists each folder casing once and drops a repeated path', async () => {
+    const id = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    assert.deepEqual(huddleStorageFolders(id), [id, id.toUpperCase()])
+    assert.deepEqual(huddleStorageFolders('00000000-0000-4000-8000-000000000001'), ['00000000-0000-4000-8000-000000000001'])
+    const calls = []
+    const paths = await listHuddleFolderFiles(id, async (folder) => {
+      calls.push(folder)
+      return [`${folder}/a.jpg`, `${folder}/a.jpg`]
+    })
+    assert.deepEqual(calls, [id, id.toUpperCase()])
+    assert.deepEqual(paths, [`${id}/a.jpg`, `${id.toUpperCase()}/a.jpg`])
   })
 })

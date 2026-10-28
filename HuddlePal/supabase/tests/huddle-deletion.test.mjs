@@ -6,8 +6,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  freshDatabase, q, admin, service, serverToday, signUp, createHuddle, joinHuddle, deposit, videoDeposit,
-  grantPlus, PUBLIC_KEY, randomUUID,
+  freshDatabase, q, admin, service, affected, serverToday, signUp, createHuddle, joinHuddle, deposit, videoDeposit,
+  grantPlus, PUBLIC_KEY, WRAPPED_KEY, randomUUID, storeObject,
 } from './harness.mjs'
 
 const DENIED = /permission denied/
@@ -131,5 +131,147 @@ describe('deleting a huddle', () => {
     for (const uid of [A, B, null]) {
       await assert.rejects(q(db, uid, 'select * from huddle_deletions'), /row-level security|permission denied/)
     }
+  })
+})
+
+function deletedHuddles(value) {
+  const rows = typeof value === 'string' ? JSON.parse(value) : value
+  return rows.map((row) => ({
+    huddle_id: row.huddle_id,
+    kept_paths: [...row.kept_paths].sort(),
+  })).sort((a, b) => (a.huddle_id < b.huddle_id ? -1 : a.huddle_id > b.huddle_id ? 1 : 0))
+}
+
+const deleteSole = async (db, uid) =>
+  deletedHuddles((await service(db, 'select delete_sole_huddles($1) as deleted', [uid]))[0].deleted)
+
+describe('delete_sole_huddles', () => {
+  it('only the service role can call it, and it is not security definer', async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    for (const caller of [A, null]) {
+      await assert.rejects(q(db, caller, 'select delete_sole_huddles($1)', [A]), DENIED)
+    }
+    assert.deepEqual(
+      await admin(db, `select prosecdef, array_to_string(proconfig, ',') as config from pg_proc where proname = 'delete_sole_huddles'`),
+      [{ prosecdef: false, config: 'search_path=public' }],
+    )
+  })
+
+  it('deletes a huddle whose last member is going, keeps a reported deposit, and tells nobody', async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const alone = await createHuddle(db, A, 'Alone')
+    await joinHuddle(db, B, alone.invite_code)
+    const today = await serverToday(db)
+    const photoPath = `${alone.id.toUpperCase()}/${randomUUID().toUpperCase()}.jpg`
+    const [photo] = await q(db, A,
+      `insert into deposits (huddle_id, author_id, storage_path, wrapped_photo_key, day_key, caption)
+       values ($1, $2, $3, $4, $5, 'reported') returning *`,
+      [alone.id, A, photoPath, WRAPPED_KEY, today])
+    await q(db, A, `insert into reactions (deposit_id, user_id, emoji) values ($1, $2, '🔥')`, [photo.id, A])
+    await q(db, B, `insert into comments (deposit_id, user_id, body) values ($1, $2, 'hm')`, [photo.id, B])
+    const [photoReport] = await q(db, B,
+      'insert into reports (reporter_id, deposit_id, photo_key) values ($1, $2, $3) returning id',
+      [B, photo.id, PUBLIC_KEY('P')])
+    await affected(db, B, 'delete from memberships where user_id = $1 and huddle_id = $2', [B, alone.id])
+    await grantPlus(db, A)
+    const video = await videoDeposit(db, A, alone.id, await serverToday(db, -1))
+    await q(db, A, 'insert into reports (reporter_id, deposit_id, photo_key) values ($1, $2, $3)', [A, video.id, PUBLIC_KEY('V')])
+    const plain = await deposit(db, A, alone.id, await serverToday(db, -2))
+    for (const name of [photo.storage_path, video.storage_path, video.video_path, plain.storage_path]) await storeObject(db, name)
+    const bens = await createHuddle(db, B, 'Bens')
+    await admin(db, `insert into vault.secrets (name, secret) values ('push_function_url', 'https://p.supabase.co/functions/v1/send-push'), ('push_webhook_secret', 'shh')`)
+
+    const deleted = await deleteSole(db, A)
+
+    assert.deepEqual(deleted, [{
+      huddle_id: alone.id,
+      kept_paths: [photo.storage_path, video.storage_path, video.video_path].sort(),
+    }])
+    assert.equal(photo.storage_path, photoPath, 'the uppercase path the app wrote is what gets kept')
+    assert.equal(await count(db, 'huddles where id = $1', [alone.id]), 0)
+    for (const table of ['memberships', 'deposits', 'huddle_keys', 'huddle_invite_keys']) {
+      assert.equal(await count(db, `${table} where huddle_id = $1`, [alone.id]), 0, table)
+    }
+    assert.equal(await count(db, 'reactions where deposit_id = $1', [photo.id]), 0)
+    assert.equal(await count(db, 'comments where deposit_id = $1', [photo.id]), 0)
+    assert.equal(await count(db, 'deposits where id = $1', [plain.id]), 0, 'an unreported post goes')
+    assert.equal(await count(db, 'huddles where id = $1', [bens.id]), 1, "someone else's huddle stays")
+    assert.equal(await count(db, 'profiles where id = $1', [A]), 1, 'the account itself is still here')
+
+    const preserved = await admin(db, 'select deposit_id, photo_key, note, report_ids, media_type, storage_path, video_path from preserved_photos order by media_type')
+    const byDeposit = Object.fromEntries(preserved.map((p) => [p.deposit_id, p]))
+    assert.equal(byDeposit[photo.id].photo_key, PUBLIC_KEY('P'))
+    assert.equal(byDeposit[photo.id].note, 'Kept when its last member deleted their account')
+    assert.equal(byDeposit[photo.id].storage_path, photoPath)
+    assert.deepEqual(byDeposit[photo.id].report_ids, [photoReport.id])
+    assert.equal(byDeposit[video.id].media_type, 'video')
+    assert.equal(byDeposit[video.id].video_path, video.video_path)
+    assert.deepEqual(
+      await admin(db, 'select reporter_id, deposit_id, photo_key from reports where id = $1', [photoReport.id]),
+      [{ reporter_id: B, deposit_id: null, photo_key: PUBLIC_KEY('P') }],
+    )
+    for (const name of [photo.storage_path, video.storage_path, video.video_path, plain.storage_path]) {
+      assert.equal(await count(db, 'storage.objects where name = $1', [name]), 1, `${name} stays for the edge function`)
+    }
+    assert.deepEqual(await admin(db, 'select 1 from huddle_deletions'), [])
+    assert.deepEqual(await admin(db, 'select 1 from net.http_requests'), [])
+    assert.deepEqual(await deleteSole(db, A), [], 'running it again finds nothing')
+  })
+
+  it('leaves a huddle that still has someone else, and that post stays with a null author after the account goes', async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const shared = await createHuddle(db, A, 'Shared')
+    await joinHuddle(db, B, shared.invite_code)
+    const alone = await createHuddle(db, A, 'Alone')
+    const today = await serverToday(db)
+    const sharedPhoto = await deposit(db, A, shared.id, today, { caption: 'us' })
+    const alonePhoto = await deposit(db, A, alone.id, today)
+    await q(db, B, `insert into comments (deposit_id, user_id, body) values ($1, $2, 'hi')`, [sharedPhoto.id, B])
+    await storeObject(db, sharedPhoto.storage_path)
+    await storeObject(db, alonePhoto.storage_path)
+
+    assert.deepEqual(await deleteSole(db, A), [{ huddle_id: alone.id, kept_paths: [] }])
+    assert.equal(await count(db, 'huddles where id = $1', [alone.id]), 0)
+    assert.equal(await count(db, 'deposits where id = $1', [alonePhoto.id]), 0)
+    assert.deepEqual(
+      await admin(db, 'select author_id, caption from deposits where id = $1', [sharedPhoto.id]),
+      [{ author_id: A, caption: 'us' }],
+    )
+    assert.equal(await count(db, 'storage.objects where name = $1', [sharedPhoto.storage_path]), 1)
+
+    await admin(db, 'delete from auth.users where id = $1', [A])
+
+    assert.deepEqual(
+      await admin(db, 'select author_id, caption from deposits where id = $1', [sharedPhoto.id]),
+      [{ author_id: null, caption: 'us' }],
+    )
+    assert.deepEqual(
+      await admin(db, 'select user_id, role from memberships where huddle_id = $1', [shared.id]),
+      [{ user_id: B, role: 'keeper' }],
+    )
+    assert.equal((await q(db, B, 'select * from deposits')).length, 1)
+    assert.equal((await q(db, B, 'select body from comments'))[0].body, 'hi')
+    assert.equal(await count(db, 'huddles where id = $1', [shared.id]), 1)
+    assert.equal(await count(db, 'storage.objects where name = $1', [sharedPhoto.storage_path]), 1, 'the shared photo stays')
+  })
+
+  it('deletes every huddle the user is alone in, and no other', async () => {
+    const db = await freshDatabase()
+    const A = await signUp(db, 'Ada')
+    const B = await signUp(db, 'Ben')
+    const one = await createHuddle(db, A, 'One')
+    const two = await createHuddle(db, A, 'Two')
+    const shared = await createHuddle(db, B, 'Shared')
+    await joinHuddle(db, A, shared.invite_code)
+    const deleted = await deleteSole(db, A)
+    assert.deepEqual(deleted.map((row) => row.huddle_id), [one.id, two.id].sort())
+    assert.equal(await count(db, 'huddles where id = $1', [shared.id]), 1)
+    const roles = Object.fromEntries((await admin(db, 'select user_id, role from memberships where huddle_id = $1', [shared.id])).map((r) => [r.user_id, r.role]))
+    assert.deepEqual(roles, { [B]: 'keeper', [A]: 'member' })
   })
 })
