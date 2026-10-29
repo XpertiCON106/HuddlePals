@@ -131,6 +131,89 @@ create index memberships_user on public.memberships (user_id);
 create index reactions_deposit on public.reactions (deposit_id);
 create index comments_deposit on public.comments (deposit_id);
 
+-- ============================================================ birthdays
+-- A profile becomes usable only with an eligible birthday. The owner can
+-- read theirs; only the activation RPCs can write it, once. Age uses the
+-- server's UTC date, with no grace that could admit someone under 13.
+create table public.profile_birthdates (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  birth_date date not null check (birth_date >= date '1900-01-01')
+);
+alter table public.profile_birthdates enable row level security;
+revoke all on public.profile_birthdates from anon, authenticated;
+grant select on public.profile_birthdates to authenticated;
+create policy profile_birthdates_select on public.profile_birthdates for select
+  using (user_id = auth.uid());
+
+-- No user argument: clients cannot query another account's age status.
+create or replace function public.caller_is_age_eligible()
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from profile_birthdates
+    where user_id = auth.uid()
+      and birth_date <= (((now() at time zone 'UTC')::date) - interval '13 years')::date
+  );
+$$;
+
+create or replace function public.require_age_eligibility()
+returns void
+language plpgsql stable set search_path = public as $$
+begin
+  if not caller_is_age_eligible() then
+    raise exception 'age_confirmation_required';
+  end if;
+end $$;
+
+-- Legacy accounts give a birthday before using any core app data. Retrying
+-- the same value is safe after a lost response; changing it is refused.
+create or replace function public.save_birthday(p_birth_date date)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_saved date;
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  if p_birth_date is null or p_birth_date < date '1900-01-01' then
+    raise exception 'invalid_birthday';
+  end if;
+  if p_birth_date > (((now() at time zone 'UTC')::date) - interval '13 years')::date then
+    raise exception 'under_minimum_age';
+  end if;
+  -- All activations of this account serialize, including profile creation.
+  perform 1 from auth.users where id = auth.uid() for update;
+  if not exists (select 1 from profiles where id = auth.uid()) then
+    raise exception 'profile_required';
+  end if;
+  select birth_date into v_saved from profile_birthdates where user_id = auth.uid();
+  if found then
+    if v_saved <> p_birth_date then raise exception 'birthday_immutable'; end if;
+    return;
+  end if;
+  insert into profile_birthdates (user_id, birth_date) values (auth.uid(), p_birth_date);
+end $$;
+revoke execute on function public.save_birthday(date) from public, anon;
+grant execute on function public.save_birthday(date) to authenticated;
+
+-- The profile and its age approval commit together. A lost response can be
+-- retried without creating another profile or changing its birthday.
+create or replace function public.complete_profile(
+  p_display_name text, p_avatar_color_hex text, p_birth_date date
+)
+returns setof public.profiles
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  perform 1 from auth.users where id = auth.uid() for update;
+  insert into profiles (id, display_name, avatar_color_hex)
+    values (auth.uid(), p_display_name, p_avatar_color_hex)
+    on conflict (id) do nothing;
+  perform save_birthday(p_birth_date);
+  return query select * from profiles where id = auth.uid();
+end $$;
+revoke execute on function public.complete_profile(text, text, date) from public, anon;
+grant execute on function public.complete_profile(text, text, date) to authenticated;
+
 -- ==================================================== helper functions
 -- SECURITY DEFINER so policies can consult memberships without tripping
 -- RLS recursion (the classic memberships-policy-reads-memberships trap).
@@ -138,26 +221,26 @@ create index comments_deposit on public.comments (deposit_id);
 create or replace function public.is_huddle_member(v uuid)
 returns boolean
 language sql stable security definer set search_path = public as
-$$ select exists (select 1 from memberships where huddle_id = v and user_id = auth.uid()); $$;
+$$ select caller_is_age_eligible() and exists (select 1 from memberships where huddle_id = v and user_id = auth.uid()); $$;
 
 create or replace function public.is_huddle_keeper(v uuid)
 returns boolean
 language sql stable security definer set search_path = public as
-$$ select exists (select 1 from memberships
+$$ select caller_is_age_eligible() and exists (select 1 from memberships
                   where huddle_id = v and user_id = auth.uid() and role = 'keeper'); $$;
 
 create or replace function public.shares_huddle_with(other uuid)
 returns boolean
 language sql stable security definer set search_path = public as
-$$ select other = auth.uid() or exists (
+$$ select other = auth.uid() or (caller_is_age_eligible() and exists (
      select 1 from memberships m1
      join memberships m2 on m1.huddle_id = m2.huddle_id
-     where m1.user_id = auth.uid() and m2.user_id = other); $$;
+     where m1.user_id = auth.uid() and m2.user_id = other)); $$;
 
 create or replace function public.can_see_deposit(d uuid)
 returns boolean
 language sql stable security definer set search_path = public as
-$$ select exists (select 1 from deposits dep
+$$ select caller_is_age_eligible() and exists (select 1 from deposits dep
                   join memberships m on m.huddle_id = dep.huddle_id
                   where dep.id = d and m.user_id = auth.uid()); $$;
 
@@ -271,7 +354,7 @@ grant execute on function public.is_user_premium(uuid) to service_role;
 create or replace function public.caller_is_premium()
 returns boolean
 language sql stable security definer set search_path = public as
-$$ select is_user_premium(auth.uid()); $$;
+$$ select caller_is_age_eligible() and is_user_premium(auth.uid()); $$;
 
 -- Records what Apple says about one subscription. Service role only: the
 -- edge functions call it once Apple's signature checks out. The account
@@ -385,7 +468,7 @@ language sql stable security definer set search_path = public as $$
     now(),
     (select count(*)::int from memberships m where m.user_id = auth.uid() and m.role = 'keeper'),
     case when is_user_premium(auth.uid()) then 10 else 3 end
-  where auth.uid() is not null;
+  where caller_is_age_eligible();
 $$;
 
 -- ============================================================== RLS
@@ -402,9 +485,10 @@ alter table public.skips       enable row level security;
 create policy profiles_select on public.profiles for select
   using (shares_huddle_with(id));
 create policy profiles_insert on public.profiles for insert
-  with check (id = auth.uid());
+  with check (id = auth.uid() and caller_is_age_eligible());
 create policy profiles_update on public.profiles for update
-  using (id = auth.uid()) with check (id = auth.uid());
+  using (id = auth.uid() and caller_is_age_eligible())
+  with check (id = auth.uid() and caller_is_age_eligible());
 
 -- huddles: members read; keeper updates settings; create/join go through RPCs.
 -- Column grant (below) further limits the keeper to presentational fields —
@@ -484,6 +568,7 @@ declare
   alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
+  perform require_age_eligibility();
   perform 1 from profiles where id = auth.uid() for update;
   select count(*) into v_kept from memberships where user_id = auth.uid() and role = 'keeper';
   if is_user_premium(auth.uid()) then
@@ -583,6 +668,7 @@ declare
   v_refusal text;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
+  perform require_age_eligibility();
   delete from join_attempts where user_id = auth.uid() and attempted_at < now() - interval '1 hour';
   if (select count(*) from join_attempts where user_id = auth.uid()) >= 10 then
     raise exception 'too_many_attempts';
@@ -1126,7 +1212,7 @@ $$;
 create or replace function public.holds_huddle_key(p_huddle uuid)
 returns boolean
 language sql stable security definer set search_path = public as
-$$ select exists (select 1 from huddle_keys k
+$$ select caller_is_age_eligible() and exists (select 1 from huddle_keys k
                   join user_keys u on u.user_id = k.user_id
                   where k.huddle_id = p_huddle and k.user_id = auth.uid()
                     and k.recipient_public_key = u.public_key); $$;
@@ -1145,6 +1231,7 @@ declare
   v_refusal text;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
+  perform require_age_eligibility();
   delete from join_attempts where user_id = auth.uid() and attempted_at < now() - interval '1 hour';
   if (select count(*) from join_attempts where user_id = auth.uid()) >= 10 then
     raise exception 'too_many_attempts';
@@ -1403,6 +1490,11 @@ language sql stable set search_path = public as $$
     left join huddle_deletions x on p_kind = 'huddle_deleted' and x.id = p_id
     left join profiles p on p.id = r.actor_id
    where (h.id is not null or x.id is not null)
+     and exists (
+       select 1 from profile_birthdates approved
+        where approved.user_id = t.user_id
+          and approved.birth_date <= (((now() at time zone 'UTC')::date) - interval '13 years')::date
+     )
      and not exists (
        select 1 from device_tokens newer
         where newer.token = t.token and newer.user_id <> t.user_id
@@ -1592,26 +1684,26 @@ end $$;
 revoke execute on function public.delete_sole_huddles(uuid) from public, anon, authenticated;
 grant execute on function public.delete_sole_huddles(uuid) to service_role;
 
--- ============================================================ birthdays
--- Asked when a profile is made (and once of accounts from before), to keep
--- HuddlePals to people 13 and older (Terms 2.1). Only the account's owner
--- reads or changes theirs, and it goes with the profile. The age rule
--- allows a day for time zones: the app checks the age on the person's own
--- calendar.
-create table public.profile_birthdates (
-  user_id uuid primary key references public.profiles (id) on delete cascade,
-  birth_date date not null check (birth_date >= date '1900-01-01')
-);
-alter table public.profile_birthdates enable row level security;
-revoke all on public.profile_birthdates from anon, authenticated;
-grant select, insert, update on public.profile_birthdates to authenticated;
-create policy profile_birthdates_select on public.profile_birthdates for select
-  using (user_id = auth.uid());
-create policy profile_birthdates_insert on public.profile_birthdates for insert
-  with check (user_id = auth.uid() and birth_date <= (current_date - interval '13 years' + interval '1 day')::date);
-create policy profile_birthdates_update on public.profile_birthdates for update
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid() and birth_date <= (current_date - interval '13 years' + interval '1 day')::date);
+-- An additional restrictive policy makes age approval a prerequisite for
+-- every existing client operation, including those on otherwise owner-only
+-- tables. Service-role cleanup and Apple notifications still bypass RLS.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'huddles', 'memberships', 'deposits', 'reactions', 'comments', 'skips',
+    'reports', 'blocks', 'user_keys', 'huddle_keys', 'device_tokens', 'terms_acceptances'
+  ] loop
+    execute format('drop policy if exists age_eligibility on public.%I', t);
+    execute format('create policy age_eligibility on public.%I as restrictive for all to authenticated using (public.caller_is_age_eligible()) with check (public.caller_is_age_eligible())', t);
+  end loop;
+end $$;
+drop policy if exists deposits_storage_age_eligibility on storage.objects;
+create policy deposits_storage_age_eligibility on storage.objects
+  as restrictive for all to authenticated
+  using (public.caller_is_age_eligible())
+  with check (public.caller_is_age_eligible());
 
 -- Live updates: deposits, comments and reactions go out over Supabase
 -- Realtime (Postgres changes); Realtime checks every row against the

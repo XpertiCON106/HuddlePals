@@ -26,6 +26,7 @@ that both end up identical (`npm test`).
 | `016_birthdays.sql` | Birthdays (`profile_birthdates`): one per account, readable and writable only by its owner, refused under 13, gone with the profile |
 | `017_live_updates.sql` | Live updates: deposits, comments and reactions join the `supabase_realtime` publication, so an open huddle updates as members post, comment and react |
 | `018_delete_sole_huddles.sql` | Account deletion removes a huddle the user was the only member of: `delete_sole_huddles(user)` (service role only, for the `delete-account` function) keeps any reported deposit in `preserved_photos` and deletes the huddle with everything in it. Huddles that still have other members stay |
+| `019_age_eligibility.sql` | Age approval before core app access: `complete_profile` saves the profile and birthday atomically, `save_birthday` activates legacy accounts, birthdays become immutable, and RLS plus RPC guards deny shared data, uploads and key operations without an eligible birthday |
 
 Ship the app build with 008 and 009: run them first, and older builds keep
 working (they keep joining with old codes until someone on the new build
@@ -61,3 +62,11 @@ every half minute, so it can go before or after the build ships.
 Run 018 before deploying the `delete-account` function that calls it.
 Until then, deleting an account leaves a huddle behind when that person
 was its only member, along with that huddle's files in Storage.
+
+Run 019 before shipping the age-screening build. It preserves existing data,
+but accounts without an eligible birthday must confirm it before accessing
+core app data. A new profile is created through `complete_profile`, not a
+direct table insert. `save_birthday` accepts a first eligible birthday or an
+identical retry, and rejects changes. Both client and server calculate age
+with the Gregorian UTC date, with no one-day grace period. Older builds
+cannot finish a new signup once this migration is applied.

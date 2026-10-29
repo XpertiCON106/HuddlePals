@@ -301,7 +301,7 @@ private final class SignOutOrderAuth: AuthServiceProtocol {
     func requestCode(to destination: OTPDestination) async throws {}
     func verifyCode(_ code: String, for destination: OTPDestination) async throws -> AuthSessionState { .signedOut }
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState { .signedOut }
-    func completeProfile(displayName: String, avatarColorHex: String) async throws -> User { throw AuthError.notAuthenticated }
+    func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User { throw AuthError.notAuthenticated }
     func updateProfile(user: User, displayName: String, avatarColorHex: String, bio: String?, photoPaths: [String]) async throws {}
     func birthday() async throws -> Birthday? { nil }
     func saveBirthday(_ birthday: Birthday) async throws {}

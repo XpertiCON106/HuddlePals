@@ -300,7 +300,7 @@ describe('account deletion (what the delete-account function triggers)', () => {
     await q(db, B, 'insert into user_keys (user_id, public_key) values ($1, $2)', [B, PUBLIC_KEY('B')])
     await q(db, B, `insert into device_tokens (user_id, token, environment) values ($1, $2, 'production')`, [B, 'b'.repeat(64)])
     await q(db, B, `insert into terms_acceptances (user_id, version, accepted_at) values ($1, '2026-10-25', now())`, [B])
-    await q(db, B, `insert into profile_birthdates (user_id, birth_date) values ($1, '1995-06-14')`, [B])
+    await q(db, B, `select save_birthday('1995-06-14')`)
 
     await admin(db, 'delete from auth.users where id = $1', [B]) // auth.admin.deleteUser
 

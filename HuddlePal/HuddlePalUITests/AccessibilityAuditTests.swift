@@ -115,7 +115,12 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         let settled = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: start)
         wait(for: [settled], timeout: 10)
         try audit("welcome")
-        signInWithMockApple()
+        openAgeScreen()
+        try audit("age screening")
+        enterBirthday()
+        app.buttons["Continue"].tap()
+        waitFor(app.buttons["Continue with Apple"]).tap()
+        if app.buttons["Agree"].waitForExistence(timeout: 3) { agreeToTerms() }
         waitFor(app.textFields["Your name"], timeout: 20)
         try audit("profile step")
     }

@@ -19,12 +19,23 @@ final class RootViewModel {
             if !deps.isLive {
                 try await deps.seeder.seedIfNeeded()
             }
+            // A rejection survives reopening. Only local credential presence
+            // is checked, so a legacy account keeps its deletion path.
+            if deps.ageScreening.isBlocked() {
+                deps.session.needsProfileSetup = await deps.auth.hasStoredSession()
+                deps.session.isReady = true
+                return
+            }
             switch try await deps.auth.currentState() {
             case .signedIn(let user):
+                deps.ageScreening.clearPendingBirthday()
+                if let claimant = deps.terms.claimedBy, claimant != user.id { deps.terms.withdraw() }
                 deps.session.currentUser = user
                 deps.session.blockedUserIDs = (try? await deps.moderationService.blockedUserIDs()) ?? []
             case .needsProfile:
                 deps.session.needsProfileSetup = true
+            case .needsBirthday(let user):
+                deps.session.pendingBirthdayUser = user
             case .signedOut:
                 break
             }
@@ -44,5 +55,16 @@ final class RootViewModel {
         await deps.plus.refresh()
         // After Plus is known: nobody with it gets a reminder about it.
         await deps.plusPromo.refresh()
+    }
+
+    func retry() async {
+        bootstrapError = nil
+        deps.session.isReady = false
+        await bootstrap()
+    }
+
+    func signOut() async {
+        bootstrapError = nil
+        await deps.signOut()
     }
 }

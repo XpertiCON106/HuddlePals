@@ -87,8 +87,8 @@ describe('migrations', () => {
     await affected(db, B, 'delete from memberships where user_id = $1', [B])
     assert.equal((await q(db, B, 'select * from huddle_keys')).length, 1, 'the old schema leaves the copy behind')
     for (const { sql } of migrations()) await db.exec(sql)
-    assert.deepEqual(await q(db, B, 'select * from huddle_keys'), [])
-    assert.equal((await q(db, A, 'select * from huddle_keys')).length, 1, 'current members keep theirs')
+    assert.deepEqual(await admin(db, 'select * from huddle_keys where user_id = $1', [B]), [])
+    assert.equal((await admin(db, 'select * from huddle_keys where user_id = $1', [A])).length, 1, 'current members keep theirs even before age confirmation')
   })
 
   it('reports filed before the fix survive their reporter deleting the account', async () => {

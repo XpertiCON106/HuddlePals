@@ -63,7 +63,9 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   `reminders`, `push` and `plusPromo`.
 - **`AppSession`**: `currentUser`, `blockedUserIDs`, `pendingInviteCode`
   (from an invite link, `InviteLink`), `pendingHuddleID` (from a tapped
-  notification), `needsProfileSetup`, `isReady`, and `photoKeysVersion`
+  notification), `needsProfileSetup`, `pendingBirthdayUser` (an older
+  account kept outside the main session until eligibility is confirmed),
+  `isReady`, and `photoKeysVersion`
   (the one field a service writes: the keyring bumps it so locked photos
   retry).
 - **Services**:
@@ -197,15 +199,25 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   migration 015). Members leave as before. When a keeper's account is
   deleted, the member who's been in the huddle longest takes over. The
   others get "… deleted the huddle." (`send-push`, migration 014).
-- **Birthdays** (`Support/Birthday.swift`, a calendar date with no time
-  zone): asked on the profile step, and once, full screen, of an account
-  without one (`AppSession.needsBirthday`, checked at sign-in). Only the
-  owner reads it (`profile_birthdates`, migration 016); Profile only shows
-  it: it's given at sign-up and can't be changed in the app. Under 13
-  (`Birthday.minimumAge`, the Terms' 2.1), only "HuddlePals is for people
-  13 or older." shows (`UnderageNotice`), with Sign out: nothing of the
-  page, so the given age can't be changed to get past. The server refuses
-  it too, with a day's leeway for time zones.
+- **Birthdays and eligibility** (`Support/Birthday.swift`, calendar dates):
+  a neutral birthday screen comes before sign-in and profile collection,
+  without a preselected adult date (`Components/BirthdayEntry.swift`,
+  onboarding `Step.age`). `Support/AgeScreening.swift` holds the local
+  state. This is self-reported screening, not
+  identity verification. An under-13 answer stores only the next eligible
+  UTC date locally and prevents a new attempt across sign-out and relaunch
+  until then; no rejected birthday or refusal goes to the backend. An
+  eligible birthday stays locally until recorded eligibility is confirmed. New profile
+  activation uses `complete_profile` to create the profile and immutable
+  birthday in one transaction; an older profile supplies its missing
+  birthday through `save_birthday`. Identical retries succeed, changes
+  fail. The server requires 13 completed years by the UTC date for core
+  app data and RPCs, including Storage and encryption-key access (migration
+  019). There is no one-day grace: someone reaching 13 ahead of UTC waits
+  until the UTC date reaches that birthday. A missing or failed eligibility
+  lookup keeps the app gated through `BirthdayCheckViewModel` before
+  `MainView` mounts; it never falls through to the shelf. The
+  owner can read the recorded birthday, and Profile only displays it.
 - **Videos** play and pause from a button on their corner, next to the
   sound; on the detail screen a tap on the video does it too (in the feed a
   tap turns the sound on). One paused by hand stays paused.
@@ -264,7 +276,7 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
 
 ## Auth
 
-- **Terms first**: the full Terms (`Legal/TermsOfService.md`) with Agree,
+- **Terms agreement**: the full Terms (`Legal/TermsOfService.md`) with Agree,
   enabled only after scrolling to the end. The gate is device-local
   (`TermsAcceptance`); once someone is signed in, `TermsRecorder` records
   the agreement in `terms_acceptances` (account, version, when Agree was
@@ -273,8 +285,8 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
   the Terms again. Live only. A material change to the Terms must bump
   `TermsOfService.version` (a test compares it with "Last updated"), and
   the same text belongs at huddlepals.com/terms.
-- **Onboarding**: welcome cards → Sign in with Apple → Terms → profile
-  (photos, name, birthday, bio, colour). The Terms come right after
+- **Onboarding**: welcome cards → neutral birthday screen → Sign in with
+  Apple → Terms → profile (photos, name, bio, colour). The Terms come right after
   sign-in, before the profile or the app, for each account (an agreement
   this device already tied to another account is withdrawn at sign-in);
   Decline signs out. `needsProfileSetup` resumes an unfinished sign-up,
@@ -290,6 +302,13 @@ The operator must not be able to see photos (`Services/Live/PhotoCrypto.swift`,
   in the Keychain (`…ThisDeviceOnly`) and refreshes about 60 s before
   expiry; a refused refresh signs out, but being offline doesn't. Apple
   sends the name only on the first authorization.
+- **Age confirmation before activation**: profile existence alone does not
+  grant core app access. `complete_profile(p_display_name,
+  p_avatar_color_hex, p_birth_date)` atomically records the initial profile
+  and eligible birthday. `save_birthday(p_birth_date)` completes an older
+  profile, and accepts only an identical retry after the first save.
+  Identity publication and huddle-key sync wait for recorded eligibility.
+  The app exposes retry and sign-out when it cannot confirm eligibility.
 
 ## Notifications
 
@@ -363,12 +382,16 @@ codes, tokens and keys are never logged.
   functions that delete a huddle's files list both spellings
   (`_shared/huddle-storage.ts`).
 - **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
-  (001–018, idempotent, run in order) upgrades the deployed one;
+  (001–019, idempotent, run in order) upgrades the deployed one;
   `supabase/scripts/reset_database.sql` wipes an old database for a fresh
   start. Writes that need rules RLS can't express go through SECURITY
   DEFINER functions (key sharing, invites, joins, skips, streaks).
   `huddle_invite_keys` and `join_attempts` have no policies at all, so only
   those functions touch them.
+  Migration 019 is prepared with the age-screening release and is not
+  applied to production by a code change. Deploy it before the matching
+  app; old builds cannot complete new or missing-birthday accounts under
+  its restrictions (DEPLOYMENT.md, Phase 12).
 - **Live updates** (`Services/Live/LiveRealtime.swift`): Supabase Realtime
   over a WebSocket, no SDK. One channel for Postgres changes to deposits,
   comments and reactions (migration 017 puts them in the

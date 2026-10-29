@@ -10,7 +10,7 @@ class HuddleUITestCase: XCTestCase {
     /// the Terms journey start already agreed, so they don't spend a minute
     /// scrolling the document; if the version moves on, the Terms show and
     /// `launchToShelf` agrees as a person would.
-    static let termsVersion = "2026-10-30"
+    static let termsVersion = "2026-10-29"
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -207,29 +207,35 @@ class HuddleUITestCase: XCTestCase {
         if choice.waitForExistence(timeout: timeout) { choice.tap() }
     }
 
-    /// The onboarding profile step after a first sign-in: a name and the
-    /// birthday the wheel starts on (over 13).
+    /// The profile step follows age screening, sign-in and the Terms. Its
+    /// birthday is already recorded by the screening step.
     func completeProfile(name: String) {
         let field = waitFor(app.textFields["Your name"], timeout: 20, "the profile step")
         field.tap()
         field.typeText(name)
-        pickBirthday()
         let open = app.buttons["Open my huddle"]
         waitUntilEnabled(open)
         open.tap()
     }
 
-    /// Birthday → the wheel → Done; `year`, when given, set on the wheel first.
-    func pickBirthday(year: Int? = nil) {
-        waitFor(app.buttons["Birthday"]).tap()
-        let card = dialog("Your birthday")
-        if let year {
-            let wheels = card.pickerWheels
-            waitFor(wheels.element(boundBy: 2))
-            wheels.element(boundBy: 2).adjust(toPickerWheelValue: String(year))
-        }
-        card.buttons["Done"].tap()
-        waitUntilGone(card)
+    /// A neutral birthday form starts with all three wheels unselected.
+    /// Explicitly select every component as a person would.
+    func enterBirthday(year: Int = 1990, month: Int = 1, day: Int = 1,
+                       file: StaticString = #filePath, line: UInt = #line) {
+        let wheels = app.pickerWheels
+        waitFor(wheels.element(boundBy: 2), file: file, line: line)
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: String(month))
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: String(day))
+        wheels.element(boundBy: 2).adjust(toPickerWheelValue: String(year))
+        waitUntilEnabled(app.buttons["Continue"], file: file, line: line)
+    }
+
+    /// Walk the welcome cards up to the age screen, before authentication.
+    func openAgeScreen() {
+        waitFor(app.buttons["Continue"], timeout: 20).tap()
+        waitFor(app.buttons["Continue"]).tap()
+        waitFor(app.buttons["Get started"]).tap()
+        waitFor(app.staticTexts["When's your birthday?"])
     }
 
     /// The shelf's + menu.
@@ -241,10 +247,9 @@ class HuddleUITestCase: XCTestCase {
     /// Walks the welcome cards and signs in with the mock "Continue with
     /// Apple" (one fixed identity, distinct from the seeded "You").
     func signInWithMockApple() {
-        let start = waitFor(app.buttons["Continue"], timeout: 20)
-        start.tap()
-        waitFor(app.buttons["Continue"]).tap()
-        waitFor(app.buttons["Get started"]).tap()
+        openAgeScreen()
+        enterBirthday()
+        app.buttons["Continue"].tap()
         waitFor(app.buttons["Continue with Apple"]).tap()
         // The Terms come right after signing in, unless already agreed.
         if app.buttons["Agree"].waitForExistence(timeout: 3) { agreeToTerms() }

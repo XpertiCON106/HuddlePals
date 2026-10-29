@@ -109,7 +109,7 @@ final class CriticalFlowTests: XCTestCase {
         XCTAssertFalse(list.showsEmptyState)
 
         let fresh = AppDependencies.makeMock(inMemory: true)
-        fresh.session.currentUser = try await fresh.auth.completeProfile(displayName: "New", avatarColorHex: "E5484D")
+        fresh.session.currentUser = try await fresh.auth.completeProfile(displayName: "New", avatarColorHex: "E5484D", birthday: Birthday(year: 1990, month: 1, day: 1))
         let empty = HuddleListViewModel(deps: fresh)
         XCTAssertFalse(empty.showsEmptyState, "not until it's loaded")
         await empty.refresh()

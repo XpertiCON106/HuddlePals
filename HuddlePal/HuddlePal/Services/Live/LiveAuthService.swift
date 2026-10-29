@@ -36,28 +36,16 @@ final class LiveAuthService: AuthServiceProtocol {
         }
     }
 
-    func currentState() async throws -> AuthSessionState {
-        do {
-            guard let session = try await client.validSession() else { return .signedOut }
-            return try await state(for: session, suggestedName: nil)
-        } catch where Self.isTransient(error) {
-            // Offline (or the server is down) at launch: a stored session
-            // stays signed in on the cached profile instead of landing on
-            // sign-in. Screens show their last synced state and retry.
-            if let userID = await client.currentUserID, let user = try store.user(id: userID) {
-                return .signedIn(user)
-            }
-            throw error
-        }
+    func hasStoredSession() async -> Bool {
+        await client.currentUserID != nil
     }
 
-    /// A failure that says nothing about the session itself.
-    private static func isTransient(_ error: Error) -> Bool {
-        if error is URLError { return true }
-        if case SupabaseClient.ClientError.http(let status, _) = error {
-            return status >= 500 || status == 429 || status == 408
-        }
-        return false
+    func currentState() async throws -> AuthSessionState {
+        // A cached profile is not evidence of age eligibility. If the
+        // server cannot confirm it, retain the auth token for retry while
+        // keeping the app session closed.
+        guard let session = try await client.validSession() else { return .signedOut }
+        return try await state(for: session, suggestedName: nil)
     }
 
     func requestCode(to destination: OTPDestination) async throws {
@@ -103,19 +91,30 @@ final class LiveAuthService: AuthServiceProtocol {
         }
     }
 
-    func completeProfile(displayName: String, avatarColorHex: String) async throws -> User {
-        guard let session = try await client.validSession() else {
+    func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User {
+        guard birthday.isValid,
+              birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
+            throw AuthError.underMinimumAge
+        }
+        guard try await client.validSession() != nil else {
             throw AuthError.notAuthenticated
         }
-        let dto = ProfileDTO(
-            id: session.userId,
-            displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
-            avatarColorHex: avatarColorHex,
-            createdAt: nil
-        )
-        let saved: [ProfileDTO] = try await client.upsert("profiles", values: dto, onConflict: "id")
-        let user = try store.apply(saved.first ?? dto)
+        let saved: [ProfileDTO]
+        do {
+            saved = try await client.rpc("complete_profile", params: [
+                "p_display_name": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                "p_avatar_color_hex": avatarColorHex,
+                "p_birth_date": birthday.isoDate,
+            ])
+        } catch {
+            throw Self.birthdayError(error)
+        }
+        guard let dto = saved.first else {
+            throw AuthError.provider("Your profile couldn't be created. Please try again.")
+        }
+        let user = try store.apply(dto)
         try store.save()
+        await keyring.ensureIdentity(for: user.id)
         return user
     }
 
@@ -126,19 +125,26 @@ final class LiveAuthService: AuthServiceProtocol {
         let rows: [BirthdayDTO] = try await client.select("profile_birthdates", query: [
             URLQueryItem(name: "user_id", value: "eq.\(session.userId.uuidString)"),
         ])
-        return rows.first.flatMap { Birthday(isoDate: $0.birthDate) }
+        guard let row = rows.first else { return nil }
+        guard let birthday = Birthday(isoDate: row.birthDate), birthday.isValid else {
+            throw AuthError.provider("Your birthday couldn't be confirmed. Please try again.")
+        }
+        return birthday
     }
 
     func saveBirthday(_ birthday: Birthday) async throws {
-        guard birthday.isOldEnough(on: .now) else { throw AuthError.underMinimumAge }
-        guard let session = try await client.validSession() else {
+        guard birthday.isValid,
+              birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
+            throw AuthError.underMinimumAge
+        }
+        guard try await client.validSession() != nil else {
             throw AuthError.notAuthenticated
         }
-        let _: [BirthdayDTO] = try await client.upsert(
-            "profile_birthdates",
-            values: BirthdayDTO(userId: session.userId, birthDate: birthday.isoDate),
-            onConflict: "user_id"
-        )
+        do {
+            try await client.rpcVoid("save_birthday", params: ["p_birth_date": birthday.isoDate])
+        } catch {
+            throw Self.birthdayError(error)
+        }
     }
 
     func updateProfile(
@@ -195,17 +201,12 @@ final class LiveAuthService: AuthServiceProtocol {
         media.removeLocalCache()
     }
 
-    /// Authenticated → signed in if the profile row exists, otherwise the
-    /// onboarding profile step.
+    /// A profile and confirmed eligible birthday are both required before
+    /// publishing a key or opening the app session.
     private func state(
         for session: SupabaseClient.Session,
         suggestedName: String?
     ) async throws -> AuthSessionState {
-        // First sign-in on this device creates the E2EE identity key and
-        // publishes its public half. Not awaited: sign-in mustn't wait on it,
-        // and the huddle-key sync retries it anyway.
-        let keyring = keyring
-        Task { await keyring.ensureIdentity(for: session.userId) }
         let profiles: [ProfileDTO] = try await client.select("profiles", query: [
             URLQueryItem(name: "id", value: "eq.\(session.userId.uuidString)"),
         ])
@@ -214,6 +215,18 @@ final class LiveAuthService: AuthServiceProtocol {
         }
         let user = try store.apply(dto)
         try store.save()
+        guard let birthday = try await birthday() else { return .needsBirthday(user) }
+        guard birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
+            throw AuthError.underMinimumAge
+        }
+        await keyring.ensureIdentity(for: session.userId)
         return .signedIn(user)
+    }
+
+    private static func birthdayError(_ error: Error) -> Error {
+        guard case SupabaseClient.ClientError.http(_, let message) = error else { return error }
+        if message.contains("birthday_immutable") { return AuthError.birthdayImmutable }
+        if message.contains("under_minimum_age") { return AuthError.underMinimumAge }
+        return error
     }
 }

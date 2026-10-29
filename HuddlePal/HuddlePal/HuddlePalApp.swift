@@ -78,7 +78,6 @@ struct HuddlePalApp: App {
                     // its agreement to the Terms, and learn its plan.
                     if userID != nil {
                         Task {
-                            await dependencies.checkBirthday()
                             await dependencies.push.refresh()
                             await dependencies.termsRecorder?.refresh()
                             await dependencies.plus.refresh()
