@@ -258,10 +258,17 @@ class HuddleUITestCase: XCTestCase {
     /// Swipes the screen until `element` exists and can be tapped (lists
     /// create rows lazily, so off-screen rows don't exist yet).
     func scrollTo(_ element: XCUIElement, maxSwipes: Int = 15) {
-        var swipes = 0
-        while !(element.exists && element.isHittable) && swipes < maxSwipes {
-            app.swipeUp()
-            swipes += 1
+        // Reopening a list can preserve its earlier scroll position, so a
+        // target above the viewport needs the reverse search as well.
+        for searchUp in [true, false] {
+            for _ in 0..<maxSwipes {
+                if element.exists && element.isHittable { return }
+                if searchUp {
+                    app.swipeUp()
+                } else {
+                    app.swipeDown()
+                }
+            }
         }
     }
 }
