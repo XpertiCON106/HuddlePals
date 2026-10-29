@@ -193,6 +193,7 @@ private struct DayRow: View {
                                     AvatarView(
                                         name: deposit.author?.displayName ?? "?",
                                         colorHex: deposit.author?.avatarColorHex ?? "888888",
+                                        imagePath: deposit.author?.profilePhotoPaths.first,
                                         size: 16
                                     )
                                     Text(deposit.author?.displayName ?? "Former member")

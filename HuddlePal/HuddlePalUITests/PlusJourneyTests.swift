@@ -74,7 +74,8 @@ final class PlusJourneyTests: HuddleUITestCase {
         XCTAssertFalse(app.buttons["Unlock your full archive"].exists)
     }
 
-    /// Free: Video opens the paywall; after buying, the video camera.
+    /// Free: Video opens the paywall; after buying, Compose is on Video, the
+    /// video camera a tap away.
     func testVideoOnTheFreePlanLeadsToPlusThenTheVideoCamera() {
         launchToShelf()
         openHuddle("The Crew")
@@ -85,6 +86,9 @@ final class PlusJourneyTests: HuddleUITestCase {
         waitFor(paywallHeadline("Post 6-second video drops with HuddlePals+"))
         app.buttons["Try it free for 1 week"].tap()
         continueFromWelcome()
+        waitFor(app.staticTexts["Record today's video, up to 6 seconds"], timeout: 15)
+        XCTAssertFalse(app.buttons["Record test video"].exists, "the camera waits for a tap")
+        waitFor(app.buttons["Open camera"]).tap()
         waitFor(app.buttons["Record test video"], timeout: 15)
     }
 

@@ -92,7 +92,9 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
 - **No iOS alerts or menus**: every confirmation, warning, message and
   choice is `appDialog` (`Components/AppDialog.swift`), the app's own card
   rising from the bottom, with `DialogAction`s (primary, secondary,
-  destructive, cancel). A choice runs once the card has gone; swiping it
+  destructive, cancel). From iOS 26 it floats with corners that follow the
+  screen's, as the system's sheets do (no set corner radius there; 28 pt
+  before). A choice runs once the card has gone; swiping it
   away is Cancel. Pickers that would pop up (reminder times) put a wheel in
   one. Only what iOS doesn't let an app replace stays Apple's: permission
   prompts, the App Store purchase, Sign in with Apple, subscription
@@ -600,14 +602,32 @@ round. A screen that's loading shows it in the middle of the screen (an
 overlay, not in the scrolling content). Pull to refresh shows it too: put
 `.huddleRefreshSpinner()` on the content of a `.refreshable` ScrollView,
 and it takes the place of the system's spinner in the refresh control
-(`Components/HuddleRefreshSpinner.swift`). Cards on Today show whole: a soft stand-in (`LoadingShimmer`) until
+(`Components/HuddleRefreshSpinner.swift`). Once a refresh starts it turns
+until the content is back in place, however soon the refresh is done and
+however long a thumb holds the pull. Under a large title UIKit keeps the
+control in the navigation bar, in a container it fades out as a refresh
+ends, so there the spinner sits beside that container, not in the
+control. Cards on Today show whole: a soft stand-in (`LoadingShimmer`) until
 the photo or poster and the author's picture are in (`MediaReadyKey`; a
 slow profile picture is waited on for a second at most), then they fade in
-together; photos and avatars fade in everywhere. The welcome cards' prints
+together; photos fade in everywhere. A profile picture already shown is
+drawn from the first frame (`AvatarImageCache`, by path: every upload
+gets a new name), and one still loading shows a plain circle, never the
+colour and initials of someone without a picture. The welcome cards' prints
 are drawn (`WelcomePicture`: silhouettes on soft skies), never emoji.
 Compose's video preview plays with sound, pauses on a tap, and trims
 (`ClipTrimBar`; Continue cuts the clip, without re-encoding, with
-`ClipTrimmer`). The app icon
+`ClipTrimmer`). Play, pause and sound buttons change at once: the audio
+session switches on a queue of its own (`PlaybackAudio`), which the video
+camera waits on before it sets the session up for recording. Compose's
+capture stage scrolls, with Continue pinned below: the photo card is sized
+for the room with the keyboard down and keeps it while a caption is typed
+(`CaptureColumn`); Done, a swipe down or a tap on the card puts the
+keyboard away. Switching between Photo and Video never opens the camera;
+it opens on Compose's first appearance and when tapped. Signing in fades
+from onboarding into the shelf; ending a session (sign-out, deletion, the
+server refusing it) swaps the whole UI in one render, as it must, under a
+still of the screen that fades away (`ScreenCrossfade`). The app icon
 (`tools/generate_icon.swift`) must stay a 1024 px opaque PNG with no SF
 Symbols.
 

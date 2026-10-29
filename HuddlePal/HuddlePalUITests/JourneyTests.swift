@@ -57,6 +57,28 @@ final class JourneyTests: HuddleUITestCase {
         XCTAssertFalse(app.buttons["Add today's memory"].exists, "one photo a day: no second post offered")
     }
 
+    /// Compose's caption: the photo keeps its size while typing, Done puts
+    /// the keyboard away, and Continue is there throughout.
+    func testTheCaptionKeyboardGoesAwayWithDone() {
+        launchToShelf()
+        openHuddle("The Crew")
+        waitFor(app.buttons["Add today's memory"]).tap()
+        waitFor(app.buttons["Take test photo"]).tap()
+        let photo = waitFor(app.images["Your photo"])
+        let photoHeight = photo.frame.height
+        let field = waitFor(app.textFields["Add a line… (optional)"])
+        field.tap()
+        field.typeText("Before the walk")
+        XCTAssertEqual(photo.frame.height, photoHeight, accuracy: 1, "the keyboard doesn't squeeze the photo")
+        XCTAssertTrue(app.buttons["Continue"].isHittable, "Continue above the keyboard")
+        snapshot("compose caption typing")
+        waitFor(app.navigationBars.buttons["Done"]).tap()
+        waitUntilGone(app.keyboards.firstMatch, timeout: 5)
+        // Typed into, the field no longer goes by its placeholder.
+        XCTAssertEqual(app.textFields.firstMatch.value as? String, "Before the walk", "the caption stays")
+        XCTAssertTrue(app.buttons["Continue"].isHittable)
+    }
+
     /// A comment: Send waits for words, Return sends, and the comment shows
     /// in view with the keyboard put away and the field empty again.
     func testACommentSendsWithReturnAndComesIntoView() {

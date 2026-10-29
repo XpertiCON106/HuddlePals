@@ -155,6 +155,9 @@ final class VideoRecorder {
 
     // On the capture queue.
     nonisolated private func controllerStart(position: AVCaptureDevice.Position, audio: Bool) throws {
+        // A clip's sound being handed back as its preview closed: done
+        // before the capture session sets the audio up for recording.
+        PlaybackAudio.finishPending()
         try controller.configure(position: position, audio: audio)
         controller.session.startRunning()
     }

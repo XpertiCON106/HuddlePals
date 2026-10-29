@@ -9,21 +9,34 @@ struct RootView: View {
     @State private var viewModel: RootViewModel?
     @State private var showLaunchReveal = true
 
+    /// Signed in, with the current Terms agreed to: the app itself.
+    private var showsMain: Bool {
+        viewModel != nil && deps.session.isReady
+            && deps.session.currentUser != nil && deps.terms.hasAcceptedCurrentVersion
+    }
+
     var body: some View {
         ZStack {
             Group {
                 if viewModel != nil, deps.session.isReady {
                     // Even a restored session waits on the Terms: no one
                     // reaches the app without tapping Agree.
-                    if deps.session.currentUser == nil || !deps.terms.hasAcceptedCurrentVersion {
+                    if !showsMain {
                         OnboardingView()
+                            .transition(.opacity)
                     } else {
                         MainView()
+                            .transition(.opacity)
                     }
                 } else {
                     Theme.background.ignoresSafeArea()
                 }
             }
+            // Into the app, onboarding fades out as the shelf fades in. Out
+            // of it, no animation: the main UI goes in the same render as
+            // the session (`AppDependencies.endSession`, which crossfades
+            // from a still of the screen instead).
+            .animation(showsMain ? .easeInOut(duration: 0.4) : nil, value: showsMain)
 
             if showLaunchReveal {
                 LaunchRevealView(isAppReady: deps.session.isReady) {

@@ -112,6 +112,14 @@ private struct ComposeContent: View {
     @Environment(\.openURL) private var openURL
     @State private var camera = CameraPicker.availability()
     @State private var paywall: PaywallContext?
+    /// The capture stage's height with the keyboard down: the photo card is
+    /// sized for it and keeps that size while a caption is typed.
+    @State private var room: CGFloat?
+    /// From the keyboard starting to show until it has fully gone: the
+    /// stage's height then isn't the room it has.
+    @State private var keyboardIsUp = false
+
+    private static let captionID = "caption"
 
     var body: some View {
         Group {
@@ -128,11 +136,11 @@ private struct ComposeContent: View {
             if phase == .active { camera = CameraPicker.availability() }
         }
         .sheet(item: $paywall, onDismiss: {
-            // Bought Plus from the Video switch: straight to the video camera.
-            // (A clip kept because Plus had ended just posts now.)
+            // Bought Plus from the Video switch: on Video, ready for a tap
+            // on the camera. (A clip kept because Plus had ended just posts
+            // now.)
             if viewModel.canRecordVideo, viewModel.medium == .photo, viewModel.clip == nil {
                 viewModel.choose(.video)
-                if camera == .ready { showCamera = true }
             }
         }) { context in
             PaywallView(context: context)
@@ -141,25 +149,59 @@ private struct ComposeContent: View {
 
     // MARK: Stage 1 — capture
 
+    /// The picker, the photo card and the caption scroll, with Continue
+    /// pinned below. The card is sized for the stage with the keyboard down
+    /// and keeps that size while a caption is typed: the stage scrolls to
+    /// keep the caption above the keyboard instead of squeezing the card.
+    /// Done, a swipe down or a tap on the card puts the keyboard away.
     private var pickStage: some View {
-        VStack(spacing: 18) {
-            mediumPicker
-                .padding(.top, 12)
-
-            photoArea
-
-            CaptionTextField(text: $viewModel.caption)
-                .focused($captionFocused)
-
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.destructive)
-                    .multilineTextAlignment(.center)
+        ScrollViewReader { scroller in
+            ScrollView {
+                CaptureColumn(room: room) {
+                    mediumPicker
+                    photoArea
+                    CaptionTextField(text: $viewModel.caption)
+                        .focused($captionFocused)
+                        .id(Self.captionID)
+                    if let error = viewModel.errorMessage {
+                        Text(error)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.destructive)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal, Theme.screenPadding)
+                .padding(.top, Self.columnTop)
+                .padding(.bottom, Self.columnBottom)
             }
-
-            Spacer()
-
+            .scrollDismissesKeyboard(.interactively)
+            .scrollBounceBehavior(.basedOnSize)
+            // The room between the navigation bar and Continue, taken only
+            // with the keyboard down (it shrinks the scroll view while up).
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                guard !captionFocused, !keyboardIsUp else { return }
+                room = height - Self.columnTop - Self.columnBottom
+            }
+            // The keyboard came up, or changed height: the caption stays
+            // just above it.
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { _ in
+                guard captionFocused else { return }
+                withAnimation(.easeOut(duration: 0.25)) {
+                    scroller.scrollTo(Self.captionID, anchor: .bottom)
+                }
+            }
+        }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardWillShowNotification) {
+                keyboardIsUp = true
+            }
+        }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardDidHideNotification) {
+                keyboardIsUp = false
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
             PrimaryButton(
                 title: "Continue",
                 systemImage: "arrow.right",
@@ -172,12 +214,27 @@ private struct ComposeContent: View {
                     if await viewModel.applyTrim() { viewModel.continueToConfirm() }
                 }
             }
+            .padding(.horizontal, Theme.screenPadding)
+            .padding(.bottom, Theme.screenPadding)
+            .background(Theme.background)
         }
-        .padding(Theme.screenPadding)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if captionFocused {
+                    Button("Done") { captionFocused = false }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
     }
 
-    /// Photo or video: switching opens that camera. Video is Plus; without
-    /// it the switch opens the paywall and stays on Photo.
+    /// Above the picker, and between the caption and Continue.
+    private static let columnTop = Theme.screenPadding + 12
+    private static let columnBottom: CGFloat = 18
+
+    /// Photo or video: switching keeps the camera closed until it's tapped.
+    /// Video is Plus; without it the switch opens the paywall and stays on
+    /// Photo.
     private var mediumPicker: some View {
         Picker("Today's deposit", selection: Binding(
             get: { viewModel.medium },
@@ -186,8 +243,8 @@ private struct ComposeContent: View {
                     paywall = .video
                     return
                 }
+                captionFocused = false
                 viewModel.choose(medium)
-                if camera == .ready { showCamera = true }
             }
         )) {
             Label("Photo", systemImage: "camera.fill").tag(ComposeViewModel.Medium.photo)
@@ -253,7 +310,12 @@ private struct ComposeContent: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
         .onTapGesture {
-            if viewModel.previewImage == nil, viewModel.clip == nil, camera == .ready { showCamera = true }
+            // Typing: a tap on the card only puts the keyboard away.
+            if captionFocused {
+                captionFocused = false
+            } else if viewModel.previewImage == nil, viewModel.clip == nil, camera == .ready {
+                showCamera = true
+            }
         }
     }
 
@@ -437,5 +499,47 @@ private struct ComposeContent: View {
             }
         }
         .padding(Theme.screenPadding)
+    }
+}
+
+/// The capture stage's column: the picker, the photo card, the caption (and
+/// an error), 18 pt apart. The card is 3:4 at the column's width, or shorter
+/// when `room` (the stage's height with the keyboard down) can't fit that
+/// and the rest, as on a small phone. `room` doesn't change while the
+/// keyboard is up, so the keyboard never squeezes the card.
+private struct CaptureColumn: Layout {
+    let room: CGFloat?
+
+    private let spacing: CGFloat = 18
+    /// The photo card's place among the subviews.
+    private let cardIndex = 1
+    private let shortestCard: CGFloat = 180
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.replacingUnspecifiedDimensions().width
+        let heights = heights(for: width, subviews: subviews)
+        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(0, subviews.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for (index, height) in heights(for: bounds.width, subviews: subviews).enumerated() {
+            // Centered: a card shorter than 3:4 at full width is narrower.
+            subviews[index].place(
+                at: CGPoint(x: bounds.midX, y: y),
+                anchor: .top,
+                proposal: ProposedViewSize(width: bounds.width, height: height)
+            )
+            y += height + spacing
+        }
+    }
+
+    private func heights(for width: CGFloat, subviews: Subviews) -> [CGFloat] {
+        var heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        guard heights.indices.contains(cardIndex) else { return heights }
+        let rest = heights.indices.filter { $0 != cardIndex }.reduce(0) { $0 + heights[$1] }
+            + spacing * CGFloat(heights.count - 1)
+        heights[cardIndex] = max(shortestCard, min(width * 4 / 3, (room ?? .infinity) - rest))
+        return heights
     }
 }

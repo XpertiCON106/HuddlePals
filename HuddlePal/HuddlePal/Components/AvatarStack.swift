@@ -24,17 +24,32 @@ struct AvatarView: View {
         return letters.isEmpty ? "?" : String(letters).uppercased()
     }
 
+    /// A picture already shown somewhere in the app, drawn from the first
+    /// frame: opening a huddle shows its members' pictures at once, not
+    /// their colours first.
+    private var cachedImage: UIImage? {
+        guard imageData == nil, let imagePath else { return nil }
+        return AvatarImageCache.shared.image(for: imagePath)
+    }
+
+    /// A picture is on its way: a plain circle meanwhile, not the colour and
+    /// initials of someone who has no picture.
+    private var isWaitingForPicture: Bool {
+        imagePath != nil && imageData == nil && !isSettled
+    }
+
     var body: some View {
+        let shown = cachedImage ?? image
         Circle()
-            .fill(AvatarStyle.fill(for: colorHex))
+            .fill(shown == nil && isWaitingForPicture ? AnyShapeStyle(Theme.surfaceElevated) : AvatarStyle.fill(for: colorHex))
             .frame(width: size, height: size)
             .overlay {
-                if let image {
-                    Image(uiImage: image)
+                if let shown {
+                    Image(uiImage: shown)
                         .resizable()
                         .scaledToFill()
                         .transition(.opacity)
-                } else {
+                } else if !isWaitingForPicture {
                     Text(initials)
                         .font(.system(size: size * 0.4, weight: .semibold))
                         .foregroundStyle(.white)
@@ -45,7 +60,7 @@ struct AvatarView: View {
             // Decorative: a name is always next to it, or the surrounding
             // link / stack carries it (UserLink, AvatarStack).
             .accessibilityHidden(true)
-            .preference(key: MediaReadyKey.self, value: imagePath == nil || imageData != nil || isSettled)
+            .preference(key: MediaReadyKey.self, value: !isWaitingForPicture || shown != nil)
             .task(id: imageLoadID) {
                 if let imageData {
                     image = UIImage(data: imageData)
@@ -57,14 +72,21 @@ struct AvatarView: View {
                     loadedPath = nil
                     return
                 }
+                if let cached = AvatarImageCache.shared.image(for: imagePath) {
+                    image = cached
+                    loadedPath = imagePath
+                    isSettled = true
+                    return
+                }
                 guard loadedPath != imagePath else { return }
                 let patience = Task {
                     try? await Task.sleep(for: .seconds(1))
                     isSettled = true
                 }
                 let data = await deps.mediaService.loadImageData(at: imagePath)
+                let loaded = await AvatarImageCache.shared.decode(data, for: imagePath)
                 patience.cancel()
-                withAnimation(.easeOut(duration: 0.3)) { image = data.flatMap(UIImage.init(data:)) }
+                withAnimation(.easeOut(duration: 0.15)) { image = loaded }
                 loadedPath = imagePath
                 isSettled = true
             }
@@ -73,6 +95,40 @@ struct AvatarView: View {
     private var imageLoadID: String {
         if let imageData { return "draft:\(imageData.hashValue)" }
         return "persisted:\(imagePath ?? "none")"
+    }
+}
+
+/// Profile pictures already decoded, by path, in memory only. A path's
+/// picture never changes (every upload gets a new name), so an avatar drawn
+/// again shows it at once. NSCache drops them under memory pressure;
+/// sign-out empties it.
+final class AvatarImageCache: @unchecked Sendable {
+    static let shared = AvatarImageCache()
+    private let cache = NSCache<NSString, UIImage>()
+
+    /// Enough for the largest avatar that shows a picture (52 pt at 3x).
+    private static let maxPixelSize: CGFloat = 180
+
+    init() {
+        cache.countLimit = 300
+    }
+
+    func image(for path: String) -> UIImage? {
+        cache.object(forKey: path as NSString)
+    }
+
+    /// Decodes `data` small, off the main actor, and keeps it for `path`.
+    func decode(_ data: Data?, for path: String) async -> UIImage? {
+        guard let data else { return nil }
+        let image = await Task.detached(priority: .userInitiated) {
+            LocalDepositImage.downsampled(data, maxPixelSize: Self.maxPixelSize)
+        }.value
+        if let image { cache.setObject(image, forKey: path as NSString) }
+        return image
+    }
+
+    func removeAll() {
+        cache.removeAllObjects()
     }
 }
 

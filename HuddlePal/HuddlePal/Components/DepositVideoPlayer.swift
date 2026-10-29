@@ -164,21 +164,42 @@ final class LoopingClipPlayer {
 /// Who gets the sound. Muted clips play alongside whatever else is playing
 /// (ambient: the music keeps going); a clip someone unmutes takes the sound,
 /// silent switch or not, like any video app, and gives it back when it stops.
+///
+/// Switching the audio session blocks until the audio hardware has changed
+/// over, long enough to hold up the tap that asked for it, so the changes
+/// run in order on a queue of their own: a play or pause button answers at
+/// once and the sound follows a moment later.
 enum PlaybackAudio {
+    private static let queue = DispatchQueue(label: "com.huddlepals.playback-audio", qos: .userInitiated)
+
     static func muted() {
-        try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+        queue.async { setAmbient() }
     }
 
     static func soundOn() {
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .moviePlayback)
-        try? session.setActive(true)
+        queue.async {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.playback, mode: .moviePlayback)
+            try? session.setActive(true)
+        }
     }
 
     static func release() {
-        let session = AVAudioSession.sharedInstance()
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
-        muted()
+        queue.async {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            setAmbient()
+        }
+    }
+
+    /// Waits for the changes asked for so far. The camera sets the audio
+    /// session up for recording, and a late change from here mustn't undo it.
+    static func finishPending() {
+        queue.sync {}
+    }
+
+    private static func setAmbient() {
+        try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
     }
 }
 
@@ -285,7 +306,8 @@ struct DepositVideoPlayer: View {
         }
     }
 
-    /// A round button on the video's corner, its tap area 44 pt.
+    /// A round button on the video's corner, its tap area 44 pt. Its icon
+    /// changes the moment it's tapped.
     private func control(_ symbol: String, action: @escaping () -> Void) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 13, weight: .semibold))
@@ -295,7 +317,7 @@ struct DepositVideoPlayer: View {
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
             .onTapGesture(perform: action)
-            .contentTransition(.symbolEffect(.replace))
+            .transaction { $0.animation = nil }
     }
 
     private func togglePlayback() {
@@ -477,7 +499,8 @@ struct ClipPreview: View {
         )
     }
 
-    /// A round button on the video, its tap area 44 pt.
+    /// A round button on the video, its tap area 44 pt. Its icon changes
+    /// the moment it's tapped.
     private func control(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
@@ -487,7 +510,7 @@ struct ClipPreview: View {
                 .background(.black.opacity(0.5), in: Circle())
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
-                .contentTransition(.symbolEffect(.replace))
+                .transaction { $0.animation = nil }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

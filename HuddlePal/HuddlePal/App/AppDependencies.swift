@@ -188,6 +188,8 @@ final class AppDependencies {
     /// server refusing the session) and leaves nothing of the account for
     /// whoever signs in next.
     func endSession() async {
+        // The swap below is instant; a still of the screen fades into it.
+        ScreenCrossfade.begin()
         liveUpdates.setActive(false)
         session.currentUser = nil
         session.needsProfileSetup = false
@@ -197,6 +199,7 @@ final class AppDependencies {
         session.blockedUserIDs = []
         plus.reset()
         DecryptedClipCache.shared.removeAll()
+        AvatarImageCache.shared.removeAll()
         // In the same main-actor turn as clearing the session: the next
         // render swaps the main UI for onboarding, so no mounted screen
         // reads a model after it's deleted.

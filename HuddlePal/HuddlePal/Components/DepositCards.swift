@@ -93,7 +93,7 @@ struct LocalDepositImage: View {
     }
 
     /// ImageIO thumbnail decode: never materializes the full-size bitmap.
-    private static func downsampled(_ data: Data, maxPixelSize: CGFloat) -> UIImage? {
+    nonisolated static func downsampled(_ data: Data, maxPixelSize: CGFloat) -> UIImage? {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
             return UIImage(data: data)

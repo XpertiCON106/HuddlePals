@@ -89,7 +89,7 @@ private struct AppDialogModifier<Extra: View>: ViewModifier {
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
             .frame(maxHeight: .infinity, alignment: .top)
             .presentationDetents([.height(height)])
-            .presentationCornerRadius(28)
+            .modifier(DialogCorners())
             .presentationBackground(Theme.surface)
             .presentationDragIndicator(.hidden)
         }
@@ -99,6 +99,20 @@ private struct AppDialogModifier<Extra: View>: ViewModifier {
         let action = chosen ?? actions.first { $0.role == .cancel }
         chosen = nil
         action?.action()
+    }
+}
+
+/// From iOS 26 a short sheet floats clear of the screen's edges, its
+/// corners following the screen's own rounded corners, as the system's
+/// sheets do (the share sheet). A set radius would break that, so the card
+/// keeps its own 28 only before iOS 26.
+private struct DialogCorners: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+        } else {
+            content.presentationCornerRadius(28)
+        }
     }
 }
 

@@ -81,10 +81,12 @@ HuddlePal/
 │   │   └── Profile/ProfileView.swift   Draft editing + confirmed save, the Plan section,
 │   │                                   sign out + DEBUG tools; TermsReaderView
 │   ├── Components/                     AppDialog (the app's own alerts and choices), BirthdayRow,
-│   │                                   BlurredDepositCard, DepositCard, AvatarStack,
+│   │                                   BlurredDepositCard, DepositCard,
+│   │                                   AvatarStack (+ AvatarImageCache, pictures shown at once),
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,
 │   │                                   HuddleSpinner (every loading spinner) +
 │   │                                   HuddleRefreshSpinner (pull to refresh),
+│   │                                   ScreenCrossfade (fades out of a session),
 │   │                                   ClipTrimBar (trimming a video),
 │   │                                   CaptionTextField (80-char enforcement),
 │   │                                   CodeEntryField, CameraPicker, TermsDocumentView,

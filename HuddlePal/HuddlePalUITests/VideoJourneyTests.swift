@@ -50,6 +50,9 @@ final class VideoJourneyTests: HuddleUITestCase {
         waitFor(app.buttons["Take test photo"])
         app.buttons["Cancel"].firstMatch.tap()
         waitFor(app.buttons["Video"]).tap()
+        // Switching keeps the camera closed until it's tapped.
+        XCTAssertFalse(app.buttons["Record test video"].waitForExistence(timeout: 2), "the switch didn't open the camera")
+        waitFor(app.buttons["Open camera"]).tap()
         waitFor(app.buttons["Record test video"], timeout: 15).tap()
         waitFor(app.otherElements.matching(NSPredicate(format: "label BEGINSWITH 'Your video'")).firstMatch, timeout: 20)
         sleep(1)
