@@ -19,6 +19,8 @@ import UIKit
 ///                               recording them; tests otherwise hold a frame)
 ///   -ui-testing-no-birthday     the seeded "You" has no birthday yet, as an
 ///                               account from before birthdays were asked for
+///   -ui-testing-ineligible-birthday   a stored birthday accepted by the old
+///                               one-day allowance, before strict UTC eligibility
 enum UITestHooks {
     #if DEBUG
     private static let arguments = ProcessInfo.processInfo.arguments
@@ -32,6 +34,7 @@ enum UITestHooks {
     static let plusIntro = arguments.contains("-ui-testing-plus-intro")
     static let motion = arguments.contains("-ui-testing-motion")
     static let noBirthday = arguments.contains("-ui-testing-no-birthday")
+    static let ineligibleBirthday = arguments.contains("-ui-testing-ineligible-birthday")
     #else
     static let isUITesting = false
     static let resetsState = false
@@ -43,6 +46,7 @@ enum UITestHooks {
     static let plusIntro = false
     static let motion = false
     static let noBirthday = false
+    static let ineligibleBirthday = false
     #endif
 
     /// Wipes what the app persists (settings, the local store, cached

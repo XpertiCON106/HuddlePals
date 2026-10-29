@@ -22,9 +22,12 @@ final class AppSession {
     /// Authenticated but never finished the profile step — onboarding
     /// resumes there instead of at sign-in.
     var needsProfileSetup = false
-    /// Signed in, but the account has no birthday yet (made before it was
-    /// asked for): it's asked once, before anything else.
+    /// Signed in, but age eligibility is pending: collect a missing birthday
+    /// or show the recorded birthday's restriction before anything else.
     var pendingBirthdayUser: User?
+    /// A recorded birthday is not yet eligible. Keep the account outside
+    /// the app without offering to replace its immutable birthday.
+    var hasIneligibleBirthday = false
     /// False until seeding + session restore finish on launch.
     var isReady = false
     /// Bumped by the live photo keyring whenever this device gains a huddle
@@ -183,6 +186,7 @@ final class AppDependencies {
         session.currentUser = nil
         session.needsProfileSetup = false
         session.pendingBirthdayUser = nil
+        session.hasIneligibleBirthday = false
         ageScreening.clearPendingBirthday()
         session.pendingInviteCode = nil
         session.pendingHuddleID = nil

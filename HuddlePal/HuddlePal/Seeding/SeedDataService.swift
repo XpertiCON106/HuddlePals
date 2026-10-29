@@ -108,7 +108,13 @@ final class SeedDataService {
         allUsers.forEach { context.insert($0) }
         // An account from before birthdays were asked for would be asked
         // first thing: the seeded one has one.
-        if !UITestHooks.noBirthday {
+        if UITestHooks.ineligibleBirthday {
+            let calendar = Birthday.eligibilityCalendar
+            let today = calendar.startOfDay(for: .now)
+            let cutoff = calendar.date(byAdding: .year, value: -Birthday.minimumAge, to: today)!
+            let oldAllowance = calendar.date(byAdding: .day, value: 1, to: cutoff)!
+            MockAuthService.storeBirthday(Birthday(date: oldAllowance, calendar: calendar), for: you.id)
+        } else if !UITestHooks.noBirthday {
             MockAuthService.storeBirthday(Birthday(year: 1995, month: 6, day: 14), for: you.id)
         }
 

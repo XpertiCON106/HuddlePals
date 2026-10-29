@@ -18,6 +18,8 @@ struct BirthdayCheckView: View {
                 } else {
                     question(viewModel)
                 }
+            } else {
+                Color.clear
             }
         }
         .onAppear {

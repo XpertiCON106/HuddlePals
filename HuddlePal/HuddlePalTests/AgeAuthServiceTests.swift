@@ -102,6 +102,23 @@ final class AgeAuthServiceTests: XCTestCase {
         noIdentityWasPublished()
     }
 
+    func testAStoredIneligibleBirthdayKeepsDeletionAccessWithoutPublishingAnIdentity() async throws {
+        let client = try await LiveStub.signedInClient(userID: userID)
+        let rows = profile
+        let id = userID.uuidString
+        let birthday = Birthday(date: .now, calendar: Birthday.eligibilityCalendar).isoDate
+        StubURLProtocol.respond { request in
+            if request.url?.path.hasSuffix("/profiles") == true { return .init(body: LiveStub.json(rows)) }
+            return .init(body: LiveStub.json([["user_id": id, "birth_date": birthday]]))
+        }
+
+        guard case .ageRestricted(let user) = try await service(client).currentState() else {
+            return XCTFail("a stored ineligible birthday must keep the authenticated deletion path")
+        }
+        XCTAssertEqual(user.id, userID)
+        noIdentityWasPublished()
+    }
+
     func testAnEligibleBirthdayIsConfirmedBeforeIdentityPublication() async throws {
         let client = try await LiveStub.signedInClient(userID: userID)
         let rows = profile

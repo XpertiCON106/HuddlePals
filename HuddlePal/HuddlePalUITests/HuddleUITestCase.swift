@@ -127,11 +127,25 @@ class HuddleUITestCase: XCTestCase {
         let row = app.buttons["Delete account"]
         scrollTo(row, maxSwipes: 25)
         row.tap()
+        enterDeletionConfirmation(file: file, line: line)
+    }
+
+    @discardableResult
+    func enterDeletionConfirmation(file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         let field = waitFor(app.textFields["deleteConfirmation"], file: file, line: line)
-        XCTAssertFalse(app.buttons["Delete my account"].isEnabled, "nothing to tap before DELETE is typed", file: file, line: line)
+        let footer = app.buttons["Delete my account"]
+        XCTAssertFalse(footer.isEnabled, "nothing to tap before DELETE is typed", file: file, line: line)
+        // The pinned footer can cover a field that XCTest still reports as
+        // hittable on a small screen. Expose the whole field before typing.
+        for _ in 0..<5 {
+            if field.frame.maxY < footer.frame.minY { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertLessThan(field.frame.maxY, footer.frame.minY, "confirmation above the footer", file: file, line: line)
         field.tap()
         field.typeText("DELETE")
-        waitUntilEnabled(app.buttons["Delete my account"], file: file, line: line)
+        waitUntilEnabled(footer, file: file, line: line)
+        return field
     }
 
     /// The top bar's Back.
@@ -224,9 +238,31 @@ class HuddleUITestCase: XCTestCase {
                        file: StaticString = #filePath, line: UInt = #line) {
         let wheels = app.pickerWheels
         waitFor(wheels.element(boundBy: 2), file: file, line: line)
-        wheels.element(boundBy: 0).adjust(toPickerWheelValue: String(month))
-        wheels.element(boundBy: 1).adjust(toPickerWheelValue: String(day))
-        wheels.element(boundBy: 2).adjust(toPickerWheelValue: String(year))
+        let components = [month, day, year].map(String.init)
+        let date = String(format: "%04d-%02d-%02d", year, month, day)
+        let summary = app.staticTexts["selectedBirthday"]
+        var settled = false
+        for _ in 0..<3 {
+            for (index, target) in components.enumerated() {
+                wheels.element(boundBy: index).adjust(toPickerWheelValue: target)
+            }
+            var matchingSince: Date?
+            let stable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                guard components.enumerated().allSatisfy({ wheels.element(boundBy: $0.offset).value as? String == $0.element }),
+                      summary.value as? String == date else {
+                    matchingSince = nil
+                    return false
+                }
+                if matchingSince == nil { matchingSince = .now }
+                return Date.now.timeIntervalSince(matchingSince!) >= 2
+            }, object: nil)
+            if XCTWaiter.wait(for: [stable], timeout: 8) == .completed {
+                settled = true
+                break
+            }
+        }
+        let values = (0..<3).map { String(describing: wheels.element(boundBy: $0).value) }
+        XCTAssertTrue(settled, "birthday \(date): wheels \(values), summary \(summary.label), value \(String(describing: summary.value))", file: file, line: line)
         waitUntilEnabled(app.buttons["Continue"], file: file, line: line)
     }
 

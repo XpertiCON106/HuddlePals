@@ -16,7 +16,7 @@ final class BirthdayCheckViewModel {
     init(deps: AppDependencies) {
         self.deps = deps
         birthday = deps.ageScreening.birthday
-        isUnderage = deps.ageScreening.isBlocked()
+        isUnderage = deps.session.hasIneligibleBirthday || deps.ageScreening.isBlocked()
     }
 
     var canContinue: Bool { birthday?.isValid == true && !isSaving && !isUnderage }

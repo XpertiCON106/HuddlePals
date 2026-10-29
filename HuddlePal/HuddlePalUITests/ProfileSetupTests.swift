@@ -108,13 +108,30 @@ final class ProfileSetupTests: HuddleUITestCase {
         app.launchArguments.removeAll { $0 == "-ui-testing-reset" }
         app.launch()
         waitFor(app.buttons["Delete account"], timeout: 25).tap()
-        let field = waitFor(app.textFields["deleteConfirmation"])
-        field.tap()
-        field.typeText("DELETE")
-        waitUntilEnabled(app.buttons["Delete my account"])
+        let field = enterDeletionConfirmation()
         app.buttons["Delete my account"].tap()
         waitUntilGone(field, timeout: 20)
         waitFor(app.buttons["Back to welcome"])
         XCTAssertFalse(app.navigationBars.buttons["Create or join a huddle"].exists)
+    }
+
+    func testAStoredIneligibleBirthdayKeepsAccountDeletionAvailable() {
+        launch(arguments: ["-ui-testing-ineligible-birthday"], termsAgreed: true)
+        let notice = app.staticTexts["HuddlePals is for people 13 or older."]
+        waitFor(notice, timeout: 25)
+        XCTAssertFalse(app.pickerWheels.firstMatch.exists, "the recorded birthday cannot be replaced")
+        XCTAssertFalse(app.navigationBars.buttons["Create or join a huddle"].exists)
+        snapshot("35 recorded birthday awaiting eligibility")
+
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "-ui-testing-reset" }
+        app.launch()
+        waitFor(notice, timeout: 25)
+        waitFor(app.buttons["Delete account"]).tap()
+        let field = enterDeletionConfirmation()
+        app.buttons["Delete my account"].tap()
+        waitUntilGone(field, timeout: 20)
+        waitFor(app.buttons["Continue"], timeout: 20, "deletion returns to welcome")
+        XCTAssertFalse(app.buttons["Delete account"].exists)
     }
 }

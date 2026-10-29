@@ -26,6 +26,9 @@ enum AuthSessionState {
     /// A restored account made before birthday screening. It cannot enter
     /// the app until its birthday has been saved and checked.
     case needsBirthday(User)
+    /// An existing birthday is below the minimum age. The account stays
+    /// closed, with sign-out and deletion available.
+    case ageRestricted(User)
     /// Fully signed in.
     case signedIn(User)
 }
@@ -393,7 +396,7 @@ final class MockAuthService: AuthServiceProtocol {
         }
         guard birthday.isValid,
               birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
-            throw AuthError.underMinimumAge
+            return .ageRestricted(user)
         }
         return .signedIn(user)
     }

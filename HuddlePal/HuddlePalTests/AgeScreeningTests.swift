@@ -148,6 +148,48 @@ final class AgeScreeningTests: XCTestCase {
         XCTAssertNil(deps.ageScreening.birthday)
     }
 
+    func testAStoredIneligibleBirthdayBlocksEntryButKeepsAccountDeletion() async {
+        let auth = AgeGateAuthSpy()
+        auth.state = .ageRestricted(auth.user)
+        let deps = dependencies(auth: auth)
+        let root = RootViewModel(deps: deps)
+        await root.bootstrap()
+        XCTAssertNil(root.bootstrapError)
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertEqual(deps.session.pendingBirthdayUser?.id, auth.user.id)
+        XCTAssertTrue(deps.session.hasIneligibleBirthday)
+
+        let gate = BirthdayCheckViewModel(deps: deps)
+        XCTAssertTrue(gate.isUnderage, "the existing blocked-account UI offers sign-out and deletion")
+        gate.birthday = Birthday(year: 1990, month: 1, day: 1)
+        XCTAssertFalse(gate.canContinue, "a recorded birthday cannot be replaced")
+        await gate.save()
+        XCTAssertEqual(auth.events, ["state"])
+
+        let deletion = DeleteAccountViewModel(deps: deps)
+        deletion.confirmation = "DELETE"
+        let deleted = await deletion.delete()
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(auth.events, ["state", "delete"])
+        XCTAssertNil(deps.session.pendingBirthdayUser)
+        XCTAssertFalse(deps.session.hasIneligibleBirthday)
+        XCTAssertNil(deps.session.currentUser)
+    }
+
+    func testSigningInWithAStoredIneligibleBirthdayKeepsTheAccountPending() async {
+        let auth = AgeGateAuthSpy()
+        auth.state = .ageRestricted(auth.user)
+        let deps = dependencies(auth: auth)
+        let onboarding = OnboardingViewModel(deps: deps)
+        onboarding.continueAfterAgeCheck(Birthday(year: 1990, month: 1, day: 1))
+        await onboarding.mockAppleSignIn()
+
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertEqual(deps.session.pendingBirthdayUser?.id, auth.user.id)
+        XCTAssertTrue(deps.session.hasIneligibleBirthday)
+        XCTAssertTrue(BirthdayCheckViewModel(deps: deps).isUnderage)
+    }
+
     func testFailedBirthdaySaveKeepsThePendingAccountOutsideTheApp() async {
         let auth = AgeGateAuthSpy()
         auth.saveError = URLError(.notConnectedToInternet)
@@ -251,6 +293,6 @@ private final class AgeGateAuthSpy: AuthServiceProtocol {
         if let saveError { throw saveError }
     }
     func signOut() async throws {}
-    func deleteAccount(appleAuthorizationCode: String?) async throws {}
+    func deleteAccount(appleAuthorizationCode: String?) async throws { events.append("delete") }
     func removeLocalData() throws {}
 }

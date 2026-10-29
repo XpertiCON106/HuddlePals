@@ -65,7 +65,8 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   (from an invite link, `InviteLink`), `pendingHuddleID` (from a tapped
   notification), `needsProfileSetup`, `pendingBirthdayUser` (an older
   account kept outside the main session until eligibility is confirmed),
-  `isReady`, and `photoKeysVersion`
+  `hasIneligibleBirthday` (a recorded date still below the minimum, with
+  sign-out and account deletion available), `isReady`, and `photoKeysVersion`
   (the one field a service writes: the keyring bumps it so locked photos
   retry).
 - **Services**:

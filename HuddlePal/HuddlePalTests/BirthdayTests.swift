@@ -134,6 +134,22 @@ final class BirthdayTests: XCTestCase {
         XCTAssertNil(deps.session.pendingBirthdayUser)
     }
 
+    func testMockAccountWithAStoredIneligibleBirthdayStaysRestricted() async throws {
+        let deps = AppDependencies.makeMock(inMemory: true)
+        let user = User(displayName: "Young", avatarColorHex: "E5484D")
+        deps.modelContainer.mainContext.insert(user)
+        try deps.modelContainer.mainContext.save()
+        UserDefaults.standard.set(user.id.uuidString, forKey: "huddlepal.mock.currentUserID")
+        MockAuthService.storeBirthday(twelveYearsAgo, for: user.id)
+        defer { UserDefaults.standard.removeObject(forKey: "huddlepal.mock.birthday." + user.id.uuidString) }
+
+        guard case .ageRestricted(let restricted) = try await deps.auth.currentState() else {
+            return XCTFail("mock and live must preserve the blocked-account deletion route")
+        }
+        XCTAssertEqual(restricted.id, user.id)
+        XCTAssertNil(deps.session.currentUser)
+    }
+
     // MARK: Profile
 
     /// Profile shows the birthday given at sign-up; there's no changing it there.

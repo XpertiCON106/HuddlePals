@@ -217,7 +217,7 @@ final class LiveAuthService: AuthServiceProtocol {
         try store.save()
         guard let birthday = try await birthday() else { return .needsBirthday(user) }
         guard birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
-            throw AuthError.underMinimumAge
+            return .ageRestricted(user)
         }
         await keyring.ensureIdentity(for: session.userId)
         return .signedIn(user)

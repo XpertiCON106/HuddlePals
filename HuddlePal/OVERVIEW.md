@@ -253,6 +253,8 @@ The server requires a recorded birthday showing 13 completed years by its
 UTC date for huddle, Storage, key, and other core operations. Birthdays are
 immutable; repeating the same save is safe. Unknown eligibility keeps the
 app gated, including on a failed lookup, before the shelf mounts.
+An existing recorded birthday below the minimum age opens the blocked
+screen, with sign-out and account deletion available and no birthday editor.
 
 ```mermaid
 sequenceDiagram

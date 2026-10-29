@@ -26,6 +26,8 @@ recorded birthday showing 13 completed years by its UTC date for huddle
 access and refuses birthday changes. An
 unresolved eligibility check keeps the app at the age gate. Both backends
 follow this flow; this is a self-reported check, not identity verification.
+An existing account whose recorded birthday is not yet eligible stays
+blocked, with sign-out and account deletion available.
 
 The matching live release requires **migration 019_age_eligibility.sql**
 before shipping. The migration is prepared in this branch and has not been

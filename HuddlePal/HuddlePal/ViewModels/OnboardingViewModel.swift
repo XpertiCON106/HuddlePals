@@ -487,6 +487,11 @@ final class OnboardingViewModel {
             Haptics.light()
         case .needsBirthday(let user):
             deps.session.pendingBirthdayUser = user
+            deps.session.hasIneligibleBirthday = false
+            deps.session.currentUser = nil
+        case .ageRestricted(let user):
+            deps.session.pendingBirthdayUser = user
+            deps.session.hasIneligibleBirthday = true
             deps.session.currentUser = nil
         case .signedIn(let user):
             if let claimant = deps.terms.claimedBy, claimant != user.id { deps.terms.withdraw() }
@@ -514,6 +519,7 @@ final class OnboardingViewModel {
         Haptics.success()
         deps.ageScreening.clearPendingBirthday()
         deps.session.pendingBirthdayUser = nil
+        deps.session.hasIneligibleBirthday = false
         deps.session.currentUser = user
         deps.session.blockedUserIDs = (try? await deps.moderationService.blockedUserIDs()) ?? []
     }

@@ -29,6 +29,7 @@ final class RootViewModel {
             switch try await deps.auth.currentState() {
             case .signedIn(let user):
                 deps.ageScreening.clearPendingBirthday()
+                deps.session.hasIneligibleBirthday = false
                 if let claimant = deps.terms.claimedBy, claimant != user.id { deps.terms.withdraw() }
                 deps.session.currentUser = user
                 deps.session.blockedUserIDs = (try? await deps.moderationService.blockedUserIDs()) ?? []
@@ -36,6 +37,10 @@ final class RootViewModel {
                 deps.session.needsProfileSetup = true
             case .needsBirthday(let user):
                 deps.session.pendingBirthdayUser = user
+                deps.session.hasIneligibleBirthday = false
+            case .ageRestricted(let user):
+                deps.session.pendingBirthdayUser = user
+                deps.session.hasIneligibleBirthday = true
             case .signedOut:
                 break
             }

@@ -541,6 +541,8 @@ script against an existing production database.
    eligibility lookups, denied core requests without a birthday, and refused
    birthday changes. A UTC boundary may delay access for someone whose local
    date has reached their thirteenth birthday ahead of UTC.
+   Also verify a stored birthday accepted by the old one-day allowance:
+   it must show the blocked screen with account deletion available.
 5. **Rollout.** Older app builds write profiles and birthdays directly and
    may not finish account activation under the new restrictions. Make the
    matching build available as part of this rollout and direct affected
