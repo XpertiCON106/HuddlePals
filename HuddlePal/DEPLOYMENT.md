@@ -471,6 +471,41 @@ half minute instead, so it can go before or after the build ships.
    on one shows on the other within a second or two, with the huddle open
    and no pull to refresh.
 
+## Phase 11 — A last member's huddles go with their account
+
+When the last member of a huddle deletes their account, the huddle goes
+too: every photo, video, caption, comment and reaction in it, and its files
+in Storage, except a reported one, which is kept for review as
+`delete_huddle` keeps one. Nobody else was in it, so nobody is notified.
+Deleting a huddle's files now also works whichever way its folder is
+spelled: the app names it with an uppercase id, Postgres prints ids in
+lowercase, and both functions clear both.
+
+1. **Migration 018.** SQL Editor → paste
+   [`supabase/migrations/018_delete_sole_huddles.sql`](supabase/migrations/018_delete_sole_huddles.sql)
+   → Run (safe to re-run). Run it first: until it exists, the new
+   `delete-account` logs `sole_huddle_cleanup_failed` and leaves such a
+   huddle in place (the account is still deleted).
+2. **Functions**, from `HuddlePal/`: redeploy both:
+
+   ```bash
+   supabase functions deploy delete-account --project-ref <project-ref>
+   ```
+
+   ```bash
+   supabase functions deploy delete-huddle --project-ref <project-ref>
+   ```
+
+3. **Website**: the revised Terms (§3.2, §4.2, §4.5; version 2026-10-30,
+   so the next build asks everyone to agree again), the Privacy Policy, and
+   the Support answer "How do I delete my account?".
+4. **Check on a phone**: sign in with a test account that is the only
+   member of a test huddle with a photo in it, then Profile → Delete
+   account. In SQL,
+   `select id from huddles where id = '<huddle-id>';` returns nothing, and
+   Storage → `deposits` has no folder named after the huddle's id, in
+   either case.
+
 ---
 
 > Already ran an earlier `schema.sql`? There are no upgrade migrations —
@@ -507,7 +542,8 @@ half minute instead, so it can go before or after the build ships.
   confirms the person first), but
   **deposited photos stay in shared huddles as "Former member"** — the
   archive is permanent (disclose this in your privacy policy; see
-  [PRIVACY.md](PRIVACY.md)). Deletion runs through the `delete-account` edge
+  [PRIVACY.md](PRIVACY.md)). A huddle with no other member left is deleted
+  with the account (Phase 11). Deletion runs through the `delete-account` edge
   function, which holds the `service_role` key — never put that key in the
   app.
 - **Permanent storage grows forever.** Deposits are never deleted, so

@@ -141,10 +141,10 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
   the `delete-huddle` edge function calls `delete_huddle` (migration 014),
   which removes every member and row, keeps a reported deposit in
   `preserved_photos`, and tells the other members (`send-push`,
-  `huddle_deleted`); then it deletes the huddle's Storage folder but for
-  those kept files. The app removes the memberships at once and the huddle
-  itself on the next shelf refresh (`huddles(for:)`), after its screens have
-  closed, with its cached files.
+  `huddle_deleted`); then it deletes the huddle's Storage folder (both
+  spellings, see Storage below) but for those kept files. The app removes
+  the memberships at once and the huddle itself on the next shelf refresh
+  (`huddles(for:)`), after its screens have closed, with its cached files.
 - **Camera only** for daily photos (`CameraPicker`) and videos
   (`VideoCaptureView`); profile photos use `PhotosPicker`. The Simulator has
   no camera, so Compose says so (`-ui-testing-fake-camera` stands in for
@@ -171,17 +171,19 @@ Mock: SwiftData + Documents/Media      Live: Supabase, with the same store as a 
 - **Backfill and recovery**: yesterday can still take a photo (until 48 h
   after its start). A broken streak shows a countdown until then; if the
   missing members backfill in time, the recompute restores it.
-- **Limits**: captions ≤ 80, comments ≤ 500, names ≤ 40 (huddles 60), bios
-  ≤ 50 (the database allows 160, which older bios may use until they're
-  edited), 3 profile photos. Members per huddle 4 on the free plan and 10 with
-  Plus, huddles kept 3 and 10, huddles joined 25 (`HuddleLimits.swift`;
-  all enforced by the server). Lengths count code points, as Postgres does
-  (`TextLimits.swift`).
+- **Limits**: captions ≤ 80, comments ≤ 500, names ≤ 10 (the database
+  allows 40, which an older name keeps until it's edited; huddles 60), bios
+  ≤ 30 (the database allows 160; an older bio shows cut to 30 and is saved
+  so with the next change), 3 profile photos. Members per huddle 4 on the
+  free plan and 10 with Plus, huddles kept 3 and 10, huddles joined 25
+  (`HuddleLimits.swift`; all enforced by the server). Lengths count code
+  points, as Postgres does (`TextLimits.swift`).
 - **Downscaling** before upload: photos ≤ 1440 px, avatars ≤ 512 px, JPEG
   0.8. Storage only grows, so keep it.
 - **Former member**: deleting an account keeps its photos and comments
   (null author, shown as "Former member"), and members who left look the
-  same. Those DTO fields must stay optional.
+  same. Those DTO fields must stay optional. A huddle with no other member
+  left goes with the account (migration 018, see Account deletion).
 - **Moderation**: report a photo, comment or profile, and block a member.
   Blocking only hides content for the blocker; the gate and streak use the
   unfiltered data. Someone a member has blocked can't join their huddle.
@@ -334,8 +336,12 @@ what goes and what stays, Apple's billing if Plus renews, and a field where
 Apple's sheet then gives a fresh authorization code
 (`SystemAppleReauthenticator`). Closing the sheet deletes nothing; if Apple
 can't confirm, the page offers **Delete account anyway**. The `delete-account` function then revokes the app's Apple tokens
-(App Review 5.1.1(v)), deletes device tokens and avatars, releases the
-user's photos (`release_storage_objects`), and calls
+(App Review 5.1.1(v)), deletes device tokens and avatars, deletes every
+huddle the user is the last member of (`delete_sole_huddles`, migration
+018: everything in it, a reported deposit kept in `preserved_photos`, no
+notification since nobody else is in it) and then those huddles' Storage
+folders but for the kept files, releases the user's photos in the huddles
+that remain (`release_storage_objects`), and calls
 `auth.admin.deleteUser`. An Apple failure is logged and deletion goes on;
 codes, tokens and keys are never logged.
 
@@ -350,8 +356,12 @@ codes, tokens and keys are never logged.
   `avatars/<user_id>/…` is readable by the owner and their co-members,
   writable by the owner. Uploads are plain inserts: **never send
   `x-upsert`** (permanence, and huddle paths have no update policy).
+  Object names are case-sensitive: the app names a huddle's folder with
+  Swift's uppercase UUID, while Postgres prints ids lowercase, so the edge
+  functions that delete a huddle's files list both spellings
+  (`_shared/huddle-storage.ts`).
 - **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
-  (001–017, idempotent, run in order) upgrades the deployed one;
+  (001–018, idempotent, run in order) upgrades the deployed one;
   `supabase/scripts/reset_database.sql` wipes an old database for a fresh
   start. Writes that need rules RLS can't express go through SECURITY
   DEFINER functions (key sharing, invites, joins, skips, streaks).
@@ -373,8 +383,12 @@ codes, tokens and keys are never logged.
   bringing back a reaction just taken back.
 - **Edge functions**: `delete-account` and `send-push`. Each splits into
   `index.ts` (wiring), `handler.ts` (logic) and a client file (`apple.ts`,
-  `apns.ts`), so Node can test the logic. `verify-subscription` and
-  `app-store-notifications` (HuddlePals+) split the same way and share
+  `apns.ts`), so Node can test the logic. `delete-huddle` splits into
+  `index.ts` and `handler.ts`; it and `delete-account` (whose
+  `sole-huddles.ts` clears the huddles `delete_sole_huddles` removed) share
+  `_shared/huddle-storage.ts` for a huddle's Storage folder.
+  `verify-subscription` and `app-store-notifications` (HuddlePals+) split
+  the same way and share
   `_shared/apple-jws.ts` (Apple's certificate chain, checked with WebCrypto
   against the pinned Apple Root CA - G3) and `_shared/subscriptions.ts`.
 - **Plus and the free plan** (migration 013): Postgres enforces them, by

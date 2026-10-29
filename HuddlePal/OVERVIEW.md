@@ -230,7 +230,7 @@ erDiagram
 
 Relationship notes: inverses are declared once, on the to-many side, with cascade deletes (deleting a huddle removes its memberships and deposits; deleting a deposit removes its reactions and comments). The server adds what the client can't enforce: `unique (huddle_id, author_id, day_key)` on deposits (once-and-permanent — a second same-day insert fails), `unique (deposit_id, user_id, emoji)` on reactions (toggle semantics), `unique (user_id, huddle_id)` on memberships, and check constraints on caption length, dayKey shape, and hour range.
 
-**Former member.** `deposits.author_id` and `comments.user_id` are nullable with `on delete set null`: deleting an account keeps that person's photos and comments, with no author. Locally that is a nil `author` / `user`, rendered as "Former member". The same applies to someone who *left* a huddle: their id survives, but RLS no longer lets you read their profile, so a device that never cached it shows them as a Former member too. Sync keeps these rows; it never drops them.
+**Former member.** `deposits.author_id` and `comments.user_id` are nullable with `on delete set null`: deleting an account keeps that person's photos and comments, with no author. Locally that is a nil `author` / `user`, rendered as "Former member". The same applies to someone who *left* a huddle: their id survives, but RLS no longer lets you read their profile, so a device that never cached it shows them as a Former member too. Sync keeps these rows; it never drops them. A huddle with no other member left is deleted with the account instead, everything in it included (`delete_sole_huddles`, migration 018).
 
 ## 7. Authentication
 
@@ -311,7 +311,7 @@ Pragmatic pull-based sync — right-sized for a daily-cadence app of ≤10 peopl
 
 Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sql](supabase/schema.sql)) run once in the Supabase SQL editor. Three pillars:
 
-**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `profile_birthdates`, `preserved_photos`, `join_attempts`, `user_entitlements`, `app_store_notifications`, `app_limits`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
+**Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `profile_birthdates`, `preserved_photos`, `join_attempts`, `user_entitlements`, `app_store_notifications`, `huddle_deletions`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
 
 **Row Level Security** — privacy *is* the product, so the database enforces it even against a malicious client (the anon key ships in the binary by design; RLS is the boundary):
 
@@ -329,7 +329,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | device_tokens | your own | your own |
 | terms_acceptances | your own | insert your own (the server stamps `recorded_at`); no updates or deletes |
 | profile_birthdates | your own | insert or update your own, 13 or older (a day's leeway for time zones); goes with the profile |
-| preserved_photos | nobody (no policies, no privileges) | the operator, through `remove_reported_photo`; `delete_huddle` keeps a deleted huddle's reported deposits here |
+| preserved_photos | nobody (no policies, no privileges) | the operator, through `remove_reported_photo`; `delete_huddle` and `delete_sole_huddles` keep a deleted huddle's reported deposits here |
 | user_entitlements | nobody; your own plan through `my_entitlement()` | the edge functions only, through `apply_entitlement`, once Apple's signature checks out |
 | app_store_notifications, huddle_deletions | nobody (no policies, no privileges) | the edge functions / `delete_huddle` |
 | storage objects | bucket `deposits`: huddle photos and video clips (ciphertext) gated by the huddle-id path folder; `avatars/<user id>/…` readable by that user and anyone sharing a huddle with them | huddle members (insert-only — the app never overwrites; a `.mp4` clip only with Plus); `avatars/<your id>/…` only |
@@ -346,6 +346,7 @@ Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, 
 | `huddle_join_rule(huddle)` / `huddle_join_status(huddle)` | How many members a huddle takes, from its keeper's plan (10 with Plus; otherwise 4, and only in the keeper's 3 longest-kept huddles), and why it refuses one more. The status is for members, so the app can explain a paused invite |
 | `my_entitlement()` | The caller's plan: Plus or not and until when, the server's clock, huddles kept against the cap |
 | `delete_huddle(huddle, user)` | Service role only (the `delete-huddle` function): for the huddle's keeper, keeps any reported deposit in `preserved_photos`, tells the other members, deletes the huddle and everything in it, and returns the Storage files to keep |
+| `delete_sole_huddles(user)` | Service role only (the `delete-account` function): deletes every huddle the account is the last member of, keeping any reported deposit in `preserved_photos` (nobody else to tell), and returns each huddle's Storage files to keep |
 | `apply_entitlement(…)` | Service role only: records what Apple signed about one subscription, keeping it with one account and ignoring anything signed earlier than what it has |
 | `huddle_invite(huddle)` | For members: the lookup, the secret sealed with the huddle key, and whether the huddle is still on an old code |
 | `create_huddle_invite` / `reset_huddle_invite` | Issue the first new-format invite (any member holding the key) / replace it (keeper); both retire the previous code |
@@ -438,10 +439,15 @@ HuddlePal/
 ├── PRIVACY.md                 Privacy policy text (host it publicly)
 ├── Config/Info.plist          Partial Info.plist: camera usage string + huddlepal:// scheme (old invite links)
 ├── supabase/
-│   ├── schema.sql             Tables + RLS + storage policies + 7 RPCs (run once)
+│   ├── schema.sql             Tables + RLS + storage policies + RPCs (run once)
+│   ├── migrations/            001–018: upgrade a deployed database, in order
 │   ├── scripts/reset_database.sql  Destructive: wipes an older DB so schema.sql can run fresh
 │   ├── functions/delete-account/  Edge function behind "Delete account"
 │   ├── functions/delete-huddle/   Edge function behind "Delete huddle"
+│   ├── functions/send-push/       Activity pushes over APNs (called by the database)
+│   ├── functions/verify-subscription/, app-store-notifications/  HuddlePals+ purchases and renewals
+│   ├── functions/_shared/     Apple signature checks, subscriptions, a huddle's Storage folder
+│   ├── tests/                 Node + PGlite tests of the SQL and the functions' logic
 │   └── Supabase.example.plist Copy to HuddlePal/HuddlePal/Supabase.plist to go live
 ├── tools/generate_icon.swift  Renders the app icon (swift tools/generate_icon.swift out.png)
 ├── tools/decrypt_reported_photo/  Operator: decrypt one reported photo with its report's key

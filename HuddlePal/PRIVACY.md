@@ -1,6 +1,6 @@
 # HuddlePals — Privacy Policy
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-10-30_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
@@ -128,7 +128,10 @@ When you do:
   keep the group's shared archive intact for the other members — consistent
   with the permanence described above. A huddle you keep passes to another
   member; to delete it and everything in it instead, delete the huddle first
-  (its settings → Delete huddle).
+  (its settings → Delete huddle). A huddle with no other member left is
+  deleted with your account, along with everything in it; we still keep a
+  photo or video someone reported, as described under "Reporting and
+  blocking."
 - **Deleting your account doesn't cancel HuddlePals+.** Apple keeps
   billing until you cancel it in Settings → your name → Subscriptions, so
   cancel it there first.

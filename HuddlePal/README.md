@@ -110,8 +110,9 @@ HuddlePal/
     └── VideoDropTests.swift            Video seal, recording, playback from memory, Compose
 ```
 
-Next to the app: `supabase/` (schema.sql, `scripts/reset_database.sql`, the
-`delete-account` and `delete-huddle` edge functions) and `tools/` (app icon generator, `decrypt_reported_photo` for
+Next to the app: `supabase/` (schema.sql, migrations 001–018, `scripts/reset_database.sql`, the
+edge functions `delete-account`, `delete-huddle`, `send-push`, `verify-subscription` and `app-store-notifications`,
+and their Node tests) and `tools/` (app icon generator, `decrypt_reported_photo` for
 moderation).
 
 > **Widgets/** — intentionally absent. A home-screen widget ("did everyone deposit yet?") is planned post-MVP; it will live in a `Widgets/` extension target sharing the SwiftData container via an app group.
@@ -180,7 +181,7 @@ Still marked with `// TODO: BACKEND — …`: orphaned Storage cleanup in `LiveM
 - **Group streak** — a day counts when every member it waits on deposited **or** spent a skip token. A day waits on members who joined *before* it: your join day is free, so joining never breaks a streak, and you count from the next day. Counting runs backward from today (if complete) or yesterday (an in-progress today never breaks the streak); the first incomplete *ended* day stops it. Recomputed on launch and after every deposit.
 - **Backfill** — a past day can receive a deposit within 48h of that day's start (in practice: yesterday), surfaced in Archive as "Add to yesterday". The next full-history recompute picks the backfilled day up — that's how the recovery window restores a streak.
 - **End-to-end encrypted photos (live)** — the backend only ever holds ciphertext. Each photo has its own key, sealed with its huddle's key, which each member's device holds wrapped to that member's identity key (iCloud Keychain). A new member's invite code carries the huddle key, sealed so only the code's secret opens it: they see every photo the moment they join, with nobody else online, and the server never holds the secret. Reporting a photo discloses that one photo's key so it can be reviewed. Captions, comments, and profiles are not encrypted.
-- **Former member** — photos and comments outlive their author: a deleted account (or a member who left, whose profile you can no longer read) shows as "Former member". The photo stays, and stays reportable.
+- **Former member** — photos and comments outlive their author: a deleted account (or a member who left, whose profile you can no longer read) shows as "Former member". The photo stays, and stays reportable. Only a huddle with no other member left goes with the account.
 
 ## Testing
 
