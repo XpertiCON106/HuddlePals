@@ -46,9 +46,9 @@ final class VideoJourneyTests: HuddleUITestCase {
         openHuddle("The Crew")
 
         waitFor(app.buttons["Add today's memory"]).tap()
-        // The photo camera opens first; switch to video instead.
-        waitFor(app.buttons["Take test photo"])
-        app.buttons["Cancel"].firstMatch.tap()
+        // Compose opens on Photo, the camera closed: switch to video.
+        waitFor(app.buttons["Open camera"])
+        XCTAssertFalse(app.buttons["Take test photo"].exists, "the camera waits for a tap")
         waitFor(app.buttons["Video"]).tap()
         // Switching keeps the camera closed until it's tapped.
         XCTAssertFalse(app.buttons["Record test video"].waitForExistence(timeout: 2), "the switch didn't open the camera")

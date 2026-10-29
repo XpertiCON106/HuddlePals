@@ -185,8 +185,6 @@ final class ComposeVideoTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        // Compose opens on the medium posted last; every test starts on Photo.
-        UserDefaults.standard.removeObject(forKey: ComposeViewModel.lastMediumKey)
         deps = AppDependencies.makeMock(inMemory: true)
         try await deps.seeder.regenerate()
         plans = try XCTUnwrap(deps.mockPlans)
@@ -197,11 +195,6 @@ final class ComposeVideoTests: XCTestCase {
         deps.session.currentUser = user
         let huddles = try await deps.huddleService.huddles(for: user)
         crew = try XCTUnwrap(huddles.first { $0.inviteCode == SeedDataService.crewInviteCode })
-    }
-
-    override func tearDown() async throws {
-        UserDefaults.standard.removeObject(forKey: ComposeViewModel.lastMediumKey)
-        try await super.tearDown()
     }
 
     private func compose() -> ComposeViewModel {

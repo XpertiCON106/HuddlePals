@@ -204,6 +204,7 @@ final class AccessibilityAuditTests: HuddleUITestCase {
         app.navigationBars.buttons.firstMatch.tap()
         openHuddle("The Crew")
         waitFor(app.buttons["Add today's memory"]).tap()
+        openComposeCamera()
         waitFor(app.buttons["Take test photo"]).tap()
         waitFor(app.buttons["Continue"])
         try audit("compose")

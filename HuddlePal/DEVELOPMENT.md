@@ -622,9 +622,18 @@ session switches on a queue of its own (`PlaybackAudio`), which the video
 camera waits on before it sets the session up for recording. Compose's
 capture stage scrolls, with Continue pinned below: the photo card is sized
 for the room with the keyboard down and keeps it while a caption is typed
-(`CaptureColumn`); Done, a swipe down or a tap on the card puts the
-keyboard away. Switching between Photo and Video never opens the camera;
-it opens on Compose's first appearance and when tapped. Signing in fades
+(`CaptureColumn`). The scroll is held at its bottom
+(`defaultScrollAnchor(.bottom)`), so the caption rises with the keyboard,
+in the same motion, to just above Continue; a `scrollTo` on the keyboard's
+arrival would move at its own pace, and SwiftUI's own scroll to a focused
+field comes only after the keyboard settles and doesn't count Continue.
+Done, a swipe down or a tap on the card puts the
+keyboard away. Compose always opens on Photo, whatever was posted last,
+and the camera opens only when tapped (the card or Open camera), never on
+its own, switching between Photo and Video included. Text fields' bars
+rise with the keyboard at its own pace: an animation tied to focus (the
+comment bar's outline) stays on what it's for, or it would hurry the whole
+bar ahead of the keyboard. Signing in fades
 from onboarding into the shelf; ending a session (sign-out, deletion, the
 server refusing it) swaps the whole UI in one render, as it must, under a
 still of the screen that fades away (`ScreenCrossfade`). The app icon

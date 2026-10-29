@@ -57,18 +57,13 @@ final class ComposeViewModel {
     /// Video drops come with HuddlePals+.
     var canRecordVideo: Bool { deps.plus.isPremium }
 
-    /// What was posted last time ("photo" or "video"): Compose opens on it.
-    static let lastMediumKey = "huddlepal.compose.lastMedium"
-
+    /// Always opens on Photo, whatever was posted last.
     init(deps: AppDependencies, huddle: Huddle, targetDayKey: String? = nil) {
         self.deps = deps
         self.huddle = huddle
         let today = deps.engine.todayKey(now: deps.dateProvider.now)
         self.targetDayKey = targetDayKey ?? today
         self.isBackfill = (targetDayKey ?? today) != today
-        if UserDefaults.standard.string(forKey: Self.lastMediumKey) == "video", deps.plus.isPremium {
-            medium = .video
-        }
     }
 
     /// Camera-only: the live capture handed back from `CameraPicker`. There
@@ -186,7 +181,6 @@ final class ComposeViewModel {
                     dayKey: targetDayKey
                 )
             }
-            UserDefaults.standard.set(clip == nil ? "photo" : "video", forKey: Self.lastMediumKey)
             return true
         } catch DepositError.videoNeedsPlus {
             videoNeedsPlus = true

@@ -63,6 +63,7 @@ final class JourneyTests: HuddleUITestCase {
         launchToShelf()
         openHuddle("The Crew")
         waitFor(app.buttons["Add today's memory"]).tap()
+        openComposeCamera()
         waitFor(app.buttons["Take test photo"]).tap()
         let photo = waitFor(app.images["Your photo"])
         let photoHeight = photo.frame.height

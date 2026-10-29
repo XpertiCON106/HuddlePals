@@ -15,7 +15,6 @@ final class PlusGateTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        UserDefaults.standard.removeObject(forKey: ComposeViewModel.lastMediumKey)
         deps = AppDependencies.makeMock(inMemory: true)
         try await deps.seeder.regenerate()
         plans = try XCTUnwrap(deps.mockPlans)
@@ -29,7 +28,6 @@ final class PlusGateTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        UserDefaults.standard.removeObject(forKey: ComposeViewModel.lastMediumKey)
         deps.dateProvider.reset()
         try await super.tearDown()
     }
@@ -194,7 +192,7 @@ final class PlusGateTests: XCTestCase {
 
     // MARK: Compose
 
-    func testComposeOpensOnVideoAfterAVideoOnlyWithPlus() async throws {
+    func testComposeOpensOnPhotoEvenAfterAVideo() async throws {
         plans.setPlus(true, for: you.id)
         let first = ComposeViewModel(deps: deps, huddle: crew)
         XCTAssertEqual(first.medium, .photo)
@@ -203,10 +201,7 @@ final class PlusGateTests: XCTestCase {
         first.continueToConfirm()
         let posted = await first.confirmAndPost()
         XCTAssertTrue(posted)
-        XCTAssertEqual(ComposeViewModel(deps: deps, huddle: crew).medium, .video, "last time was a video")
-
-        plans.setPlus(false, for: you.id)
-        XCTAssertEqual(ComposeViewModel(deps: deps, huddle: crew).medium, .photo, "but not without Plus")
+        XCTAssertEqual(ComposeViewModel(deps: deps, huddle: crew).medium, .photo, "a video last time doesn't change where Compose starts")
     }
 
     // MARK: Profile

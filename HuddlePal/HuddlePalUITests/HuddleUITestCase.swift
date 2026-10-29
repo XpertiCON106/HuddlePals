@@ -147,6 +147,7 @@ class HuddleUITestCase: XCTestCase {
     /// Compose → stand-in camera → caption → confirm → post.
     func depositPhoto(caption: String? = nil, ctaLabel: String = "Add today's memory") {
         waitFor(app.buttons[ctaLabel]).tap()
+        openComposeCamera()
         waitFor(app.buttons["Take test photo"]).tap()
         if let caption {
             let field = waitFor(app.textFields["Add a line… (optional)"])
@@ -159,6 +160,12 @@ class HuddleUITestCase: XCTestCase {
         waitFor(app.staticTexts["This is permanent"])
         let post = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Post'")).firstMatch
         waitFor(post).tap()
+    }
+
+    /// Compose opens on Photo with the camera closed: this opens it.
+    func openComposeCamera(file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertFalse(app.buttons["Take test photo"].exists, "the camera waits for a tap", file: file, line: line)
+        waitFor(app.buttons["Open camera"], file: file, line: line).tap()
     }
 
     /// Taps `label` in the row, then the same-named button of the

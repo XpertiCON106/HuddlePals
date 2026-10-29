@@ -391,6 +391,9 @@ private struct DetailContent: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .strokeBorder(commentFocused ? Theme.textSecondary.opacity(0.45) : Theme.hairline, lineWidth: 1)
+                        // Only the outline: the bar itself rises with the
+                        // keyboard, at the keyboard's own pace.
+                        .animation(.easeOut(duration: 0.15), value: commentFocused)
                 )
             }
 
@@ -409,7 +412,6 @@ private struct DetailContent: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Theme.hairline).frame(height: 1)
         }
-        .animation(.easeOut(duration: 0.15), value: commentFocused)
     }
 
     private var sendButton: some View {

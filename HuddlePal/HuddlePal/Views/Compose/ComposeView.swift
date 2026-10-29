@@ -54,11 +54,9 @@ struct ComposeView: View {
             }
         }
         .onAppear {
+            // On Photo, the camera closed until it's tapped.
             if viewModel == nil {
                 viewModel = ComposeViewModel(deps: deps, huddle: huddle, targetDayKey: targetDayKey)
-                // Open the camera immediately (when there is one — the
-                // Simulator has none).
-                showCamera = CameraPicker.availability() == .ready
             }
         }
     }
@@ -119,8 +117,6 @@ private struct ComposeContent: View {
     /// stage's height then isn't the room it has.
     @State private var keyboardIsUp = false
 
-    private static let captionID = "caption"
-
     var body: some View {
         Group {
             switch viewModel.stage {
@@ -155,41 +151,36 @@ private struct ComposeContent: View {
     /// keep the caption above the keyboard instead of squeezing the card.
     /// Done, a swipe down or a tap on the card puts the keyboard away.
     private var pickStage: some View {
-        ScrollViewReader { scroller in
-            ScrollView {
-                CaptureColumn(room: room) {
-                    mediumPicker
-                    photoArea
-                    CaptionTextField(text: $viewModel.caption)
-                        .focused($captionFocused)
-                        .id(Self.captionID)
-                    if let error = viewModel.errorMessage {
-                        Text(error)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Theme.destructive)
-                            .multilineTextAlignment(.center)
-                    }
-                }
-                .padding(.horizontal, Theme.screenPadding)
-                .padding(.top, Self.columnTop)
-                .padding(.bottom, Self.columnBottom)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .scrollBounceBehavior(.basedOnSize)
-            // The room between the navigation bar and Continue, taken only
-            // with the keyboard down (it shrinks the scroll view while up).
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                guard !captionFocused, !keyboardIsUp else { return }
-                room = height - Self.columnTop - Self.columnBottom
-            }
-            // The keyboard came up, or changed height: the caption stays
-            // just above it.
-            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { _ in
-                guard captionFocused else { return }
-                withAnimation(.easeOut(duration: 0.25)) {
-                    scroller.scrollTo(Self.captionID, anchor: .bottom)
+        ScrollView {
+            CaptureColumn(room: room) {
+                mediumPicker
+                photoArea
+                CaptionTextField(text: $viewModel.caption)
+                    .focused($captionFocused)
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.destructive)
+                        .multilineTextAlignment(.center)
                 }
             }
+            .padding(.horizontal, Theme.screenPadding)
+            .padding(.top, Self.columnTop)
+            .padding(.bottom, Self.columnBottom)
+            // Always the full room, so the anchor below only ever moves it
+            // for the keyboard.
+            .frame(minHeight: room.map { $0 + Self.columnTop + Self.columnBottom }, alignment: .top)
+        }
+        // Held at the bottom: as the keyboard rises, the caption rises with
+        // it, in the same motion, to just above Continue.
+        .defaultScrollAnchor(.bottom)
+        .scrollDismissesKeyboard(.interactively)
+        .scrollBounceBehavior(.basedOnSize)
+        // The room between the navigation bar and Continue, taken only with
+        // the keyboard down (it shrinks the scroll view while up).
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            guard !captionFocused, !keyboardIsUp else { return }
+            room = height - Self.columnTop - Self.columnBottom
         }
         .task {
             for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardWillShowNotification) {
