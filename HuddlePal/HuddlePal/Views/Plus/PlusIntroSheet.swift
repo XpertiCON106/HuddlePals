@@ -47,6 +47,9 @@ struct PlusIntroSheet: View {
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .disabled(isAsking)
+                        // Clear of the shadow under See HuddlePals+ (it fades
+                        // out about 29 pt down): text over it fails contrast.
+                        .padding(.top, 18)
                         Button {
                             dismiss()
                         } label: {

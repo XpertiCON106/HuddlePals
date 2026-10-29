@@ -77,6 +77,8 @@ private struct DeleteAccountContent: View {
                         + Text(" to confirm"))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
+                        // The field below says the same to VoiceOver.
+                        .accessibilityHidden(true)
                     TextField(DeleteAccountViewModel.confirmationWord, text: $viewModel.confirmation)
                         .font(.system(size: 18, weight: .semibold, design: .monospaced))
                         .textInputAutocapitalization(.characters)
