@@ -506,6 +506,65 @@ lowercase, and both functions clear both.
    Storage → `deposits` has no folder named after the huddle's id, in
    either case.
 
+## Phase 12 — Website analytics
+
+Migration 020 adds tables and functions for basic website analytics (page
+visits, sessions, events) used by the huddlepals.com dashboard at
+`https://huddlepals.com/admin`, with automatic cleanup of old data. The
+website code is in the HuddlePals.com repository; the app is untouched. Do the steps in this order: a push to the website's
+`main` deploys it straight away (Cloudflare Workers Builds).
+
+1. **Migration 020.** SQL Editor → paste
+   [`supabase/migrations/020_website_analytics.sql`](supabase/migrations/020_website_analytics.sql)
+   → Run (safe to re-run). It only adds the five `analytics_` tables and
+   their functions. Check: Table Editor lists them, each with RLS on and
+   no policies.
+2. **The admin account.** Authentication → Users → Add user → Create new
+   user: email `<admin-email>`, a long password from a password manager,
+   **Auto Confirm User** on. Copy the new user's id (`<admin-user-id>`).
+   Nothing about the admin goes in SQL or in the code; the Worker checks
+   both values from its secrets.
+   - Email sign-in has to be enabled (Authentication → Sign In / Providers
+     → Email) for the password to work. Leave "Allow new users to sign up"
+     on: Sign in with Apple needs it. Other email accounts may then exist,
+     but the dashboard and every `/api/admin/*` call refuse anyone who isn't
+     the admin.
+3. **Redirect URL** for "Forgot password": Authentication → URL
+   Configuration → Redirect URLs → add `https://huddlepals.com/admin`. The
+   recovery link opens the dashboard's set-password screen.
+4. **Worker secrets** (Cloudflare → Workers & Pages → `huddlepals` →
+   Settings → Variables and Secrets, type *Secret*; or
+   `npx wrangler secret put <NAME>` in the website repo):
+   - `SUPABASE_SERVICE_ROLE_KEY` — Supabase → Project Settings → API keys →
+     service role. It lives only here; the browser only ever gets the anon
+     key.
+   - `ADMIN_EMAIL` — `<admin-email>`
+   - `ADMIN_USER_ID` — `<admin-user-id>`
+
+   Set them before pushing: visit recording and the dashboard need them
+   from the first request (`wrangler.jsonc` lists them as required).
+5. **Push the website's `main`.** Workers Builds runs `npm run build` and
+   `npx wrangler deploy`. That deploy also applies `workers_dev: false` and
+   `preview_urls: false` (the site is served only on huddlepals.com) and
+   adds the daily cron (`17 4 * * *`) that cleans up old analytics data.
+6. **Check it live**:
+   - `https://huddlepals.com/api/health` answers `{"ok":true}`.
+   - `/`, `/privacy`, `/terms`, `/support`, `/join` and
+     `/.well-known/apple-app-site-association` look and answer as before
+     (the association file still as `application/json`).
+   - Open a public page in a private window, then
+     `select path, visited_at from analytics_visits order by visited_at desc limit 5;`
+     shows it.
+   - `https://huddlepals.com/admin` answers with `X-Robots-Tag: noindex, nofollow`;
+     sign in as the admin and the dashboard shows that visit. Signing in
+     with any other account shows "Not the admin account".
+   - "Forgot password?" on the sign-in page sends a link that opens "Set a
+     new password".
+
+Undoing it: revert the website commit and push (the site goes back to
+static assets only), then `drop table` the five `analytics_` tables and
+`drop function` the `analytics_` functions if you want the data gone.
+
 ---
 
 > Already ran an earlier `schema.sql`? There are no upgrade migrations —

@@ -26,6 +26,7 @@ that both end up identical (`npm test`).
 | `016_birthdays.sql` | Birthdays (`profile_birthdates`): one per account, readable and writable only by its owner, refused under 13, gone with the profile |
 | `017_live_updates.sql` | Live updates: deposits, comments and reactions join the `supabase_realtime` publication, so an open huddle updates as members post, comment and react |
 | `018_delete_sole_huddles.sql` | Account deletion removes a huddle the user was the only member of: `delete_sole_huddles(user)` (service role only, for the `delete-account` function) keeps any reported deposit in `preserved_photos` and deletes the huddle with everything in it. Huddles that still have other members stay |
+| `020_website_analytics.sql` | Tables and functions for basic website analytics (page visits, sessions, events) used by the huddlepals.com dashboard, with automatic cleanup of old data. RLS on with no policies; service role only. No existing table changes and the app never touches it |
 
 Ship the app build with 008 and 009: run them first, and older builds keep
 working (they keep joining with old codes until someone on the new build
@@ -61,3 +62,10 @@ every half minute, so it can go before or after the build ships.
 Run 018 before deploying the `delete-account` function that calls it.
 Until then, deleting an account leaves a huddle behind when that person
 was its only member, along with that huddle's files in Storage.
+
+019 is taken by `019_age_eligibility.sql` on the `legal-fixes` branch; 020
+doesn't depend on it, so they can run in either order.
+
+Run 020 before deploying the website build with analytics. Until it runs,
+that build's visit recording fails quietly (the site itself is unaffected)
+and the dashboard at `/admin` shows an error.

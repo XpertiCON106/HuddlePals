@@ -426,6 +426,7 @@ Run everything with ⌘U (or `xcodebuild test`, see DEVELOPMENT.md):
 - HuddlePals+ and the free plan: [`PlanRulesTests`](HuddlePalTests/PlanRulesTests.swift) (the archive window's edges and the clock set back, the join and create rule tables, error codes and what builds from before Plus show), [`PlanLimitTests`](HuddlePalTests/PlanLimitTests.swift) (the mock server's caps, keeper succession, the 25-huddle limit), [`PlusServiceTests`](HuddlePalTests/PlusServiceTests.swift) (StoreKit 2 through `SKTestSession` against a stubbed server: products, purchase naming the account, a purchase the server didn't confirm, Ask to Buy, restore, a renewal or refund while the app runs, a failed purchase, the server's clock and the offline cache), and [`PlusGateTests`](HuddlePalTests/PlusGateTests.swift) (the paywall's wording, each gate's view model, the deletion warning).
 - Video drops: [`VideoDropTests`](HuddlePalTests/VideoDropTests.swift) (one key for poster and clip, the recording's short life on disk, the writer's settings and 6-second cut, playback from memory and the loader's byte ranges, Compose with and without Plus), the live upload and a video report in [`InviteKeyTests`](HuddlePalTests/InviteKeyTests.swift), and [`StoreMigrationTests`](HuddlePalTests/StoreMigrationTests.swift) (a store from before videos opens with every row as a photo).
 - UI tests (`HuddlePalUITests`), on the mock world: the journeys, unhappy paths and accessibility audits, and for Plus [`PlusJourneyTests`](HuddlePalUITests/PlusJourneyTests.swift) (the paywall's contents and buying, a locked day that buying opens, Video · Plus, the 4th huddle, a full and a paused invite, the deletion warning) and [`VideoJourneyTests`](HuddlePalUITests/VideoJourneyTests.swift) (recording, posting and the looping feed).
+- Website analytics (migration 020): [`analytics.test.mjs`](supabase/tests/analytics.test.mjs) in `supabase/tests` — only the service role reaches the tables and functions, the summary leaves the admin out and honours the range (hourly for 24 hours) and time zone, deleting visits takes their events and anything left unused, clear all empties exactly the five `analytics_` tables, and pruning keeps recent rows.
 - What tests can't cover: the live wire formats against the real Supabase project — exercise those by hand (DEPLOYMENT.md lists the spots).
 
 ## 14. File map
@@ -440,7 +441,7 @@ HuddlePal/
 ├── Config/Info.plist          Partial Info.plist: camera usage string + huddlepal:// scheme (old invite links)
 ├── supabase/
 │   ├── schema.sql             Tables + RLS + storage policies + RPCs (run once)
-│   ├── migrations/            001–018: upgrade a deployed database, in order
+│   ├── migrations/            001–018, 020: upgrade a deployed database, in order
 │   ├── scripts/reset_database.sql  Destructive: wipes an older DB so schema.sql can run fresh
 │   ├── functions/delete-account/  Edge function behind "Delete account"
 │   ├── functions/delete-huddle/   Edge function behind "Delete huddle"
