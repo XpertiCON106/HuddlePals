@@ -441,7 +441,7 @@ HuddlePal/
 ├── Config/Info.plist          Partial Info.plist: camera usage string + huddlepal:// scheme (old invite links)
 ├── supabase/
 │   ├── schema.sql             Tables + RLS + storage policies + RPCs (run once)
-│   ├── migrations/            001–018, 020: upgrade a deployed database, in order
+│   ├── migrations/            001–018, 020–021: upgrade a deployed database, in order
 │   ├── scripts/reset_database.sql  Destructive: wipes an older DB so schema.sql can run fresh
 │   ├── functions/delete-account/  Edge function behind "Delete account"
 │   ├── functions/delete-huddle/   Edge function behind "Delete huddle"

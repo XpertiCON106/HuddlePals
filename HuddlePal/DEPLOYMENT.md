@@ -565,6 +565,29 @@ Undoing it: revert the website commit and push (the site goes back to
 static assets only), then `drop table` the five `analytics_` tables and
 `drop function` the `analytics_` functions if you want the data gone.
 
+### Storage & usage page
+
+Migration 021 adds `admin_storage_usage()`, which the dashboard's
+`/admin/storage` page reads (through `GET /api/admin/storage`, admin only)
+for file storage, file counts by folder and the database size, shown
+against the Free plan limits (1 GB files, 500 MB database).
+
+1. **Migration 021.** SQL Editor → paste
+   [`supabase/migrations/021_admin_storage_usage.sql`](supabase/migrations/021_admin_storage_usage.sql)
+   → Run (safe to re-run). One read-only function, service role only.
+2. **Optional, Worker requests** (today and the last 30 days, against the
+   Workers Free limit of 100,000 a day): create a Cloudflare API token with
+   only **Account → Account Analytics → Read**, then set Worker secrets
+   `CF_ANALYTICS_TOKEN` (that token) and `CF_ACCOUNT_ID` (the account id).
+   Never use a token that can deploy. Without them the page says the
+   Cloudflare section isn't connected.
+3. **Push the website's `main`**, then check that `/api/admin/storage`
+   answers 401 without a session and `/admin/storage` carries
+   `X-Robots-Tag: noindex, nofollow`.
+
+Undoing it: revert the website commit, then
+`drop function public.admin_storage_usage();`.
+
 ---
 
 > Already ran an earlier `schema.sql`? There are no upgrade migrations —

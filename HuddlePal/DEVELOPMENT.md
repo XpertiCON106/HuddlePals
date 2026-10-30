@@ -363,7 +363,7 @@ codes, tokens and keys are never logged.
   functions that delete a huddle's files list both spellings
   (`_shared/huddle-storage.ts`).
 - **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
-  (001–018 and 020, idempotent, run in order; 019 is on `legal-fixes`) upgrades the deployed one;
+  (001–018, 020 and 021, idempotent, run in order; 019 is on `legal-fixes`) upgrades the deployed one;
   `supabase/scripts/reset_database.sql` wipes an old database for a fresh
   start. Writes that need rules RLS can't express go through SECURITY
   DEFINER functions (key sharing, invites, joins, skips, streaks).
@@ -378,6 +378,12 @@ codes, tokens and keys are never logged.
   granted to the service role only, so only the Worker reaches any of it.
   The app never does. The admin is checked in the Worker (Supabase JWT plus
   the `ADMIN_USER_ID`/`ADMIN_EMAIL` secrets), not in SQL.
+- **Admin storage usage** (migration 021): `admin_storage_usage()` returns
+  the `deposits` bucket's size and file count, its size by top-level folder
+  (huddle folders counted together as `huddles`), all buckets' total and
+  `pg_database_size`, for the huddlepals.com dashboard's Storage & usage
+  page. Read-only, SECURITY DEFINER with an empty `search_path`, service
+  role only.
 - **Live updates** (`Services/Live/LiveRealtime.swift`): Supabase Realtime
   over a WebSocket, no SDK. One channel for Postgres changes to deposits,
   comments and reactions (migration 017 puts them in the
