@@ -597,7 +597,8 @@ and website branches must be reviewed and merged manually. Apply migration
 019 before releasing the matching app; do not run the fresh schema or reset
 script against an existing production database.
 
-1. **Migration 019.** After migrations 001–018 (020 and 021 can come before or after it), apply
+1. **Migration 019.** After migrations 001–018 (020 and 021 can run before
+   or after it), apply
    [`supabase/migrations/019_age_eligibility.sql`](supabase/migrations/019_age_eligibility.sql)
    in the SQL Editor. It adds atomic `complete_profile(name, colour,
    birthday)` and idempotent `save_birthday(birthday)`, makes birthdays
@@ -611,7 +612,9 @@ script against an existing production database.
    unknown. A rejected answer stores only the next eligible UTC date
    locally, across sign-out and relaunch. Eligible birthdays are held
    locally until recorded eligibility is confirmed. The backend does not receive a
-   rejected birthday or refusal.
+   rejected birthday or refusal. In App Store Connect → App Privacy, declare
+   Other Data (the birthday) and no Phone Number, matching
+   `PrivacyInfo.xcprivacy`.
 3. **Website and legal text.** Publish the matching Terms (§2.1, version
    2026-10-31), Privacy Policy, and Support birthday answer. Keep the app's
    bundled Terms word-for-word identical to the rendered website Terms.

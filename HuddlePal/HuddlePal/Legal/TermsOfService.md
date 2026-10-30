@@ -1,6 +1,6 @@
 # HuddlePals Terms of Service
 
-Last updated: October 29, 2026
+Last updated: October 31, 2026
 
 ## 1. Agreement to These Terms
 
