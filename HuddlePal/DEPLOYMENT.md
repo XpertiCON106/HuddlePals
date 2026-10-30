@@ -116,7 +116,7 @@ seeded **mock** world. No code changes to switch.
    invite code. Sign out from Profile and sign back in with the same Apple
    identity: the recorded birthday and profile need not be entered again
    after the sign-in age screen. Migration 019 is required for this flow
-   (Phase 12); test builds must exclude production `Supabase.plist`.
+   (Phase 13); test builds must exclude production `Supabase.plist`.
 
 ## Phase 3 — Apple Developer + TestFlight (~1–2 hours + review wait)
 
@@ -440,7 +440,7 @@ all-caps Section 13 notice at the top (Section 13 itself is unchanged).
 
 ## Phase 9 — Birthdays
 
-This phase introduced the private birthday table. Phase 12 supersedes the
+This phase introduced the private birthday table. Phase 13 supersedes the
 original profile-step screen with screening before sign-in and server
 eligibility enforcement.
 
@@ -453,7 +453,7 @@ eligibility enforcement.
 3. **App Store Connect → App Privacy**: add the birthday as collected data
    (Other Data, linked to the user, for App Functionality, not used for
    tracking).
-4. **Check on a phone** using the current flow and checks in Phase 12.
+4. **Check on a phone** using the current flow and checks in Phase 13.
 
 ## Phase 10 — Live updates
 
@@ -508,14 +508,96 @@ lowercase, and both functions clear both.
    Storage → `deposits` has no folder named after the huddle's id, in
    either case.
 
-## Phase 12 — Age screening before sign-in and account activation
+## Phase 12 — Website analytics
+
+Migration 020 adds tables and functions for basic website analytics (page
+visits, sessions, events) used by the huddlepals.com dashboard at
+`https://huddlepals.com/admin`, with automatic cleanup of old data. The
+website code is in the HuddlePals.com repository; the app is untouched. Do the steps in this order: a push to the website's
+`main` deploys it straight away (Cloudflare Workers Builds).
+
+1. **Migration 020.** SQL Editor → paste
+   [`supabase/migrations/020_website_analytics.sql`](supabase/migrations/020_website_analytics.sql)
+   → Run (safe to re-run). It only adds the five `analytics_` tables and
+   their functions. Check: Table Editor lists them, each with RLS on and
+   no policies.
+2. **The admin account.** Authentication → Users → Add user → Create new
+   user: email `<admin-email>`, a long password from a password manager,
+   **Auto Confirm User** on. Copy the new user's id (`<admin-user-id>`).
+   Nothing about the admin goes in SQL or in the code; the Worker checks
+   both values from its secrets.
+   - Email sign-in has to be enabled (Authentication → Sign In / Providers
+     → Email) for the password to work. Leave "Allow new users to sign up"
+     on: Sign in with Apple needs it. Other email accounts may then exist,
+     but the dashboard and every `/api/admin/*` call refuse anyone who isn't
+     the admin.
+3. **Redirect URL** for "Forgot password": Authentication → URL
+   Configuration → Redirect URLs → add `https://huddlepals.com/admin`. The
+   recovery link opens the dashboard's set-password screen.
+4. **Worker secrets** (Cloudflare → Workers & Pages → `huddlepals` →
+   Settings → Variables and Secrets, type *Secret*; or
+   `npx wrangler secret put <NAME>` in the website repo):
+   - `SUPABASE_SERVICE_ROLE_KEY` — Supabase → Project Settings → API keys →
+     service role. It lives only here; the browser only ever gets the anon
+     key.
+   - `ADMIN_EMAIL` — `<admin-email>`
+   - `ADMIN_USER_ID` — `<admin-user-id>`
+
+   Set them before pushing: visit recording and the dashboard need them
+   from the first request (`wrangler.jsonc` lists them as required).
+5. **Push the website's `main`.** Workers Builds runs `npm run build` and
+   `npx wrangler deploy`. That deploy also applies `workers_dev: false` and
+   `preview_urls: false` (the site is served only on huddlepals.com) and
+   adds the daily cron (`17 4 * * *`) that cleans up old analytics data.
+6. **Check it live**:
+   - `https://huddlepals.com/api/health` answers `{"ok":true}`.
+   - `/`, `/privacy`, `/terms`, `/support`, `/join` and
+     `/.well-known/apple-app-site-association` look and answer as before
+     (the association file still as `application/json`).
+   - Open a public page in a private window, then
+     `select path, visited_at from analytics_visits order by visited_at desc limit 5;`
+     shows it.
+   - `https://huddlepals.com/admin` answers with `X-Robots-Tag: noindex, nofollow`;
+     sign in as the admin and the dashboard shows that visit. Signing in
+     with any other account shows "Not the admin account".
+   - "Forgot password?" on the sign-in page sends a link that opens "Set a
+     new password".
+
+Undoing it: revert the website commit and push (the site goes back to
+static assets only), then `drop table` the five `analytics_` tables and
+`drop function` the `analytics_` functions if you want the data gone.
+
+### Storage & usage page
+
+Migration 021 adds `admin_storage_usage()`, which the dashboard's
+`/admin/storage` page reads (through `GET /api/admin/storage`, admin only)
+for file storage, file counts by folder and the database size, shown
+against the Free plan limits (1 GB files, 500 MB database).
+
+1. **Migration 021.** SQL Editor → paste
+   [`supabase/migrations/021_admin_storage_usage.sql`](supabase/migrations/021_admin_storage_usage.sql)
+   → Run (safe to re-run). One read-only function, service role only.
+2. **Optional, Worker requests** (today and the last 30 days, against the
+   Workers Free limit of 100,000 a day): create a Cloudflare API token with
+   only **Account → Account Analytics → Read**, then set Worker secrets
+   `CF_ANALYTICS_TOKEN` (that token) and `CF_ACCOUNT_ID` (the account id).
+   Never use a token that can deploy. Without them the page says the
+   Cloudflare section isn't connected.
+3. **Push the website's `main`**, then check that `/api/admin/storage`
+   answers 401 without a session and `/admin/storage` carries
+   `X-Robots-Tag: noindex, nofollow`.
+
+Undoing it: revert the website commit, then
+`drop function public.admin_storage_usage();`.
+
+## Phase 13 — Age screening before sign-in and account activation
 
 **Prepared for review, not applied to production by this change.** The app
 and website branches must be reviewed and merged manually. Apply migration
 019 before releasing the matching app; do not run the fresh schema or reset
 script against an existing production database.
 
-1. **Migration 019.** After migrations 001–018, apply
+1. **Migration 019.** After migrations 001–018 (020 and 021 can come before or after it), apply
    [`supabase/migrations/019_age_eligibility.sql`](supabase/migrations/019_age_eligibility.sql)
    in the SQL Editor. It adds atomic `complete_profile(name, colour,
    birthday)` and idempotent `save_birthday(birthday)`, makes birthdays
@@ -531,7 +613,7 @@ script against an existing production database.
    locally until recorded eligibility is confirmed. The backend does not receive a
    rejected birthday or refusal.
 3. **Website and legal text.** Publish the matching Terms (§2.1, version
-   2026-10-29), Privacy Policy, and Support birthday answer. Keep the app's
+   2026-10-31), Privacy Policy, and Support birthday answer. Keep the app's
    bundled Terms word-for-word identical to the rendered website Terms.
 4. **Verify locally first.** Run the database suite in fresh and migrated
    modes, then the full Xcode unit and UI suites with production

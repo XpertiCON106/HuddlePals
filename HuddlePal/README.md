@@ -129,7 +129,7 @@ HuddlePal/
     └── VideoDropTests.swift            Video seal, recording, playback from memory, Compose
 ```
 
-Next to the app: `supabase/` (schema.sql, migrations 001–019, `scripts/reset_database.sql`, the
+Next to the app: `supabase/` (schema.sql, migrations 001–021, `scripts/reset_database.sql`, the
 edge functions `delete-account`, `delete-huddle`, `send-push`, `verify-subscription` and `app-store-notifications`,
 and their Node tests) and `tools/` (app icon generator, `decrypt_reported_photo` for
 moderation).

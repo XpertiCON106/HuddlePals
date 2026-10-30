@@ -383,7 +383,7 @@ codes, tokens and keys are never logged.
   functions that delete a huddle's files list both spellings
   (`_shared/huddle-storage.ts`).
 - **Schema**: `schema.sql` builds a fresh database; `supabase/migrations/`
-  (001–019, idempotent, run in order) upgrades the deployed one;
+  (001–021, idempotent, run in order) upgrades the deployed one;
   `supabase/scripts/reset_database.sql` wipes an old database for a fresh
   start. Writes that need rules RLS can't express go through SECURITY
   DEFINER functions (key sharing, invites, joins, skips, streaks).
@@ -392,7 +392,22 @@ codes, tokens and keys are never logged.
   Migration 019 is prepared with the age-screening release and is not
   applied to production by a code change. Deploy it before the matching
   app; old builds cannot complete new or missing-birthday accounts under
-  its restrictions (DEPLOYMENT.md, Phase 12).
+  its restrictions (DEPLOYMENT.md, Phase 13).
+- **Website analytics** (migration 020): tables and functions for basic
+  website analytics (page visits, sessions, events) used by the
+  huddlepals.com dashboard, with automatic cleanup of old data. RLS is on
+  with no policies, and the functions (`analytics_summary`,
+  `analytics_experience`, `analytics_delete_visits`, `analytics_clear_all`,
+  `analytics_prune`) are SECURITY DEFINER with an empty `search_path`,
+  granted to the service role only, so only the Worker reaches any of it.
+  The app never does. The admin is checked in the Worker (Supabase JWT plus
+  the `ADMIN_USER_ID`/`ADMIN_EMAIL` secrets), not in SQL.
+- **Admin storage usage** (migration 021): `admin_storage_usage()` returns
+  the `deposits` bucket's size and file count, its size by top-level folder
+  (huddle folders counted together as `huddles`), all buckets' total and
+  `pg_database_size`, for the huddlepals.com dashboard's Storage & usage
+  page. Read-only, SECURITY DEFINER with an empty `search_path`, service
+  role only.
 - **Live updates** (`Services/Live/LiveRealtime.swift`): Supabase Realtime
   over a WebSocket, no SDK. One channel for Postgres changes to deposits,
   comments and reactions (migration 017 puts them in the

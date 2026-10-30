@@ -27,6 +27,8 @@ that both end up identical (`npm test`).
 | `017_live_updates.sql` | Live updates: deposits, comments and reactions join the `supabase_realtime` publication, so an open huddle updates as members post, comment and react |
 | `018_delete_sole_huddles.sql` | Account deletion removes a huddle the user was the only member of: `delete_sole_huddles(user)` (service role only, for the `delete-account` function) keeps any reported deposit in `preserved_photos` and deletes the huddle with everything in it. Huddles that still have other members stay |
 | `019_age_eligibility.sql` | Age approval before core app access: `complete_profile` saves the profile and birthday atomically, `save_birthday` activates legacy accounts, birthdays become immutable, and RLS plus RPC guards deny shared data, uploads and key operations without an eligible birthday |
+| `020_website_analytics.sql` | Tables and functions for basic website analytics (page visits, sessions, events) used by the huddlepals.com dashboard, with automatic cleanup of old data. RLS on with no policies; service role only. No existing table changes and the app never touches it |
+| `021_admin_storage_usage.sql` | `admin_storage_usage()`: the `deposits` bucket's size and file count, size by top-level folder, and the database size, for the huddlepals.com dashboard's Storage & usage page. Read-only; service role only. No table changes |
 
 Ship the app build with 008 and 009: run them first, and older builds keep
 working (they keep joining with old codes until someone on the new build
@@ -70,3 +72,13 @@ direct table insert. `save_birthday` accepts a first eligible birthday or an
 identical retry, and rejects changes. Both client and server calculate age
 with the Gregorian UTC date, with no one-day grace period. Older builds
 cannot finish a new signup once this migration is applied.
+
+020 and 021 don't depend on 019, so they can run before or after it.
+
+Run 020 before deploying the website build with analytics. Until it runs,
+that build's visit recording fails quietly (the site itself is unaffected)
+and the dashboard at `/admin` shows an error.
+
+Run 021 before deploying the website build with the Storage & usage page.
+Until it runs, that page shows an error; the rest of the dashboard is
+unaffected.
