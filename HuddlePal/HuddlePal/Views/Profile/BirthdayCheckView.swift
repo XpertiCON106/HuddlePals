@@ -1,27 +1,38 @@
 import SwiftUI
 
-/// Asked once of an account made before birthdays were (`needsBirthday`),
+/// Asked once of an account made before birthdays were collected,
 /// before anything else: the birthday, which only its owner can see. Under
 /// the minimum age, HuddlePals stops there and offers to sign out.
 struct BirthdayCheckView: View {
     @Environment(AppDependencies.self) private var deps
-    @State private var wheel = Birthday.wheelStart.date()
-    @State private var isSaving = false
-    @State private var isUnderage = false
-    @State private var errorMessage: String?
+    @State private var viewModel: BirthdayCheckViewModel?
+    @State private var showDeleteAccount = false
 
     var body: some View {
-        if isUnderage {
-            UnderageNotice {
-                Task { await deps.signOut() }
+        Group {
+            if let viewModel {
+                if viewModel.isUnderage {
+                    UnderageNotice(signOut: {
+                        Task { await viewModel.signOut() }
+                    }, deleteAccount: { showDeleteAccount = true })
+                } else {
+                    question(viewModel)
+                }
+            } else {
+                Color.clear
             }
-        } else {
-            question
+        }
+        .onAppear {
+            if viewModel == nil { viewModel = BirthdayCheckViewModel(deps: deps) }
+        }
+        .sheet(isPresented: $showDeleteAccount) {
+            NavigationStack { DeleteAccountView() }
         }
     }
 
-    private var question: some View {
-        ScrollView {
+    private func question(_ model: BirthdayCheckViewModel) -> some View {
+        @Bindable var model = model
+        return ScrollView {
             VStack(spacing: 22) {
                 Image(systemName: "gift.fill")
                     .font(.system(size: 40, weight: .medium))
@@ -40,23 +51,26 @@ struct BirthdayCheckView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                DatePicker("Birthday", selection: $wheel, in: ...Date.now, displayedComponents: .date)
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
+                BirthdayEntry(birthday: $model.birthday)
+                    .disabled(model.isSaving || model.hasSavedBirthday)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
                     .cardSurface()
 
-                if let errorMessage {
+                if let errorMessage = model.errorMessage {
                     Text(errorMessage)
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.destructive)
                         .multilineTextAlignment(.center)
                 }
 
-                PrimaryButton(title: "Continue", isLoading: isSaving) {
-                    Task { await save() }
+                PrimaryButton(title: "Continue", isLoading: model.isSaving, isEnabled: model.canContinue) {
+                    Task { await model.save() }
                 }
+                Button("Sign out") { Task { await model.signOut() } }
+                    .disabled(model.isSaving)
+                Button("Delete account") { showDeleteAccount = true }
+                    .disabled(model.isSaving)
             }
             .padding(.horizontal, Theme.screenPadding)
             .padding(.bottom, 36)
@@ -64,29 +78,14 @@ struct BirthdayCheckView: View {
         .background(Theme.background)
     }
 
-    private func save() async {
-        let birthday = Birthday(date: wheel)
-        guard birthday.isOldEnough(on: .now) else {
-            isUnderage = true
-            return
-        }
-        isSaving = true
-        defer { isSaving = false }
-        errorMessage = nil
-        do {
-            try await deps.auth.saveBirthday(birthday)
-            deps.session.needsBirthday = false
-            Haptics.success()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
 }
 
 /// Under the minimum age: only this, and a way out. Shown in place of the
 /// whole page, on the sign-up profile step and the one-time birthday question.
 struct UnderageNotice: View {
     let signOut: () -> Void
+    var deleteAccount: (() -> Void)? = nil
+    var exitTitle = "Sign out"
 
     var body: some View {
         VStack(spacing: 18) {
@@ -97,9 +96,13 @@ struct UnderageNotice: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Button(action: signOut) {
-                Text("Sign out")
+                Text(exitTitle)
             }
             .buttonStyle(ActionButtonStyle(role: .secondary))
+            if let deleteAccount {
+                Button("Delete account", action: deleteAccount)
+                    .foregroundStyle(Theme.destructive)
+            }
         }
         .padding(20)
         .cardSurface()

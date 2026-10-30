@@ -10,7 +10,7 @@ class HuddleUITestCase: XCTestCase {
     /// the Terms journey start already agreed, so they don't spend a minute
     /// scrolling the document; if the version moves on, the Terms show and
     /// `launchToShelf` agrees as a person would.
-    static let termsVersion = "2026-10-30"
+    static let termsVersion = "2026-10-31"
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -127,11 +127,25 @@ class HuddleUITestCase: XCTestCase {
         let row = app.buttons["Delete account"]
         scrollTo(row, maxSwipes: 25)
         row.tap()
+        enterDeletionConfirmation(file: file, line: line)
+    }
+
+    @discardableResult
+    func enterDeletionConfirmation(file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         let field = waitFor(app.textFields["deleteConfirmation"], file: file, line: line)
-        XCTAssertFalse(app.buttons["Delete my account"].isEnabled, "nothing to tap before DELETE is typed", file: file, line: line)
+        let footer = app.buttons["Delete my account"]
+        XCTAssertFalse(footer.isEnabled, "nothing to tap before DELETE is typed", file: file, line: line)
+        // The pinned footer can cover a field that XCTest still reports as
+        // hittable on a small screen. Expose the whole field before typing.
+        for _ in 0..<5 {
+            if field.frame.maxY < footer.frame.minY { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertLessThan(field.frame.maxY, footer.frame.minY, "confirmation above the footer", file: file, line: line)
         field.tap()
         field.typeText("DELETE")
-        waitUntilEnabled(app.buttons["Delete my account"], file: file, line: line)
+        waitUntilEnabled(footer, file: file, line: line)
+        return field
     }
 
     /// The top bar's Back.
@@ -207,29 +221,57 @@ class HuddleUITestCase: XCTestCase {
         if choice.waitForExistence(timeout: timeout) { choice.tap() }
     }
 
-    /// The onboarding profile step after a first sign-in: a name and the
-    /// birthday the wheel starts on (over 13).
+    /// The profile step follows age screening, sign-in and the Terms. Its
+    /// birthday is already recorded by the screening step.
     func completeProfile(name: String) {
         let field = waitFor(app.textFields["Your name"], timeout: 20, "the profile step")
         field.tap()
         field.typeText(name)
-        pickBirthday()
         let open = app.buttons["Open my huddle"]
         waitUntilEnabled(open)
         open.tap()
     }
 
-    /// Birthday → the wheel → Done; `year`, when given, set on the wheel first.
-    func pickBirthday(year: Int? = nil) {
-        waitFor(app.buttons["Birthday"]).tap()
-        let card = dialog("Your birthday")
-        if let year {
-            let wheels = card.pickerWheels
-            waitFor(wheels.element(boundBy: 2))
-            wheels.element(boundBy: 2).adjust(toPickerWheelValue: String(year))
+    /// A neutral birthday form starts with all three wheels unselected.
+    /// Explicitly select every component as a person would.
+    func enterBirthday(year: Int = 1990, month: Int = 1, day: Int = 1,
+                       file: StaticString = #filePath, line: UInt = #line) {
+        let wheels = app.pickerWheels
+        waitFor(wheels.element(boundBy: 2), file: file, line: line)
+        let components = [month, day, year].map(String.init)
+        let date = String(format: "%04d-%02d-%02d", year, month, day)
+        let summary = app.staticTexts["selectedBirthday"]
+        var settled = false
+        for _ in 0..<3 {
+            for (index, target) in components.enumerated() {
+                wheels.element(boundBy: index).adjust(toPickerWheelValue: target)
+            }
+            var matchingSince: Date?
+            let stable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                guard components.enumerated().allSatisfy({ wheels.element(boundBy: $0.offset).value as? String == $0.element }),
+                      summary.value as? String == date else {
+                    matchingSince = nil
+                    return false
+                }
+                if matchingSince == nil { matchingSince = .now }
+                return Date.now.timeIntervalSince(matchingSince!) >= 2
+            }, object: nil)
+            if XCTWaiter.wait(for: [stable], timeout: 8) == .completed {
+                settled = true
+                break
+            }
         }
-        card.buttons["Done"].tap()
-        waitUntilGone(card)
+        let values = (0..<3).map { String(describing: wheels.element(boundBy: $0).value) }
+        XCTAssertTrue(settled, "birthday \(date): wheels \(values), summary \(summary.label), value \(String(describing: summary.value))", file: file, line: line)
+        waitUntilEnabled(app.buttons["Continue"], file: file, line: line)
+    }
+
+    /// Walk the welcome cards up to the age screen, before authentication.
+    func openAgeScreen() {
+        waitFor(app.buttons["Continue"], timeout: 20).tap()
+        waitFor(app.buttons["Continue"]).tap()
+        waitFor(app.buttons["Get started"]).tap()
+        waitFor(app.staticTexts["When's your birthday?"])
     }
 
     /// The shelf's + menu.
@@ -241,10 +283,9 @@ class HuddleUITestCase: XCTestCase {
     /// Walks the welcome cards and signs in with the mock "Continue with
     /// Apple" (one fixed identity, distinct from the seeded "You").
     func signInWithMockApple() {
-        let start = waitFor(app.buttons["Continue"], timeout: 20)
-        start.tap()
-        waitFor(app.buttons["Continue"]).tap()
-        waitFor(app.buttons["Get started"]).tap()
+        openAgeScreen()
+        enterBirthday()
+        app.buttons["Continue"].tap()
         waitFor(app.buttons["Continue with Apple"]).tap()
         // The Terms come right after signing in, unless already agreed.
         if app.buttons["Agree"].waitForExistence(timeout: 3) { agreeToTerms() }
@@ -253,10 +294,17 @@ class HuddleUITestCase: XCTestCase {
     /// Swipes the screen until `element` exists and can be tapped (lists
     /// create rows lazily, so off-screen rows don't exist yet).
     func scrollTo(_ element: XCUIElement, maxSwipes: Int = 15) {
-        var swipes = 0
-        while !(element.exists && element.isHittable) && swipes < maxSwipes {
-            app.swipeUp()
-            swipes += 1
+        // Reopening a list can preserve its earlier scroll position, so a
+        // target above the viewport needs the reverse search as well.
+        for searchUp in [true, false] {
+            for _ in 0..<maxSwipes {
+                if element.exists && element.isHittable { return }
+                if searchUp {
+                    app.swipeUp()
+                } else {
+                    app.swipeDown()
+                }
+            }
         }
     }
 }

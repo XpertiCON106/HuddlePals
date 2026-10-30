@@ -79,6 +79,15 @@ describe('device tokens', () => {
 })
 
 describe('who gets notified', () => {
+  it('existing device tokens receive nothing until their account confirms an eligible birthday', async () => {
+    const { db, A, B, C, family, today } = await world()
+    await admin(db, 'delete from profile_birthdates where user_id = $1', [A])
+    const photo = await deposit(db, B, family.id, today)
+    assert.deepEqual(await recipients(db, 'deposit', photo.id), [C])
+    await q(db, A, "select save_birthday('1995-06-14')")
+    assert.deepEqual((await recipients(db, 'deposit', photo.id)).sort(), [A, C].sort())
+  })
+
   it('a new photo: every other member of that huddle, with what the notification says', async () => {
     const { db, A, B, C, family, today } = await world()
     const photo = await deposit(db, B, family.id, today, { caption: 'never sent' })

@@ -11,6 +11,7 @@ final class OnboardingViewModel {
     enum Step: Equatable {
         case terms
         case welcome
+        case age
         case method
         case code
         case profile
@@ -134,8 +135,16 @@ final class OnboardingViewModel {
 
     init(deps: AppDependencies) {
         self.deps = deps
+        birthday = deps.ageScreening.birthday
+        isUnderage = deps.ageScreening.isBlocked()
+        if isUnderage {
+            step = .age
+            return
+        }
         // Authenticated on a previous run but never finished the profile.
-        let start: Step = deps.session.needsProfileSetup ? .profile : .welcome
+        let start: Step = deps.session.needsProfileSetup
+            ? (deps.ageScreening.hasEligibleBirthday() ? .profile : .age)
+            : .welcome
         let signedIn = deps.session.currentUser != nil || deps.session.needsProfileSetup
         if signedIn, !deps.terms.hasAcceptedCurrentVersion {
             // Signed in, but not agreed to these Terms (new ones, or the
@@ -143,7 +152,7 @@ final class OnboardingViewModel {
             stepAfterTerms = start
             step = .terms
         } else {
-            step = start
+            step = isUnderage ? .age : start
         }
     }
 
@@ -153,7 +162,28 @@ final class OnboardingViewModel {
             pageIndex += 1
             return
         }
-        step = .method
+        step = .age
+    }
+
+    /// No authentication or profile collection starts until this date is
+    /// eligible. The server confirms it again when the profile activates.
+    func continueAfterAgeCheck(_ picked: Birthday) {
+        birthdayPicked(picked)
+        guard !isUnderage, deps.ageScreening.hasEligibleBirthday() else { return }
+        if deps.session.needsProfileSetup {
+            afterSignIn(go: .profile)
+        } else {
+            step = .method
+        }
+    }
+
+    private func canStartSignIn() -> Bool {
+        guard deps.ageScreening.hasEligibleBirthday() else {
+            isUnderage = deps.ageScreening.isBlocked()
+            step = .age
+            return false
+        }
+        return true
     }
 
     // MARK: - Terms of Service
@@ -198,6 +228,7 @@ final class OnboardingViewModel {
     // MARK: - Email / phone code flow
 
     func sendCode() async {
+        guard canStartSignIn() else { return }
         errorMessage = nil
         let target: OTPDestination
         switch channel {
@@ -279,6 +310,7 @@ final class OnboardingViewModel {
     // MARK: - Sign in with Apple
 
     func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        guard canStartSignIn() else { return }
         let nonce = AppleSignInNonce.random()
         currentNonce = nonce
         request.requestedScopes = [.fullName]
@@ -286,6 +318,7 @@ final class OnboardingViewModel {
     }
 
     func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) async {
+        guard canStartSignIn() else { return }
         switch result {
         case .failure(let error):
             if let authError = error as? ASAuthorizationError, authError.code == .canceled {
@@ -322,6 +355,7 @@ final class OnboardingViewModel {
 
     /// Mock-mode stand-in for the real Apple sheet.
     func mockAppleSignIn() async {
+        guard canStartSignIn() else { return }
         errorMessage = nil
         isWorking = true
         defer { isWorking = false }
@@ -338,9 +372,12 @@ final class OnboardingViewModel {
     // MARK: - Profile step
 
     func birthdayPicked(_ picked: Birthday) {
-        guard !isUnderage else { return }
+        let calendar = Birthday.eligibilityCalendar
+        guard !isUnderage, picked.isValid,
+              picked.date(in: calendar) <= calendar.startOfDay(for: .now) else { return }
         birthday = picked
-        isUnderage = !picked.isOldEnough(on: .now)
+        _ = deps.ageScreening.submit(picked)
+        isUnderage = deps.ageScreening.isBlocked()
         if isUnderage { Haptics.light() }
     }
 
@@ -388,10 +425,11 @@ final class OnboardingViewModel {
             if let createdUser {
                 user = createdUser
             } else {
-                user = try await deps.auth.completeProfile(displayName: displayName, avatarColorHex: selectedColorHex)
+                user = try await deps.auth.completeProfile(
+                    displayName: displayName, avatarColorHex: selectedColorHex, birthday: birthday
+                )
                 createdUser = user
             }
-            try await deps.auth.saveBirthday(birthday)
             let trimmedBio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
             if isRetry || !photos.isEmpty || !trimmedBio.isEmpty {
                 for data in photos.dropFirst(uploadedPhotoPaths.count) {
@@ -409,8 +447,14 @@ final class OnboardingViewModel {
                     photoPaths: uploadedPhotoPaths
                 )
             }
-            deps.session.needsProfileSetup = false
-            await finishSignIn(user)
+            // Activation has recorded the birthday atomically. Re-read auth
+            // state so a retry cannot expose an unconfirmed account.
+            if case .signedIn(let confirmed) = try await deps.auth.currentState() {
+                deps.session.needsProfileSetup = false
+                await finishSignIn(confirmed)
+            } else {
+                throw AuthError.notAuthenticated
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -432,6 +476,7 @@ final class OnboardingViewModel {
         case .signedOut:
             break
         case .needsProfile(let suggestedName):
+            deps.session.needsProfileSetup = true
             if let suggestedName, displayName.isEmpty {
                 displayName = suggestedName
             }
@@ -440,6 +485,14 @@ final class OnboardingViewModel {
             if deps.terms.claimedBy != nil { deps.terms.withdraw() }
             afterSignIn(go: .profile)
             Haptics.light()
+        case .needsBirthday(let user):
+            deps.session.pendingBirthdayUser = user
+            deps.session.hasIneligibleBirthday = false
+            deps.session.currentUser = nil
+        case .ageRestricted(let user):
+            deps.session.pendingBirthdayUser = user
+            deps.session.hasIneligibleBirthday = true
+            deps.session.currentUser = nil
         case .signedIn(let user):
             if let claimant = deps.terms.claimedBy, claimant != user.id { deps.terms.withdraw() }
             // Not agreed yet: the Terms show (RootView keeps onboarding up
@@ -464,6 +517,9 @@ final class OnboardingViewModel {
     /// currentUser is set; the huddle list loads itself on appear.
     private func finishSignIn(_ user: User) async {
         Haptics.success()
+        deps.ageScreening.clearPendingBirthday()
+        deps.session.pendingBirthdayUser = nil
+        deps.session.hasIneligibleBirthday = false
         deps.session.currentUser = user
         deps.session.blockedUserIDs = (try? await deps.moderationService.blockedUserIDs()) ?? []
     }

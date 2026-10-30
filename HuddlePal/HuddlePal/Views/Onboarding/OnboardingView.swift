@@ -34,6 +34,7 @@ private struct OnboardingContent: View {
             switch viewModel.step {
             case .terms: TermsStep(viewModel: viewModel)
             case .welcome: WelcomeStep(viewModel: viewModel)
+            case .age: AgeStep(viewModel: viewModel)
             case .method: MethodStep(viewModel: viewModel)
             case .code:
                 // Only email/phone sign-in reaches this step; with it off,
@@ -48,6 +49,49 @@ private struct OnboardingContent: View {
         }
         .background(Theme.background)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewModel.step)
+    }
+}
+
+/// Asked before any sign-in request or profile information is collected.
+private struct AgeStep: View {
+    let viewModel: OnboardingViewModel
+    @State private var birthday: Birthday?
+    @State private var showDeleteAccount = false
+
+    var body: some View {
+        Group {
+            if viewModel.isUnderage {
+                UnderageNotice(signOut: {
+                    Task { await viewModel.signOut() }
+                }, deleteAccount: viewModel.isSignedIn ? { showDeleteAccount = true } : nil,
+                exitTitle: viewModel.isSignedIn ? "Sign out" : "Back to welcome")
+            } else {
+                ScrollView {
+                    VStack(spacing: 22) {
+                        Text("When's your birthday?")
+                            .font(Theme.displayFont(28))
+                            .accessibilityAddTraits(.isHeader)
+                        Text("We ask before sign-in. Your birthday is private.")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Theme.textSecondary)
+                            .multilineTextAlignment(.center)
+                        BirthdayEntry(birthday: $birthday)
+                            .cardSurface()
+                        PrimaryButton(title: "Continue", isEnabled: birthday?.isValid == true) {
+                            if let birthday { viewModel.continueAfterAgeCheck(birthday) }
+                        }
+                    }
+                    .padding(Theme.screenPadding)
+                    .padding(.top, 40)
+                }
+            }
+        }
+        .sheet(isPresented: $showDeleteAccount) {
+            NavigationStack { DeleteAccountView() }
+        }
+        .onChange(of: viewModel.isSignedIn) { _, signedIn in
+            if !signedIn { showDeleteAccount = false }
+        }
     }
 }
 
@@ -464,9 +508,9 @@ private struct ProfileStep: View {
     var body: some View {
         if viewModel.isUnderage {
             // Under 13: nothing of the profile page, just this and a way out.
-            UnderageNotice {
+            UnderageNotice(signOut: {
                 Task { await viewModel.signOutUnderage() }
-            }
+            })
         } else {
             form
         }
@@ -509,10 +553,9 @@ private struct ProfileStep: View {
                         .modifier(FormField())
 
                     VStack(alignment: .leading, spacing: 6) {
-                        BirthdayRow(birthday: viewModel.birthday) { viewModel.birthdayPicked($0) }
+                        BirthdayRow(birthday: viewModel.birthday)
                             .font(.system(size: 17))
                             .modifier(FormField(asksToBeFilled: viewModel.birthday == nil))
-                            .disabled(viewModel.isWorking)
                         Text(viewModel.birthday == nil
                              ? "Needed to open your huddle. Only you can see it."
                              : "Only you can see your birthday.")

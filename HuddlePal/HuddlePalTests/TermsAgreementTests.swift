@@ -47,11 +47,14 @@ final class TermsAgreementTests: XCTestCase {
         return (deps, OnboardingViewModel(deps: deps))
     }
 
-    func testSignedOutTheWelcomeCardsLeadStraightToSignIn() {
+    func testSignedOutTheWelcomeCardsLeadToAgeScreeningBeforeSignIn() {
         let onboarding = OnboardingViewModel(deps: makeDeps())
         XCTAssertEqual(onboarding.step, .welcome, "no Terms before signing in")
         onboarding.pageIndex = OnboardingViewModel.cards.count - 1
         onboarding.advanceWelcome()
+        XCTAssertEqual(onboarding.step, .age)
+        XCTAssertNil(onboarding.birthday, "no birthday is preselected")
+        onboarding.continueAfterAgeCheck(Birthday(year: 1990, month: 1, day: 1))
         XCTAssertEqual(onboarding.step, .method)
     }
 
@@ -60,6 +63,7 @@ final class TermsAgreementTests: XCTestCase {
         let onboarding = OnboardingViewModel(deps: deps)
         onboarding.pageIndex = OnboardingViewModel.cards.count - 1
         onboarding.advanceWelcome()
+        onboarding.continueAfterAgeCheck(Birthday(year: 1990, month: 1, day: 1))
         await onboarding.mockAppleSignIn()
         XCTAssertEqual(onboarding.step, .terms, "the Terms before the profile")
         XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
@@ -73,6 +77,7 @@ final class TermsAgreementTests: XCTestCase {
         deps.terms.accept(at: .now)
         deps.terms.claim(for: UUID()) // someone else's agreement
         let onboarding = OnboardingViewModel(deps: deps)
+        onboarding.continueAfterAgeCheck(Birthday(year: 1990, month: 1, day: 1))
         await onboarding.mockAppleSignIn()
         XCTAssertEqual(onboarding.step, .terms)
         XCTAssertFalse(deps.terms.hasAcceptedCurrentVersion)
@@ -110,6 +115,7 @@ final class TermsAgreementTests: XCTestCase {
         await onboarding.declineTerms()
         onboarding.pageIndex = OnboardingViewModel.cards.count - 1
         onboarding.advanceWelcome()
+        onboarding.continueAfterAgeCheck(Birthday(year: 1990, month: 1, day: 1))
         await onboarding.mockAppleSignIn()
         XCTAssertEqual(onboarding.step, .terms)
         XCTAssertFalse(onboarding.hasReachedEndOfTerms)
@@ -132,6 +138,7 @@ final class TermsAgreementTests: XCTestCase {
 
     func testAnInterruptedSignUpResumesAtTheProfileAfterAgreeing() {
         let deps = makeDeps()
+        deps.ageScreening.submit(Birthday(year: 1990, month: 1, day: 1))
         deps.session.needsProfileSetup = true
         let onboarding = OnboardingViewModel(deps: deps)
         XCTAssertEqual(onboarding.step, .terms)
@@ -151,6 +158,7 @@ final class TermsAgreementTests: XCTestCase {
         XCTAssertEqual(relaunched.acceptedVersion, TermsOfService.version)
         XCTAssertGreaterThanOrEqual(try XCTUnwrap(relaunched.acceptedAt), before.addingTimeInterval(-1))
         let returning = makeDeps()
+        returning.ageScreening.submit(Birthday(year: 1990, month: 1, day: 1))
         returning.session.needsProfileSetup = true
         XCTAssertEqual(OnboardingViewModel(deps: returning).step, .profile, "agreed once, not asked again")
     }

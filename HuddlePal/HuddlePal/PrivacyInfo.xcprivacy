@@ -58,7 +58,7 @@
 		</dict>
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypePhoneNumber</string>
+			<string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>

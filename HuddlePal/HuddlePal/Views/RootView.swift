@@ -19,9 +19,23 @@ struct RootView: View {
         ZStack {
             Group {
                 if viewModel != nil, deps.session.isReady {
+                    if let error = viewModel?.bootstrapError {
+                        VStack(spacing: 20) {
+                            Text("Couldn't confirm your account")
+                                .font(Theme.displayFont(24))
+                            Text(error)
+                                .multilineTextAlignment(.center)
+                            PrimaryButton(title: "Try again") {
+                                Task { await viewModel?.retry() }
+                            }
+                            Button("Sign out") { Task { await viewModel?.signOut() } }
+                        }
+                        .padding(Theme.screenPadding)
+                    } else if deps.session.pendingBirthdayUser != nil {
+                        BirthdayCheckView()
                     // Even a restored session waits on the Terms: no one
                     // reaches the app without tapping Agree.
-                    if !showsMain {
+                    } else if !showsMain {
                         OnboardingView()
                             .transition(.opacity)
                     } else {
@@ -228,13 +242,6 @@ struct MainView: View {
             case .intro: PlusIntroSheet()
             case .paywall: PaywallView(context: .promotion)
             }
-        }
-        // An account from before birthdays were asked for: once, first.
-        .fullScreenCover(isPresented: Binding(
-            get: { deps.session.needsBirthday },
-            set: { deps.session.needsBirthday = $0 }
-        )) {
-            BirthdayCheckView()
         }
         .task {
             // An invite link opened before signing in.

@@ -23,6 +23,12 @@ enum AuthSessionState {
     /// Authenticated, but no profile yet — finish onboarding.
     /// `suggestedName` carries Apple's full name when available.
     case needsProfile(suggestedName: String?)
+    /// A restored account made before birthday screening. It cannot enter
+    /// the app until its birthday has been saved and checked.
+    case needsBirthday(User)
+    /// An existing birthday is below the minimum age. The account stays
+    /// closed, with sign-out and deletion available.
+    case ageRestricted(User)
     /// Fully signed in.
     case signedIn(User)
 }
@@ -34,6 +40,7 @@ enum AuthError: LocalizedError {
     case notAuthenticated
     /// A birthday under the Terms' minimum age (`Birthday.minimumAge`).
     case underMinimumAge
+    case birthdayImmutable
     case provider(String)
 
     var errorDescription: String? {
@@ -43,6 +50,7 @@ enum AuthError: LocalizedError {
         case .invalidCode: "That code didn't match — or it expired. Check it or request a fresh one."
         case .notAuthenticated: "You're not signed in."
         case .underMinimumAge: "HuddlePals is for people \(Birthday.minimumAge) or older."
+        case .birthdayImmutable: "Your birthday has already been saved and can't be changed."
         case .provider(let message): message
         }
     }
@@ -108,6 +116,9 @@ private extension Character {
 
 @MainActor
 protocol AuthServiceProtocol: AnyObject {
+    /// Local credential presence only: enough to offer sign-out or account
+    /// deletion while age-blocked, never evidence of app eligibility.
+    func hasStoredSession() async -> Bool
     /// Session state at launch (restores a persisted session if present).
     func currentState() async throws -> AuthSessionState
     /// Sends a verification code to the email or phone.
@@ -119,8 +130,9 @@ protocol AuthServiceProtocol: AnyObject {
     func verifyCode(_ code: String, for destination: OTPDestination) async throws -> AuthSessionState
     /// Native Sign in with Apple: exchanges the identity token for a session.
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState
-    /// Creates the profile for a freshly authenticated account.
-    func completeProfile(displayName: String, avatarColorHex: String) async throws -> User
+    /// Creates the profile and its eligible birthday together. A profile
+    /// without a confirmed birthday cannot activate an app session.
+    func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User
     /// Updates the editable profile: name, identity color, bio (≤50),
     /// and up to 3 profile photo paths.
     func updateProfile(
@@ -133,8 +145,8 @@ protocol AuthServiceProtocol: AnyObject {
     /// The signed-in account's birthday, which only its owner can read; nil
     /// when it was never given (accounts from before it was asked for).
     func birthday() async throws -> Birthday?
-    /// Saves it. Refused under the minimum age (`AuthError.underMinimumAge`),
-    /// here and by the server.
+    /// Saves it once. The same birthday may be retried; changing an existing
+    /// birthday or submitting one under the minimum age is refused.
     func saveBirthday(_ birthday: Birthday) async throws
     func signOut() async throws
     /// Permanently deletes the signed-in account. Deposited photos remain in
@@ -149,6 +161,10 @@ protocol AuthServiceProtocol: AnyObject {
     /// everything that account could see on this device (synced rows, cached
     /// photos), so the next person to sign in finds none of it.
     func removeLocalData() throws
+}
+
+extension AuthServiceProtocol {
+    func hasStoredSession() async -> Bool { false }
 }
 
 extension AuthValidation {
@@ -194,6 +210,12 @@ final class MockAuthService: AuthServiceProtocol {
         self.context = context
     }
 
+    func hasStoredSession() async -> Bool {
+        let defaults = UserDefaults.standard
+        return defaults.string(forKey: Self.currentUserIDKey) != nil
+            || defaults.string(forKey: Self.pendingIdentityKey) != nil
+    }
+
     /// Called by the seeder when the mock world is rebuilt.
     static func resetForReseed() {
         let defaults = UserDefaults.standard
@@ -209,7 +231,7 @@ final class MockAuthService: AuthServiceProtocol {
         if let stored = UserDefaults.standard.string(forKey: Self.currentUserIDKey),
            let id = UUID(uuidString: stored),
            let user = users.first(where: { $0.id == id }) {
-            return .signedIn(user)
+            return try checkedState(for: user)
         }
         // A sign-up that got as far as verification but never finished the
         // profile resumes there, exactly like the live service.
@@ -221,7 +243,7 @@ final class MockAuthService: AuthServiceProtocol {
         if !UserDefaults.standard.bool(forKey: Self.signedOutKey),
            let seeded = users.first(where: { $0.displayName == SeedDataService.currentUserName }) {
             persist(seeded)
-            return .signedIn(seeded)
+            return try checkedState(for: seeded)
         }
         return .signedOut
     }
@@ -248,11 +270,16 @@ final class MockAuthService: AuthServiceProtocol {
         try signIn(identityKey: Self.identityPrefix + "apple", suggestedName: suggestedName)
     }
 
-    func completeProfile(displayName: String, avatarColorHex: String) async throws -> User {
+    func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User {
+        guard birthday.isValid,
+              birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
+            throw AuthError.underMinimumAge
+        }
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let user = User(displayName: trimmed, avatarColorHex: avatarColorHex)
         context.insert(user)
         try context.save()
+        Self.storeBirthday(birthday, for: user.id)
         if let pendingIdentity = UserDefaults.standard.string(forKey: Self.pendingIdentityKey) {
             UserDefaults.standard.set(user.id.uuidString, forKey: pendingIdentity)
             UserDefaults.standard.removeObject(forKey: Self.pendingIdentityKey)
@@ -295,12 +322,20 @@ final class MockAuthService: AuthServiceProtocol {
         guard let id = UserDefaults.standard.string(forKey: Self.currentUserIDKey) else {
             throw AuthError.notAuthenticated
         }
-        guard birthday.isOldEnough(on: .now) else { throw AuthError.underMinimumAge }
-        UserDefaults.standard.set(birthday.isoDate, forKey: Self.birthdayPrefix + id)
+        guard birthday.isValid,
+              birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
+            throw AuthError.underMinimumAge
+        }
+        let key = Self.birthdayPrefix + id
+        if let saved = UserDefaults.standard.string(forKey: key), saved != birthday.isoDate {
+            throw AuthError.birthdayImmutable
+        }
+        UserDefaults.standard.set(birthday.isoDate, forKey: key)
     }
 
     func signOut() async throws {
         UserDefaults.standard.removeObject(forKey: Self.currentUserIDKey)
+        UserDefaults.standard.removeObject(forKey: Self.pendingIdentityKey)
         UserDefaults.standard.set(true, forKey: Self.signedOutKey)
     }
 
@@ -318,6 +353,7 @@ final class MockAuthService: AuthServiceProtocol {
             defaults.removeObject(forKey: Self.birthdayPrefix + stored)
         }
         defaults.removeObject(forKey: Self.currentUserIDKey)
+        defaults.removeObject(forKey: Self.pendingIdentityKey)
         defaults.set(true, forKey: Self.signedOutKey)
     }
 
@@ -336,7 +372,7 @@ final class MockAuthService: AuthServiceProtocol {
            let id = UUID(uuidString: stored),
            let user = users.first(where: { $0.id == id }) {
             persist(user)
-            return .signedIn(user)
+            return try checkedState(for: user)
         }
         UserDefaults.standard.set(identityKey, forKey: Self.pendingIdentityKey)
         return .needsProfile(suggestedName: suggestedName)
@@ -351,5 +387,17 @@ final class MockAuthService: AuthServiceProtocol {
 
     private func persist(_ user: User) {
         UserDefaults.standard.set(user.id.uuidString, forKey: Self.currentUserIDKey)
+    }
+
+    private func checkedState(for user: User) throws -> AuthSessionState {
+        guard let raw = UserDefaults.standard.string(forKey: Self.birthdayPrefix + user.id.uuidString),
+              let birthday = Birthday(isoDate: raw) else {
+            return .needsBirthday(user)
+        }
+        guard birthday.isValid,
+              birthday.isOldEnough(on: .now, calendar: Birthday.eligibilityCalendar) else {
+            return .ageRestricted(user)
+        }
+        return .signedIn(user)
     }
 }

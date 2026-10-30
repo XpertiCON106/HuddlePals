@@ -174,20 +174,27 @@ final class LiveServiceTests: XCTestCase {
         XCTAssertEqual(userID, me.id, "still signed in: the account still exists")
     }
 
-    func testLaunchingOfflineKeepsTheStoredSessionSignedIn() async throws {
+    func testLaunchingOfflineKeepsTheTokenButDoesNotAssumeAgeEligibility() async throws {
         let client = try await LiveStub.signedInClient(userID: me.id)
         StubURLProtocol.respond { _ in .init(error: URLError(.notConnectedToInternet)) }
-        guard case .signedIn(let user) = try await authService(client).currentState() else {
-            return XCTFail("an offline launch must not look like being signed out")
+        do {
+            _ = try await authService(client).currentState()
+            XCTFail("an offline profile cannot confirm the account's age eligibility")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .notConnectedToInternet)
         }
-        XCTAssertEqual(user.id, me.id)
+        let userID = await client.currentUserID
+        XCTAssertEqual(userID, me.id, "retain the token so retry does not require another Apple sign-in")
     }
 
-    func testLaunchingOfflineWithAnExpiredTokenKeepsTheSessionToo() async throws {
+    func testAnOfflineExpiredTokenDoesNotOpenAnUncheckedAppSession() async throws {
         let client = try await LiveStub.signedInClient(userID: me.id, expiresIn: 0)
         StubURLProtocol.respond { _ in .init(error: URLError(.timedOut)) }
-        guard case .signedIn = try await authService(client).currentState() else {
-            return XCTFail("the refresh couldn't run; the session is still good")
+        do {
+            _ = try await authService(client).currentState()
+            XCTFail("a failed refresh must not bypass age eligibility")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .timedOut)
         }
         XCTAssertNotNil(KeychainStore.load(key: LiveStub.sessionKey), "the stored session survives")
     }

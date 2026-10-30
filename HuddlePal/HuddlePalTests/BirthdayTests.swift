@@ -1,13 +1,13 @@
+import SwiftData
 import XCTest
 
 @testable import HuddlePal
 
-/// Birthdays: the Terms' minimum age (13), asked when a profile is made and
-/// once of accounts from before, and kept to their owner. Also: a huddle
-/// deleted while it's open says so instead of loading.
+/// Birthday boundaries, atomic profile activation and immutable recorded dates.
+/// Also: a huddle deleted while open says so instead of loading.
 @MainActor
 final class BirthdayTests: XCTestCase {
-    private let calendar = Calendar(identifier: .gregorian)
+    private let calendar = Birthday.eligibilityCalendar
 
     override func tearDown() async throws {
         // The mock keeps its session in the standard defaults: leave it as found.
@@ -21,7 +21,7 @@ final class BirthdayTests: XCTestCase {
     }
 
     private var twelveYearsAgo: Birthday {
-        Birthday(date: Calendar.current.date(byAdding: .year, value: -12, to: .now)!)
+        Birthday(date: calendar.date(byAdding: .year, value: -12, to: .now)!, calendar: calendar)
     }
 
     // MARK: The rule
@@ -81,34 +81,73 @@ final class BirthdayTests: XCTestCase {
         XCTAssertEqual(onboarding.birthday, twelveYearsAgo)
     }
 
-    func testTheServiceRefusesUnder13Too() async throws {
+    func testTheServiceRefusesUnder13BeforeCreatingAProfile() async throws {
         let deps = AppDependencies.makeMock(inMemory: true)
-        _ = try await deps.auth.completeProfile(displayName: "Kid", avatarColorHex: "E5484D")
         do {
-            try await deps.auth.saveBirthday(twelveYearsAgo)
-            XCTFail("saved a birthday under 13")
+            _ = try await deps.auth.completeProfile(
+                displayName: "Kid", avatarColorHex: "E5484D", birthday: twelveYearsAgo
+            )
+            XCTFail("created a profile under 13")
         } catch AuthError.underMinimumAge {
-            // As the server's rule does.
+            // No partially activated profile may survive a rejected birthday.
         }
+        XCTAssertTrue(try deps.modelContainer.mainContext.fetch(FetchDescriptor<User>()).isEmpty)
+        XCTAssertNil(deps.session.currentUser)
+    }
+
+    func testTheServiceAllowsIdenticalBirthdayRetryButRefusesChanges() async throws {
+        let deps = AppDependencies.makeMock(inMemory: true)
+        let original = Birthday(year: 1991, month: 2, day: 3)
+        _ = try await deps.auth.completeProfile(
+            displayName: "Pat", avatarColorHex: "E5484D", birthday: original
+        )
+        try await deps.auth.saveBirthday(original)
+        do {
+            try await deps.auth.saveBirthday(Birthday(year: 1990, month: 2, day: 3))
+            XCTFail("changed a recorded birthday")
+        } catch AuthError.birthdayImmutable {}
         let saved = try await deps.auth.birthday()
-        XCTAssertNil(saved)
+        XCTAssertEqual(saved, original)
     }
 
     // MARK: Accounts from before
 
-    func testAnAccountWithoutABirthdayIsAskedUntilItGivesOne() async throws {
+    func testAnAccountWithoutABirthdayDoesNotActivateAMainSession() async throws {
         let deps = AppDependencies.makeMock(inMemory: true)
-        deps.session.currentUser = try await deps.auth.completeProfile(displayName: "Old", avatarColorHex: "E5484D")
-        await deps.checkBirthday()
-        XCTAssertTrue(deps.session.needsBirthday)
+        let user = User(displayName: "Old", avatarColorHex: "E5484D")
+        deps.modelContainer.mainContext.insert(user)
+        try deps.modelContainer.mainContext.save()
+        UserDefaults.standard.set(user.id.uuidString, forKey: "huddlepal.mock.currentUserID")
 
+        guard case .needsBirthday(let pending) = try await deps.auth.currentState() else {
+            return XCTFail("an account without a birthday was activated")
+        }
+        XCTAssertEqual(pending.id, user.id)
+        XCTAssertNil(deps.session.currentUser)
         try await deps.auth.saveBirthday(Birthday(year: 1990, month: 5, day: 5))
-        await deps.checkBirthday()
-        XCTAssertFalse(deps.session.needsBirthday)
-
-        deps.session.needsBirthday = true
+        guard case .signedIn(let confirmed) = try await deps.auth.currentState() else {
+            return XCTFail("recording an eligible birthday did not activate the account")
+        }
+        XCTAssertEqual(confirmed.id, user.id)
+        deps.session.pendingBirthdayUser = pending
         await deps.endSession()
-        XCTAssertFalse(deps.session.needsBirthday, "nobody signed in, nothing to ask")
+        XCTAssertNil(deps.session.pendingBirthdayUser)
+    }
+
+    func testMockAccountWithAStoredIneligibleBirthdayStaysRestricted() async throws {
+        let deps = AppDependencies.makeMock(inMemory: true)
+        let user = User(displayName: "Young", avatarColorHex: "E5484D")
+        deps.modelContainer.mainContext.insert(user)
+        try deps.modelContainer.mainContext.save()
+        UserDefaults.standard.set(user.id.uuidString, forKey: "huddlepal.mock.currentUserID")
+        MockAuthService.storeBirthday(twelveYearsAgo, for: user.id)
+        defer { UserDefaults.standard.removeObject(forKey: "huddlepal.mock.birthday." + user.id.uuidString) }
+
+        guard case .ageRestricted(let restricted) = try await deps.auth.currentState() else {
+            return XCTFail("mock and live must preserve the blocked-account deletion route")
+        }
+        XCTAssertEqual(restricted.id, user.id)
+        XCTAssertNil(deps.session.currentUser)
     }
 
     // MARK: Profile
@@ -116,14 +155,13 @@ final class BirthdayTests: XCTestCase {
     /// Profile shows the birthday given at sign-up; there's no changing it there.
     func testProfileShowsTheBirthdayGivenAtSignUp() async throws {
         let deps = AppDependencies.makeMock(inMemory: true)
-        deps.session.currentUser = try await deps.auth.completeProfile(displayName: "Pat", avatarColorHex: "E5484D")
+        let birthday = Birthday(year: 1991, month: 2, day: 3)
+        deps.session.currentUser = try await deps.auth.completeProfile(
+            displayName: "Pat", avatarColorHex: "E5484D", birthday: birthday
+        )
         let profile = ProfileViewModel(deps: deps)
         await profile.loadBirthday()
-        XCTAssertNil(profile.birthday)
-
-        try await deps.auth.saveBirthday(Birthday(year: 1991, month: 2, day: 3))
-        await profile.loadBirthday()
-        XCTAssertEqual(profile.birthday, Birthday(year: 1991, month: 2, day: 3))
+        XCTAssertEqual(profile.birthday, birthday)
     }
 
     // MARK: A huddle deleted while it's open

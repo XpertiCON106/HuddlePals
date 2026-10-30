@@ -1,6 +1,6 @@
 # HuddlePals — Privacy Policy
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-10-31_
 
 > Operator: **HuddlePals**
 > Contact: **hello@huddlepals.com**
@@ -20,7 +20,7 @@ described under "How your data is stored and protected."
 | **Apple account identifier**, and any email address Apple shares at sign-in (it may be a private relay address) | To sign you in with Sign in with Apple, the only way to sign in. If Apple shares your name, we use it only to pre-fill your display name, which you can change | Yes |
 | **Display name** | Shown to other members of your huddles | Yes |
 | **Profile photos** (up to 3) and **bio** | Shown on your profile to people you share a huddle with | Yes |
-| **Birthday** | Asked when you make your profile, to make sure everyone using HuddlePals is 13 or older. Only you can see it: it isn't shown to anyone else | Yes |
+| **Birthday** | Asked before sign-in, to check that you're 13 or older, then kept privately with your account. Only you can see it: it isn't shown to anyone else | Yes |
 | **Deposited photos, videos and captions** | The core function — shared with your huddle's members. Photos and videos are end-to-end encrypted, including a video's sound and the still image made from its first frame; captions are not. A video records sound only if you allow HuddlePals to use the microphone | Yes |
 | **Encryption public key** | Lets your huddle's members share the huddle's photo key with your device. Your private key stays on your devices (iCloud Keychain) | Yes |
 | **Reactions and comments** | The core function | Yes |
@@ -161,9 +161,16 @@ We collect basic data analytics to keep things running smoothly.
 ## Children
 
 HuddlePals is not directed to children under 13 (or the minimum age in your
-country). Do not use the app if you are under that age. We ask for your
-birthday when you make your profile; if it shows you're under 13, you can't
-make one.
+country). Do not use the app if you are under that age. Before you sign in,
+the app asks for your birthday. This is a self-reported check, not identity
+verification. If the date shows you're under 13, sign-in stops: the app keeps
+only the date you can try again on this device, and the birthday you entered
+isn't sent to us. Otherwise, your birthday stays on the device only until
+it's recorded privately with your account, and accounts made before this
+check must add one before using huddles. You can't change a recorded birthday
+in the app; contact us if it's wrong. If we learn that we have collected
+personal information from a child under 13, we close the account and delete
+that child's personal information as the law requires.
 
 ## Legal basis and your rights
 

@@ -569,7 +569,7 @@ private final class ProfileAuthSpy: AuthServiceProtocol {
     ) async throws -> AuthSessionState {
         .signedOut
     }
-    func completeProfile(displayName: String, avatarColorHex: String) async throws -> User {
+    func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User {
         throw TestError.updateFailed
     }
 

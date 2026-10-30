@@ -107,7 +107,7 @@ flowchart TD
 
 | Screen | What it does |
 |---|---|
-| **Onboarding** | Three concept cards: the first with a day going by behind the whole screen (dawn to night, Day 1 to 7 and round again, and each day's print clipped onto a line), the others with small loops (blurred photos that clear once yours drops in; an archive filling up). Every print is a different moment, drawn as ink silhouettes on soft skies (friends on a beach, the dog, a birthday cake, a couple at golden hour, a family walk, the city at dusk…); all still with Reduce Motion → sign-in method (Apple; email / phone when the feature flag is on) → verification code → the Terms of Service, right after signing in: the full text with Agree / Decline; Agree unlocks only after scrolling to the end, and Decline signs out, back to the first card (asked again whenever `TermsOfService.version` changes, and by each account on a shared device) → profile (photos, name, a private birthday, bio, colour; under 13 can't continue). Returning accounts skip the profile step; one without a birthday is asked for it once. Someone already signed in when the Terms show can sign out there to use another account. |
+| **Onboarding** | Three concept cards with drawn daily moments and small loops, held still with Reduce Motion → a neutral birthday screen without an adult default → sign-in method (Apple; email / phone when the feature flag is on) → the Terms of Service, right after signing in: Agree enables only after scrolling to the end, and Decline signs out. An under-13 answer stops before sign-in and keeps the next eligible date on the device across relaunches. An eligible new account completes profile setup, which records the profile and birthday atomically before uploading any staged photos. An existing account without a birthday supplies it before the shelf mounts; a failed check offers retry or sign-out. Recorded birthdays are private and immutable. Each account accepts the current Terms for itself. |
 | **Huddles shelf** | The main screen: every huddle you belong to, with emoji, name, member stack, streak, lock state, "N waiting for you". Tap to step inside. At the top right: your profile, and + to create or join. |
 | **Huddle Home (Today)** | One huddle's day. Serif huddle name, member stack, streak badge, and — when a streak just broke — the 24h recovery banner with a live countdown. LOCKED: frosted 2-column grid + "Add today's memory". UNLOCKED: vertical feed of today's cards + "waiting on…" row. Each card shows whole once its photo and its author's picture are in (a soft stand-in until then), and others' posts, comments and reactions appear as they happen (live updates), with no pull to refresh. A huddle its keeper deleted while it was open says so and goes back to the shelf. |
 | **Compose** (sheet) | Two stages: capture (camera-only, no library import; it always opens on Photo, and the camera opens only when tapped, switching between Photo and Video included; a photo, or with Plus a video of up to 6 seconds, previewed with sound, play/pause and a trim bar; caption with live counter — the photo card keeps its size while typing, and Done, a swipe down or a tap on the card puts the keyboard away) → the permanence gate ("This is permanent — post it?"). Posting is irreversible; success plays the lock-opening spring + haptic. Also serves backfill/recovery for yesterday. On the free plan the picker shows "Video · Plus", which opens the paywall. |
@@ -234,36 +234,68 @@ Relationship notes: inverses are declared once, on the to-many side, with cascad
 
 ## 7. Authentication
 
-Three ways in, one account model. **Today only Sign in with Apple is shown**: email and phone are built but hidden behind `FeatureFlags.emailAndPhoneSignInEnabled`. (The Supabase project's email provider may still accept codes server-side; turn it off there too if it shouldn't.) Email and phone send a **verification code** (6 digits unless the Supabase project is set to more — up to 10; the app's code boxes follow `EMAIL_OTP_LENGTH` / `SMS_OTP_LENGTH` in `Supabase.plist`); Apple uses the native sheet. All resolve to a Supabase `auth.users` row; the app's `profiles` row (name + avatar) is created on first sign-in by the onboarding profile step.
+Every sign-in route starts with a neutral birthday screen (`Step.age`,
+`Components/BirthdayEntry.swift`): no adult date is preselected. An under-13
+answer stops before Apple sign-in and records only the next eligible UTC date
+locally (`Support/AgeScreening.swift`), so sign-out or relaunch cannot restart
+the screen before that date. The rejected birthday and refusal never leave
+the device. An eligible birthday is held locally while sign-in finishes,
+then cleared when recorded eligibility is confirmed. This is self-reported screening,
+not independent identity or age verification.
+
+**Only Sign in with Apple is shown**: email and phone remain behind
+`FeatureFlags.emailAndPhoneSignInEnabled`, and must pass the same age screen
+if enabled. Apple uses its native sheet. All methods resolve to a Supabase
+`auth.users` row, which alone grants no core app access. A new account uses
+`complete_profile(name, colour, birthday)` to save its initial profile and
+birthday atomically. Older profiles without a birthday use `save_birthday`.
+The server requires a recorded birthday showing 13 completed years by its
+UTC date for huddle, Storage, key, and other core operations. Birthdays are
+immutable; repeating the same save is safe. Unknown eligibility keeps the
+app gated, including on a failed lookup, before the shelf mounts.
+An existing recorded birthday below the minimum age opens the blocked
+screen, with sign-out and account deletion available and no birthday editor.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant App as OnboardingViewModel
     participant S as Auth service
-    participant G as Supabase GoTrue
+    participant G as Supabase
 
-    U->>App: enters email / phone
-    App->>S: requestCode(to:)
-    S->>G: POST /auth/v1/otp {email|phone, create_user}
-    G-->>U: verification code (email or SMS)
-    U->>App: types / autofills code
-    App->>S: verifyCode(code, for:)
-    S->>G: POST /auth/v1/verify {type, destination, token}
-    G-->>S: access + refresh token (session → Keychain)
-    S->>G: GET profiles?id=eq.me
-    alt profile exists
-        S-->>App: .signedIn(user) → straight into the huddle
-    else first time
-        S-->>App: .needsProfile → name + avatar step
-        App->>S: completeProfile(name, color)
-        S->>G: upsert profiles row
+    U->>App: enters birthday
+    alt under 13
+        App-->>U: stop before sign-in; remember next eligible date locally
+    else eligible date
+        U->>App: Sign in with Apple
+        App->>S: identity token and nonce
+        S->>G: exchange token; read own profile and birthday
+        alt confirmed profile and eligible birthday
+            S-->>App: signed in (Terms still required)
+        else existing profile needs birthday
+            S-->>App: birthday gate before shelf
+            App->>S: saveBirthday(birthday)
+            S->>G: save_birthday(birthday)
+        else first profile
+            S-->>App: Terms then profile setup
+            App->>S: completeProfile(name, colour, birthday)
+            S->>G: complete_profile: atomic profile and birthday
+        end
     end
 ```
 
-Sign in with Apple specifics: the view model generates a random nonce, sends its SHA-256 to Apple ([Support/AppleSignInNonce.swift](HuddlePal/Support/AppleSignInNonce.swift)), and the raw nonce + identity token go to GoTrue's `id_token` grant — replay-protected, no client secret needed. Apple provides the user's name **only on first authorization**; it's prefilled into the profile step.
+Sign in with Apple specifics: the view model generates a random nonce,
+sends its SHA-256 to Apple, and sends the raw nonce and identity token to
+GoTrue's `id_token` grant (`Support/AppleSignInNonce.swift`). Apple provides
+the user's name only on the first authorization; the profile step prefills
+it. Encryption identity publication waits until recorded age eligibility.
 
-Session lifecycle: tokens live in the **Keychain** (so you stay signed in across relaunches, whichever method you used) ([KeychainStore.swift](HuddlePal/Services/Live/KeychainStore.swift)), access tokens auto-refresh ~60s before expiry, a failed refresh surfaces as signed-out. Sign out hits `/logout`, clears the Keychain, and returns you to onboarding; signing back in with the same identity lands directly in your huddle (no profile step). The mock mirrors the entire state machine — including resuming an interrupted sign-up at the profile step — with the fixed code `123456`.
+Tokens live in the device Keychain (`KeychainStore.swift`) and refresh about
+60 seconds before expiry. A refused refresh signs out; a network failure
+preserves the session but does not resolve unknown age eligibility.
+Sign-out clears the session and returns to onboarding. The mock follows the
+same age, profile, and Terms state transitions, using code `123456` for its
+hidden email/phone paths.
 
 UX details built in: SMS autofill (`.textContentType(.oneTimeCode)`), auto-submit on the last digit, paste support, resend with a 60-second cooldown (matching GoTrue's rate limit), US/Canada phone numbers without typing +1 (a fixed "+1" prefix, formatted as you type into "(415) 555-0123"; start with "+" for any other country), and a sign-out confirmation dialog.
 
@@ -313,7 +345,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 
 **Tables** — `profiles`, `huddles`, `memberships`, `deposits`, `reactions`, `comments`, `skips`, `reports`, `blocks`, `user_keys`, `huddle_keys`, `huddle_invite_keys`, `device_tokens`, `terms_acceptances`, `profile_birthdates`, `preserved_photos`, `join_attempts`, `user_entitlements`, `app_store_notifications`, `huddle_deletions`, with the constraints listed in §6 and indexes on the hot paths (`deposits(huddle_id, day_key)`, `memberships(user_id)`).
 
-**Row Level Security** — privacy *is* the product, so the database enforces it even against a malicious client (the anon key ships in the binary by design; RLS is the boundary):
+**Row Level Security** — the database requires recorded 13+ eligibility for core app access even if a client bypasses the screen. A caller may still read their own profile and birthday to complete an older account. Huddle, co-member, key and Storage access require eligibility. The anon key ships in the binary by design; RLS and guarded RPCs are the boundary:
 
 | Table | You can read | You can write |
 |---|---|---|
@@ -328,7 +360,7 @@ Everything server-side lives in **one idempotent SQL file** ([supabase/schema.sq
 | huddle_invite_keys | nobody (no policies, no privileges) | via the invite RPCs only |
 | device_tokens | your own | your own |
 | terms_acceptances | your own | insert your own (the server stamps `recorded_at`); no updates or deletes |
-| profile_birthdates | your own | insert or update your own, 13 or older (a day's leeway for time zones); goes with the profile |
+| profile_birthdates | your own | immutable; `complete_profile` or `save_birthday` records an eligible birthday, with identical retries allowed; goes with the profile |
 | preserved_photos | nobody (no policies, no privileges) | the operator, through `remove_reported_photo`; `delete_huddle` and `delete_sole_huddles` keep a deleted huddle's reported deposits here |
 | user_entitlements | nobody; your own plan through `my_entitlement()` | the edge functions only, through `apply_entitlement`, once Apple's signature checks out |
 | app_store_notifications, huddle_deletions | nobody (no policies, no privileges) | the edge functions / `delete_huddle` |
@@ -340,6 +372,7 @@ Helper functions (`is_huddle_member`, `is_huddle_keeper`, `shares_huddle_with`, 
 
 | Function | Purpose |
 |---|---|
+| `complete_profile(name, colour, birthday)` / `save_birthday(birthday)` | Atomically activate a new profile with an eligible birthday / complete an older profile; same-date retries succeed, changes fail |
 | `create_huddle(name, emoji, day_key)` | Huddle + keeper membership + unique invite code in one transaction; 3 huddles kept on the free plan, 10 with Plus |
 | `join_huddle(code, day_key)` | Old secret-less codes only (old app builds), until the huddle gets a new-format invite |
 | `redeem_huddle_invite(lookup, proof, day_key)` | Checks the code's proof (10 misses/hour), `huddle_join_rule`, the 25-huddle limit and blocks, inserts membership, returns the huddle key sealed for the code |
@@ -363,7 +396,7 @@ The join RPCs take the caller's local today (`day_key`) and store it as the memb
 
 The operator — anyone with the Supabase dashboard — must not be able to view deposited photos, so Storage holds only ciphertext ([PhotoCrypto.swift](HuddlePal/Services/Live/PhotoCrypto.swift), CryptoKit only). There are three layers of keys:
 
-- **Identity key** — each user's Curve25519 key pair, made on first sign-in on a device. The private half stays in the iCloud Keychain (synchronizable, so it reaches the user's other devices and survives a reinstall; only account deletion removes it). The public half goes in `user_keys`.
+- **Identity key** — each user's Curve25519 key pair, made after age eligibility is confirmed on a device. The private half stays in the iCloud Keychain (synchronizable, so it reaches the user's other devices and survives a reinstall; only account deletion removes it). The public half goes in `user_keys`.
 - **Huddle key** — a random 256-bit key made by the creator's device. Each member has a copy in `huddle_keys`, wrapped to their public key: an ephemeral X25519 agreement, then HKDF-SHA256 bound to the huddle and member ids, then AES-GCM.
 - **Photo key** — fresh per photo. The JPEG is AES-GCM sealed with it, and that box is the Storage object. The photo key is itself sealed with the huddle key into `deposits.wrapped_photo_key`. A report discloses only this key (`reports.photo_key`), so the operator can review one reported photo with [tools/decrypt_reported_photo](tools/decrypt_reported_photo/README.md) and nothing else. A video drop (Plus) is two boxes under one photo key: its poster JPEG and its MP4 clip. The clip is recorded straight into a compressed file, read into memory and deleted at once; it's played from memory too (an `AVAssetResourceLoader` delegate serves the decrypted bytes), so no plaintext video stays on disk.
 
@@ -441,7 +474,7 @@ HuddlePal/
 ├── Config/Info.plist          Partial Info.plist: camera usage string + huddlepal:// scheme (old invite links)
 ├── supabase/
 │   ├── schema.sql             Tables + RLS + storage policies + RPCs (run once)
-│   ├── migrations/            001–018, 020–021: upgrade a deployed database, in order
+│   ├── migrations/            001–021: upgrade a deployed database, in order (019 awaits deployment)
 │   ├── scripts/reset_database.sql  Destructive: wipes an older DB so schema.sql can run fresh
 │   ├── functions/delete-account/  Edge function behind "Delete account"
 │   ├── functions/delete-huddle/   Edge function behind "Delete huddle"
@@ -470,9 +503,9 @@ HuddlePal/
 │   ├── Components/            AppDialog (the app's own alerts and choices), AvatarStack,
 │   │                          DepositCards, StreakBadge, PrimaryButton,
 │   │                          CaptionTextField, CodeEntryField, CameraPicker,
-│   │                          EmptyHuddleState, TermsDocumentView, ScreenCrossfade
+│   │                          EmptyHuddleState, BirthdayEntry, TermsDocumentView, ScreenCrossfade
 │   ├── Support/               Theme, Haptics, DateProviding, AppleSignInNonce,
-│   │                          DailyReminders, PlusPromotion, ImageDownscaler, TermsOfService
+│   │                          DailyReminders, PlusPromotion, AgeScreening, ImageDownscaler, TermsOfService
 │   ├── Legal/TermsOfService.md  The Terms of Service shown in-app (host the same text publicly)
 │   └── Assets.xcassets        App icon + ink accent color
 ├── HuddlePalTests/                HuddleEngineTests, CriticalFlowTests, LiveSyncTests,
@@ -489,7 +522,7 @@ HuddlePal/
 
 - **Modes**: no `Supabase.plist` → mock; filled-in plist → live. The plist is gitignored; the anon key it holds is publishable (RLS is the security boundary). A Release-only build phase fails any Release build or Archive that lacks a real plist, so the mock world can't ship.
 - **Entitlements**: `HuddlePal.entitlements` carries Sign in with Apple and Push Notifications (`aps-environment`); wired via `CODE_SIGN_ENTITLEMENTS`. Registering the capabilities needs the paid Apple Developer Program.
-- **App Store readiness**: 1024px opaque icon, privacy manifest (no tracking; photos and videos, audio, name, user id, email, phone, other user content and purchase history, collected for app functionality only), `ITSAppUsesNonExemptEncryption = NO` (the photo encryption uses only Apple's CryptoKit; see DEPLOYMENT.md "Export compliance").
+- **App Store readiness**: 1024px opaque icon, privacy manifest (no tracking; photos and videos, audio, name, user id, email, other data (the birthday), other user content and purchase history, collected for app functionality only), `ITSAppUsesNonExemptEncryption = NO` (the photo encryption uses only Apple's CryptoKit; see DEPLOYMENT.md "Export compliance").
 - **Build**: `GENERATE_INFOPLIST_FILE = YES`, merged with the small partial `Config/Info.plist` (kept outside the synchronized folders), iOS 17.0 target, Swift 5 language mode, Universal device family (iPhone + iPad; iPhone-only is an open decision), synchronized folder groups (drop a file in, it's in the build).
 
 ## 16. Known limitations & roadmap

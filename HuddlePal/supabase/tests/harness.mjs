@@ -88,11 +88,23 @@ export async function serverToday(db, offsetDays = 0) {
   return rows[0].d
 }
 
-/** Creates an auth user and their profile (as the app's profile step does). */
-export async function signUp(db, name) {
+/** Creates only the authentication record, before profile/age activation. */
+export async function authUser(db, name) {
   const id = randomUUID()
   await admin(db, `insert into auth.users (id, email) values ($1, $2)`, [id, `${name}@example.test`])
-  await q(db, id, `insert into profiles (id, display_name) values ($1, $2)`, [id, name])
+  return id
+}
+
+/** Creates an eligible account through the same atomic RPC as the app. */
+export async function signUp(db, name) {
+  const id = await authUser(db, name)
+  const [{ available }] = await admin(db, `select to_regprocedure('public.complete_profile(text,text,date)') is not null as available`)
+  if (available) {
+    await q(db, id, `select * from complete_profile($1, 'E5484D', '1995-06-14')`, [name])
+  } else {
+    // Migration regression tests deliberately start before age activation.
+    await q(db, id, `insert into profiles (id, display_name) values ($1, $2)`, [id, name])
+  }
   return id
 }
 

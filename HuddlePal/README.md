@@ -16,6 +16,23 @@ Every service is a protocol with two implementations — a seeded offline **mock
 
 **Demo tools** live in Profile → DEBUG: force the gate shut ("simulate: I haven't posted today"), simulate HuddlePals+ (or Plus that ends in a minute) and a subscription linked to another account, advance the mock clock a day at a time to exercise streak math, and regenerate the seed world from scratch.
 
+**Age screening** comes before sign-in: enter a birthday without a
+preselected adult date. An under-13 answer stops sign-in and keeps only the
+next eligible UTC date locally, across sign-out and relaunch. An eligible
+birthday is held locally until recorded eligibility is confirmed. In live mode,
+`complete_profile` saves the profile and birthday atomically;
+`save_birthday` handles an older account without one. The server requires a
+recorded birthday showing 13 completed years by its UTC date for huddle
+access and refuses birthday changes. An
+unresolved eligibility check keeps the app at the age gate. Both backends
+follow this flow; this is a self-reported check, not identity verification.
+An existing account whose recorded birthday is not yet eligible stays
+blocked, with sign-out and account deletion available.
+
+The matching live release requires **migration 019_age_eligibility.sql**
+before shipping. The migration is prepared in this branch and has not been
+applied to production by this change; follow [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## File map
 
 ```
@@ -80,7 +97,7 @@ HuddlePal/
 │   │   ├── Profile/BirthdayCheckView.swift  The birthday, asked once of accounts from before
 │   │   └── Profile/ProfileView.swift   Draft editing + confirmed save, the Plan section,
 │   │                                   sign out + DEBUG tools; TermsReaderView
-│   ├── Components/                     AppDialog (the app's own alerts and choices), BirthdayRow,
+│   ├── Components/                     AppDialog (the app's own alerts and choices), BirthdayEntry + BirthdayRow,
 │   │                                   BlurredDepositCard, DepositCard,
 │   │                                   AvatarStack (+ AvatarImageCache, pictures shown at once),
 │   │                                   StreakBadge, EmptyHuddleState, PrimaryButton,
@@ -93,7 +110,7 @@ HuddlePal/
 │   │                                   VideoRecorder + VideoCaptureView (6-second clips),
 │   │                                   DepositVideoPlayer (plays decrypted clips from memory)
 │   ├── Support/                        Theme, Haptics, DateProviding (injectable clock),
-│   │                                   DailyReminders, PlusPromotion, ImageDownscaler, AppleSignInNonce,
+│   │                                   DailyReminders, PlusPromotion, AgeScreening, ImageDownscaler, AppleSignInNonce,
 │   │                                   CaptureFiles + PreparedClip (a recording's short life on disk),
 │   │                                   TermsOfService (bundled text + TermsAcceptance)
 │   ├── Legal/TermsOfService.md         The Terms of Service shown in-app; host it at huddlepals.com/terms
@@ -112,7 +129,7 @@ HuddlePal/
     └── VideoDropTests.swift            Video seal, recording, playback from memory, Compose
 ```
 
-Next to the app: `supabase/` (schema.sql, migrations 001–018, 020 and 021, `scripts/reset_database.sql`, the
+Next to the app: `supabase/` (schema.sql, migrations 001–021, `scripts/reset_database.sql`, the
 edge functions `delete-account`, `delete-huddle`, `send-push`, `verify-subscription` and `app-store-notifications`,
 and their Node tests) and `tools/` (app icon generator, `decrypt_reported_photo` for
 moderation).

@@ -10,8 +10,21 @@ struct Birthday: Equatable, Hashable {
 
     /// The Terms' minimum age.
     static let minimumAge = 13
-    /// Where the wheel starts before one is chosen.
-    static let wheelStart = Birthday(year: 2000, month: 1, day: 1)
+    /// Eligibility uses the same calendar day as Postgres, regardless of
+    /// the device's calendar or clock's time zone.
+    static var eligibilityCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    var isValid: Bool {
+        guard (1...9999).contains(year), (1...12).contains(month), (1...31).contains(day),
+              let date = Self.eligibilityCalendar.date(from: DateComponents(year: year, month: month, day: day))
+        else { return false }
+        let parts = Self.eligibilityCalendar.dateComponents([.year, .month, .day], from: date)
+        return parts.year == year && parts.month == month && parts.day == day
+    }
 
     init(year: Int, month: Int, day: Int) {
         self.year = year
@@ -27,9 +40,11 @@ struct Birthday: Equatable, Hashable {
 
     /// From a Postgres date, "1996-04-12".
     init?(isoDate: String) {
-        let parts = isoDate.prefix(10).split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3, (1...12).contains(parts[1]), (1...31).contains(parts[2]) else { return nil }
+        guard isoDate.count == 10 else { return nil }
+        let parts = isoDate.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
         self.init(year: parts[0], month: parts[1], day: parts[2])
+        guard isValid, self.isoDate == isoDate else { return nil }
     }
 
     /// As Postgres writes a date: "1996-04-12".
@@ -51,7 +66,7 @@ struct Birthday: Equatable, Hashable {
     }
 
     func isOldEnough(on today: Date, calendar: Calendar = .current) -> Bool {
-        age(on: today, calendar: calendar) >= Self.minimumAge
+        isValid && age(on: today, calendar: calendar) >= Self.minimumAge
     }
 
     /// "April 12, 1996".

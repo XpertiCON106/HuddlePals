@@ -111,10 +111,12 @@ seeded **mock** world. No code changes to switch.
    (`Supabase.plist` is gitignored; the anon key is publishable by design —
    RLS is the security boundary.)
 3. Run on a simulator. You should see onboarding (no "The Crew", no DEBUG
-   section in Profile) → sign in with an email code (or Apple) → pick a
-   name and color → "No huddle yet" → create a huddle → a server-generated
-   invite code. Sign out from Profile, sign back in with the same email:
-   you land straight back in your huddle — no profile step the second time.
+   section in Profile) → enter a birthday → Sign in with Apple → agree to
+   the Terms → activate a profile → "No huddles yet" → create a huddle → an
+   invite code. Sign out from Profile and sign back in with the same Apple
+   identity: the recorded birthday and profile need not be entered again
+   after the sign-in age screen. Migration 019 is required for this flow
+   (Phase 13); test builds must exclude production `Supabase.plist`.
 
 ## Phase 3 — Apple Developer + TestFlight (~1–2 hours + review wait)
 
@@ -134,8 +136,9 @@ seeded **mock** world. No code changes to switch.
    in the project. The photo end-to-end encryption uses only Apple's
    CryptoKit, i.e. encryption within the operating system — keep the flag
    unless you add your own or bundled crypto; see "Export compliance"
-   below.) Users must agree to the Terms of Service in-app before they
-   can sign in (`HuddlePal/Legal/TermsOfService.md`). Publish that same
+   below.) Users complete age screening before sign-in and agree to the
+   Terms of Service after sign-in, before profile activation or huddle
+   access (`HuddlePal/Legal/TermsOfService.md`). Publish that same
    text at https://huddlepals.com/terms and PRIVACY.md at
    https://huddlepals.com/privacy, the URLs the Terms cite. Keep Apple's
    **standard EULA** as the app's License Agreement (don't upload a custom
@@ -168,12 +171,12 @@ seeded **mock** world. No code changes to switch.
 
      > HuddlePals is a private, invite-only photo app for small groups (up
      > to 4 people who know each other, or 10 with HuddlePals+). Sign in with Apple is the only
-     > sign-in. To try it: agree to the Terms, sign in, create a huddle and
+     > sign-in. To try it: enter your birthday, sign in, agree to the Terms, create a huddle and
      > take today's photo. Other members' photos for today unlock once you
      > post yours. To see a group with other members, join with invite
      > code <CODE>. Content safeguards (guideline 1.2): everyone agrees to
-     > the Terms (zero tolerance for objectionable content) before signing
-     > in; any photo (••• menu), comment (touch and hold) or profile (•••
+     > the Terms (zero tolerance for objectionable content) before huddle
+     > access; any photo (••• menu), comment (touch and hold) or profile (•••
      > menu) can be reported; members can be blocked; we review reports
      > within 24 hours. Photos and videos are end-to-end encrypted; a
      > report sends us that one post's key so we can review it. HuddlePals
@@ -341,8 +344,8 @@ TestFlight build → checks on a device → website → App Review → release.
 
 ### 5.4 App Review and release
 
-1. Publish **the website changes** (the Grok instructions: Support's Plus
-   questions, the member counts, the revised Terms and Privacy Policy) and
+1. Publish **the website changes** (Support's Plus questions, the member
+   counts, the revised Terms and Privacy Policy) and
    have the live pages checked against the repo.
 2. On the version page, add **both subscriptions** under In-App Purchases
    and Subscriptions (the first ones must go to review with an app
@@ -400,7 +403,7 @@ straight to Join. That needs two things outside the app:
 
 1. **The website** serves `/.well-known/apple-app-site-association` (JSON,
    no redirect) naming the app, and a `/join` page for people without the
-   app (the Grok instructions have both, word for word). Check it:
+   app. Both are in the website repository. Check it:
 
    ```bash
    curl -sI https://huddlepals.com/.well-known/apple-app-site-association
@@ -429,7 +432,7 @@ all-caps Section 13 notice at the top (Section 13 itself is unchanged).
    keepers: older builds still offer it, and once 015 runs, a keeper who
    taps it stays in place.
 2. **Website**: the Terms page without the notice, version 2026-10-29 (the
-   app asks everyone to agree once more). The Grok instructions have it.
+   app asks everyone to agree once more). Keep it identical to the bundled text.
 3. **Check on a phone** with the new build: as a keeper, Huddle Settings
    shows Delete huddle and no Leave; as a member, Leave. Profile → Delete
    account opens its page, and Delete my account works only once DELETE is
@@ -437,21 +440,20 @@ all-caps Section 13 notice at the top (Section 13 itself is unchanged).
 
 ## Phase 9 — Birthdays
 
-New profiles ask for a birthday (only its owner can see it; under 13 can't
-continue), and accounts from before are asked for theirs once.
+This phase introduced the private birthday table. Phase 13 supersedes the
+original profile-step screen with screening before sign-in and server
+eligibility enforcement.
 
 1. **Migration 016.** SQL Editor → paste
    [`supabase/migrations/016_birthdays.sql`](supabase/migrations/016_birthdays.sql)
    → Run (safe to re-run). Run it before shipping the build: without the
    table, that build can't finish a new profile.
-2. **Website**: the Privacy Policy with the birthday (the Grok instructions
-   have it, word for word).
+2. **Website**: publish the matching Privacy Policy with the birthday
+   disclosure; keep the app and website copies aligned.
 3. **App Store Connect → App Privacy**: add the birthday as collected data
    (Other Data, linked to the user, for App Functionality, not used for
    tracking).
-4. **Check on a phone** with the new build: a new account's profile step
-   needs a birthday; one under 13 stops with Sign out. An existing account
-   is asked once, full screen, then Profile shows it.
+4. **Check on a phone** using the current flow and checks in Phase 13.
 
 ## Phase 10 — Live updates
 
@@ -588,13 +590,56 @@ against the Free plan limits (1 GB files, 500 MB database).
 Undoing it: revert the website commit, then
 `drop function public.admin_storage_usage();`.
 
+## Phase 13 — Age screening before sign-in and account activation
+
+**Prepared for review, not applied to production by this change.** The app
+and website branches must be reviewed and merged manually. Apply migration
+019 before releasing the matching app; do not run the fresh schema or reset
+script against an existing production database.
+
+1. **Migration 019.** After migrations 001–018 (020 and 021 can run before
+   or after it), apply
+   [`supabase/migrations/019_age_eligibility.sql`](supabase/migrations/019_age_eligibility.sql)
+   in the SQL Editor. It adds atomic `complete_profile(name, colour,
+   birthday)` and idempotent `save_birthday(birthday)`, makes birthdays
+   immutable, and requires an eligible birthday for core data, Storage, and
+   RPC access. The server requires 13 completed years by the UTC date,
+   without the former one-day allowance. Existing accounts with a recorded
+   eligible birthday keep access; other accounts must complete the gate.
+2. **App.** Release the build that screens a self-reported birthday before
+   Apple sign-in, publishes identity keys only after recorded eligibility,
+   and blocks the shelf while an older account's birthday is missing or
+   unknown. A rejected answer stores only the next eligible UTC date
+   locally, across sign-out and relaunch. Eligible birthdays are held
+   locally until recorded eligibility is confirmed. The backend does not receive a
+   rejected birthday or refusal. In App Store Connect → App Privacy, declare
+   Other Data (the birthday) and no Phone Number, matching
+   `PrivacyInfo.xcprivacy`.
+3. **Website and legal text.** Publish the matching Terms (§2.1, version
+   2026-10-31), Privacy Policy, and Support birthday answer. Keep the app's
+   bundled Terms word-for-word identical to the rendered website Terms.
+4. **Verify locally first.** Run the database suite in fresh and migrated
+   modes, then the full Xcode unit and UI suites with production
+   `Supabase.plist` excluded. Cover a neutral empty birthday, the exact age
+   boundary, refusal after relaunch/sign-out, interrupted sign-up, atomic
+   profile/birthday creation, an older account without a birthday, failed
+   eligibility lookups, denied core requests without a birthday, and refused
+   birthday changes. A UTC boundary may delay access for someone whose local
+   date has reached their thirteenth birthday ahead of UTC.
+   Also verify a stored birthday accepted by the old one-day allowance:
+   it must show the blocked screen with account deletion available.
+5. **Rollout.** Older app builds write profiles and birthdays directly and
+   may not finish account activation under the new restrictions. Make the
+   matching build available as part of this rollout and direct affected
+   users to update. No Edge Function redeployment is needed for this
+   migration. After deployment, repeat the eligible and missing-birthday
+   flows on test accounts and confirm account deletion remains available.
+
 ---
 
-> Already ran an earlier `schema.sql`? There are no upgrade migrations —
-> start over with [`supabase/scripts/reset_database.sql`](supabase/scripts/reset_database.sql)
-> as in Phase 1 step 4, and make sure the `deposits` bucket allows
-> `application/octet-stream` (keep `image/jpeg`); without it, posting a
-> photo fails.
+For an existing database, apply the incremental migrations in order. The
+reset script is for a disposable database only. Keep the `deposits` bucket
+MIME types `application/octet-stream` and `image/jpeg`.
 
 ## Caveats you accepted by shipping this MVP
 

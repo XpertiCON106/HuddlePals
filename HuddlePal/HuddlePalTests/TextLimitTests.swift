@@ -62,7 +62,7 @@ final class TextLimitTests: XCTestCase {
         XCTAssertEqual(AuthValidation.sanitizedBio(once), once)
 
         let deps = AppDependencies.makeMock(inMemory: true)
-        let user = try await deps.auth.completeProfile(displayName: "Sam", avatarColorHex: "E5484D")
+        let user = try await deps.auth.completeProfile(displayName: "Sam", avatarColorHex: "E5484D", birthday: Birthday(year: 1990, month: 1, day: 1))
         user.bio = long
         deps.session.currentUser = user
         let profile = ProfileViewModel(deps: deps)
@@ -75,7 +75,7 @@ final class TextLimitTests: XCTestCase {
     /// still saves, until the name itself is edited.
     func testAnOlderLongerNameStaysUntilItsEdited() async throws {
         let deps = AppDependencies.makeMock(inMemory: true)
-        deps.session.currentUser = try await deps.auth.completeProfile(displayName: "Alexandria Q", avatarColorHex: "E5484D")
+        deps.session.currentUser = try await deps.auth.completeProfile(displayName: "Alexandria Q", avatarColorHex: "E5484D", birthday: Birthday(year: 1990, month: 1, day: 1))
         let profile = ProfileViewModel(deps: deps)
         await profile.loadInitialState()
         XCTAssertEqual(profile.displayName, "Alexandria Q", "shown as it is")

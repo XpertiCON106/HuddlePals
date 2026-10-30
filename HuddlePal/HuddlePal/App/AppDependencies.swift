@@ -22,9 +22,12 @@ final class AppSession {
     /// Authenticated but never finished the profile step — onboarding
     /// resumes there instead of at sign-in.
     var needsProfileSetup = false
-    /// Signed in, but the account has no birthday yet (made before it was
-    /// asked for): it's asked once, before anything else.
-    var needsBirthday = false
+    /// Signed in, but age eligibility is pending: collect a missing birthday
+    /// or show the recorded birthday's restriction before anything else.
+    var pendingBirthdayUser: User?
+    /// A recorded birthday is not yet eligible. Keep the account outside
+    /// the app without offering to replace its immutable birthday.
+    var hasIneligibleBirthday = false
     /// False until seeding + session restore finish on launch.
     var isReady = false
     /// Bumped by the live photo keyring whenever this device gains a huddle
@@ -72,6 +75,7 @@ final class AppDependencies {
     /// Agreement to the Terms of Service — required before anything past
     /// the welcome cards (RootView, OnboardingViewModel).
     let terms: TermsAcceptance
+    let ageScreening: AgeScreening
     /// Records that agreement on the server for the signed-in account. Live
     /// only: the offline world has nobody to prove it to.
     let termsRecorder: TermsRecorder?
@@ -112,6 +116,7 @@ final class AppDependencies {
         debug: DebugSettings,
         appearance: AppearanceSettings = AppearanceSettings(),
         terms: TermsAcceptance = TermsAcceptance(),
+        ageScreening: AgeScreening? = nil,
         termsRecords: (any TermsRecordServiceProtocol)? = nil,
         auth: any AuthServiceProtocol,
         appleReauth: any AppleReauthenticating,
@@ -137,6 +142,7 @@ final class AppDependencies {
         self.debug = debug
         self.appearance = appearance
         self.terms = terms
+        self.ageScreening = ageScreening ?? AgeScreening()
         self.termsRecorder = termsRecords.map { TermsRecorder(terms: terms, service: $0, session: session) }
         self.auth = auth
         self.appleReauth = appleReauth
@@ -162,20 +168,6 @@ final class AppDependencies {
         self.push.centerDelegate.promotion = self.plusPromo
     }
 
-    /// Whether the signed-in account still needs its birthday, from the
-    /// server (offline: not asked this time, asked on a later launch).
-    func checkBirthday() async {
-        guard session.currentUser != nil else {
-            session.needsBirthday = false
-            return
-        }
-        do {
-            session.needsBirthday = try await auth.birthday() == nil
-        } catch {
-            // Unknown: don't stop anyone over a network error.
-        }
-    }
-
     /// Signs out on this device: first, while the session still exists, the
     /// device stops getting the account's notifications.
     func signOut() async {
@@ -193,7 +185,9 @@ final class AppDependencies {
         liveUpdates.setActive(false)
         session.currentUser = nil
         session.needsProfileSetup = false
-        session.needsBirthday = false
+        session.pendingBirthdayUser = nil
+        session.hasIneligibleBirthday = false
+        ageScreening.clearPendingBirthday()
         session.pendingInviteCode = nil
         session.pendingHuddleID = nil
         session.blockedUserIDs = []
@@ -237,6 +231,7 @@ final class AppDependencies {
             session: session,
             debug: DebugSettings(),
             terms: terms,
+            ageScreening: AgeScreening(defaults: inMemory ? nil : .standard),
             auth: MockAuthService(context: context),
             appleReauth: MockAppleReauthenticator(),
             huddleService: MockHuddleService(
