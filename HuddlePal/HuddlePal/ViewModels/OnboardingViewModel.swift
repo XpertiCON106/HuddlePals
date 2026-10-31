@@ -14,6 +14,7 @@ final class OnboardingViewModel {
         case age
         case method
         case code
+        case password
         case profile
     }
 
@@ -73,6 +74,9 @@ final class OnboardingViewModel {
     private(set) var attemptsExhausted = false
     private var cooldownTask: Task<Void, Never>?
 
+    // Password step (with `emailInput`)
+    var passwordInput = ""
+
     static let maxCodeAttempts = 5
     /// Matches GoTrue's default one-request-per-60s OTP rate limit; a
     /// shorter cooldown only lets the user hit the server's refusal.
@@ -122,6 +126,10 @@ final class OnboardingViewModel {
     }
 
     var canVerify: Bool { codeInput.count == codeLength && !isWorking && !attemptsExhausted }
+
+    var canSignInWithPassword: Bool {
+        !isWorking && AuthValidation.normalizedEmail(emailInput) != nil && !passwordInput.isEmpty
+    }
 
     var canCompleteProfile: Bool {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -300,11 +308,38 @@ final class OnboardingViewModel {
     func backToMethod() {
         step = .method
         codeInput = ""
+        passwordInput = ""
         errorMessage = nil
         failedAttempts = 0
         attemptsExhausted = false
         cooldownTask?.cancel()
         resendSecondsRemaining = 0
+    }
+
+    // MARK: - Password
+
+    /// For accounts made with a password in the dashboard, such as App
+    /// Review's demo account: the app has no way to make one. The same age
+    /// check comes first, and the same Terms and profile steps after.
+    func showPasswordSignIn() {
+        guard canStartSignIn() else { return }
+        errorMessage = nil
+        step = .password
+    }
+
+    func signInWithPassword() async {
+        guard canStartSignIn(), canSignInWithPassword,
+              let email = AuthValidation.normalizedEmail(emailInput) else { return }
+        errorMessage = nil
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            let state = try await deps.auth.signInWithPassword(email: email, password: passwordInput)
+            passwordInput = ""
+            await handle(state)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     // MARK: - Sign in with Apple

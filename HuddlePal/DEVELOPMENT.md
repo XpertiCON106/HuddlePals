@@ -23,8 +23,10 @@ in sync when behaviour changes.
 - **Careful**: the `Supabase.plist` on this machine points at
   **production**, which holds a family's real data. Never run tests or
   demos against it; every test build excludes it (below).
-- **Sign-in**: Apple only (`FeatureFlags.emailAndPhoneSignInEnabled` is
-  `false`; the email/phone code stays, hidden).
+- **Sign-in**: Apple, plus **Sign in with a password** for accounts made
+  with a password in the Supabase dashboard (App Review's demo account; the
+  app can't make one). `FeatureFlags.emailAndPhoneSignInEnabled` is
+  `false`; the email/phone code stays, hidden.
 
 ## Rules you must not break
 
@@ -357,7 +359,9 @@ what goes and what stays, Apple's billing if Plus renews, and a field where
 **DELETE** has to be typed, exactly, before **Delete my account** works.
 Apple's sheet then gives a fresh authorization code
 (`SystemAppleReauthenticator`). Closing the sheet deletes nothing; if Apple
-can't confirm, the page offers **Delete account anyway**. The `delete-account` function then revokes the app's Apple tokens
+can't confirm, the page offers **Delete account anyway**. An account that
+signs in with a password (the demo account) skips Apple's sheet: it has no
+Apple tokens. The `delete-account` function then revokes the app's Apple tokens
 (App Review 5.1.1(v)), deletes device tokens and avatars, deletes every
 huddle the user is the last member of (`delete_sole_huddles`, migration
 018: everything in it, a reported deposit kept in `preserved_photos`, no

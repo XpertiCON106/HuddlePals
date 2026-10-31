@@ -2,9 +2,10 @@ import Foundation
 import SwiftData
 
 /// Real accounts via Supabase GoTrue: Sign in with Apple (native id_token
-/// exchange), plus email and SMS with 6-digit verification codes. Sessions
-/// persist in the Keychain, so sign out / sign back in lands on the same
-/// account from any method tied to the same identity.
+/// exchange), plus email and SMS with 6-digit verification codes, and email
+/// with a password for accounts made in the dashboard. Sessions persist in
+/// the Keychain, so sign out / sign back in lands on the same account from
+/// any method tied to the same identity.
 @MainActor
 final class LiveAuthService: AuthServiceProtocol {
     private let client: SupabaseClient
@@ -89,6 +90,23 @@ final class LiveAuthService: AuthServiceProtocol {
         } catch let SupabaseClient.ClientError.http(_, message) {
             throw AuthError.provider(message)
         }
+    }
+
+    func signInWithPassword(email: String, password: String) async throws -> AuthSessionState {
+        do {
+            let session = try await client.signInWithPassword(email: email, password: password)
+            return try await state(for: session, suggestedName: nil)
+        } catch let SupabaseClient.ClientError.http(status, message) {
+            // GoTrue says the same for a wrong password and an unknown email.
+            if status == 400, message.localizedCaseInsensitiveContains("invalid login credentials") {
+                throw AuthError.invalidCredentials
+            }
+            throw AuthError.provider(message)
+        }
+    }
+
+    func signsInWithApple() async -> Bool {
+        await client.signsInWithApple
     }
 
     func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User {

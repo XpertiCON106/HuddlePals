@@ -475,6 +475,16 @@ final class ProfileConfirmationTests: XCTestCase {
 
     // MARK: Apple confirms before deletion (QA-20)
 
+    func testAPasswordAccountIsDeletedWithoutAskingApple() async {
+        auth.appleAccount = false
+        let deleted = await confirmedDeletion().delete()
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(appleReauth.calls, 0, "it has no Apple tokens to revoke")
+        XCTAssertEqual(auth.deleteCodes, [nil])
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertEqual(auth.removeLocalDataCalls, 1)
+    }
+
     func testDeletingTheAccountSendsAFreshAppleCode() async {
         appleReauth.result = .success("fresh-code")
         let deleted = await confirmedDeletion().delete()
@@ -569,6 +579,11 @@ private final class ProfileAuthSpy: AuthServiceProtocol {
     ) async throws -> AuthSessionState {
         .signedOut
     }
+    func signInWithPassword(email: String, password: String) async throws -> AuthSessionState {
+        .signedOut
+    }
+    var appleAccount = true
+    func signsInWithApple() async -> Bool { appleAccount }
     func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User {
         throw TestError.updateFailed
     }

@@ -32,6 +32,18 @@ final class AuthInputTests: XCTestCase {
         """
         let restored = try SupabaseClient.makeDecoder().decode(SupabaseClient.Session.self, from: Data(json.utf8))
         XCTAssertEqual(restored.userId, id, "users signed in on the broken build stay signed in after updating")
+        XCTAssertTrue(restored.signsInWithApple, "every account before password sign-in was Apple's")
+    }
+
+    func testASessionRemembersHowItsAccountSignsIn() throws {
+        let saved = SupabaseClient.Session(
+            accessToken: "access", refreshToken: "refresh",
+            expiresAt: Date(timeIntervalSince1970: 1_800_000_000), userId: UUID(), providers: ["email"]
+        )
+        let data = try SupabaseClient.makeEncoder().encode(saved)
+        let restored = try SupabaseClient.makeDecoder().decode(SupabaseClient.Session.self, from: data)
+        XCTAssertEqual(restored.providers, ["email"])
+        XCTAssertFalse(restored.signsInWithApple)
     }
 
     // MARK: Phone numbers

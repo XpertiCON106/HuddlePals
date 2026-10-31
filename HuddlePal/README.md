@@ -181,7 +181,7 @@ Key decisions:
 
 | Protocol | Mock | Live (Supabase) |
 |---|---|---|
-| `AuthServiceProtocol` | Auto-signs-in seeded "You"; fake code `123456` for email/phone | GoTrue: Sign in with Apple (native id_token + nonce), email/SMS OTP (code length from `Supabase.plist`, default 6), Keychain sessions with auto-refresh; account deletion via the `delete-account` edge function |
+| `AuthServiceProtocol` | Auto-signs-in seeded "You"; fake code `123456` for email/phone; any password | GoTrue: Sign in with Apple (native id_token + nonce), email + password for dashboard-made accounts (App Review's demo account), email/SMS OTP (code length from `Supabase.plist`, default 6), Keychain sessions with auto-refresh; account deletion via the `delete-account` edge function |
 | `HuddleServiceProtocol` | SwiftData CRUD; invite-code lookup in store; `SkipLedger` in memory | `huddles`/`memberships` tables; create as an RPC; join with `redeem_huddle_invite` (the invite carries the huddle key; 8-member cap); invite show / reset; `skips` table + `spend_skip_token`; `recompute_streak` RPC (the server's streak is canonical) |
 | `DepositServiceProtocol` | SwiftData insert-only (permanence enforced) | `deposits` plain insert, unique `(huddle_id, author_id, day_key)`; `reactions` toggle via delete-or-insert; `comments`; one-query "who posted today" for the huddle list |
 | `MediaServiceProtocol` | Writes JPEGs to `Documents/Media/` | Insert-only upload to Storage bucket `deposits`; huddle photos **end-to-end encrypted** first (ciphertext in Storage and in the local cache, decrypted in memory for display); local files are the offline cache; authenticated download on cache miss |
