@@ -37,6 +37,8 @@ enum AuthError: LocalizedError {
     case invalidEmail
     case invalidPhone
     case invalidCode
+    /// A wrong password, or an email without a password account.
+    case invalidCredentials
     case notAuthenticated
     /// A birthday under the Terms' minimum age (`Birthday.minimumAge`).
     case underMinimumAge
@@ -48,6 +50,7 @@ enum AuthError: LocalizedError {
         case .invalidEmail: "That doesn't look like an email address."
         case .invalidPhone: "Enter a 10-digit US or Canadian number, or start with + and your country code."
         case .invalidCode: "That code didn't match — or it expired. Check it or request a fresh one."
+        case .invalidCredentials: "That email and password don't match an account."
         case .notAuthenticated: "You're not signed in."
         case .underMinimumAge: "HuddlePals is for people \(Birthday.minimumAge) or older."
         case .birthdayImmutable: "Your birthday has already been saved and can't be changed."
@@ -130,6 +133,12 @@ protocol AuthServiceProtocol: AnyObject {
     func verifyCode(_ code: String, for destination: OTPDestination) async throws -> AuthSessionState
     /// Native Sign in with Apple: exchanges the identity token for a session.
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState
+    /// Email and password, for an account made with a password in the
+    /// Supabase dashboard (App Review's demo account). The app never makes one.
+    func signInWithPassword(email: String, password: String) async throws -> AuthSessionState
+    /// Whether the signed-in account signs in with Apple: only then does
+    /// deleting it ask Apple for a code to revoke the app's tokens with.
+    func signsInWithApple() async -> Bool
     /// Creates the profile and its eligible birthday together. A profile
     /// without a confirmed birthday cannot activate an app session.
     func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User
@@ -165,6 +174,7 @@ protocol AuthServiceProtocol: AnyObject {
 
 extension AuthServiceProtocol {
     func hasStoredSession() async -> Bool { false }
+    func signsInWithApple() async -> Bool { true }
 }
 
 extension AuthValidation {
@@ -203,6 +213,8 @@ final class MockAuthService: AuthServiceProtocol {
     private static let signedOutKey = "huddlepal.mock.signedOutExplicitly"
     private static let identityPrefix = "huddlepal.mock.identity."
     private static let pendingIdentityKey = "huddlepal.mock.pendingIdentity"
+    /// Absent for the seeded "You", who stands for an Apple account.
+    private static let signedInWithAppleKey = "huddlepal.mock.signedInWithApple"
 
     private let context: ModelContext
 
@@ -221,6 +233,7 @@ final class MockAuthService: AuthServiceProtocol {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: signedOutKey)
         defaults.removeObject(forKey: pendingIdentityKey)
+        defaults.removeObject(forKey: signedInWithAppleKey)
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(identityPrefix) {
             defaults.removeObject(forKey: key)
         }
@@ -263,11 +276,25 @@ final class MockAuthService: AuthServiceProtocol {
 
     func verifyCode(_ code: String, for destination: OTPDestination) async throws -> AuthSessionState {
         guard code == Self.mockCode else { throw AuthError.invalidCode }
+        UserDefaults.standard.set(false, forKey: Self.signedInWithAppleKey)
         return try signIn(identityKey: identityKey(for: destination), suggestedName: nil)
     }
 
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState {
-        try signIn(identityKey: Self.identityPrefix + "apple", suggestedName: suggestedName)
+        UserDefaults.standard.set(true, forKey: Self.signedInWithAppleKey)
+        return try signIn(identityKey: Self.identityPrefix + "apple", suggestedName: suggestedName)
+    }
+
+    /// Any password but an empty one; the same email as a code sign-in is
+    /// the same account, as on the server.
+    func signInWithPassword(email: String, password: String) async throws -> AuthSessionState {
+        guard !password.isEmpty else { throw AuthError.invalidCredentials }
+        UserDefaults.standard.set(false, forKey: Self.signedInWithAppleKey)
+        return try signIn(identityKey: identityKey(for: .email(email)), suggestedName: nil)
+    }
+
+    func signsInWithApple() async -> Bool {
+        UserDefaults.standard.object(forKey: Self.signedInWithAppleKey) as? Bool ?? true
     }
 
     func completeProfile(displayName: String, avatarColorHex: String, birthday: Birthday) async throws -> User {
@@ -336,6 +363,7 @@ final class MockAuthService: AuthServiceProtocol {
     func signOut() async throws {
         UserDefaults.standard.removeObject(forKey: Self.currentUserIDKey)
         UserDefaults.standard.removeObject(forKey: Self.pendingIdentityKey)
+        UserDefaults.standard.removeObject(forKey: Self.signedInWithAppleKey)
         UserDefaults.standard.set(true, forKey: Self.signedOutKey)
     }
 
@@ -354,6 +382,7 @@ final class MockAuthService: AuthServiceProtocol {
         }
         defaults.removeObject(forKey: Self.currentUserIDKey)
         defaults.removeObject(forKey: Self.pendingIdentityKey)
+        defaults.removeObject(forKey: Self.signedInWithAppleKey)
         defaults.set(true, forKey: Self.signedOutKey)
     }
 

@@ -164,14 +164,29 @@ seeded **mock** world. No code changes to switch.
    - **Account deletion** must work on the live backend: migrations
      001–007, the Apple secrets and the `delete-account` function
      (DEVELOPMENT.md), then delete a test account on the TestFlight build.
-   - **App Review notes.** Sign in with Apple is the only sign-in, so no
-     demo account is needed. Reviewers can't see the core loop alone, so
+   - **Demo account.** App Review wants a user name and password for any
+     app with a sign-in, Sign in with Apple included. Supabase →
+     Authentication → Users → Add user → Create new user: email
+     `appreview@huddlepals.com`, a long password from a password manager,
+     **Auto Confirm User** on. Email sign-in stays enabled (Authentication →
+     Sign In / Providers → Email; the admin account needs it too). In App
+     Store Connect → the version → App Review Information, tick
+     **Sign-in required** and enter that email and password. It's an
+     ordinary account with no admin access; the reviewer uses **Sign in
+     with a password**, under Continue with Apple. Before each later
+     submission, sign in with it in the app, delete it (Profile → Delete
+     account) and create it again: huddles an earlier reviewer made can't
+     be opened on a new reviewer's device.
+   - **App Review notes.** Reviewers can't see the core loop alone, so
      consider a demo huddle where a test account posts daily, and paste
      something like this:
 
      > HuddlePals is a private, invite-only photo app for small groups (up
-     > to 4 people who know each other, or 10 with HuddlePals+). Sign in with Apple is the only
-     > sign-in. To try it: enter your birthday, sign in, agree to the Terms, create a huddle and
+     > to 4 people who know each other, or 10 with HuddlePals+). Everyone
+     > signs in with Apple; for review, tap "Sign in with a password" under
+     > Continue with Apple and use the demo account. To try it: enter a
+     > birthday (13 or older), sign in, agree to the Terms, make your
+     > profile, create a huddle and
      > take today's photo. Other members' photos for today unlock once you
      > post yours. To see a group with other members, join with invite
      > code <CODE>. Content safeguards (guideline 1.2): everyone agrees to
@@ -183,7 +198,8 @@ seeded **mock** world. No code changes to switch.
      > Plus (auto-renewable, monthly or yearly) is in Profile → Plan and
      > behind Video when posting; Restore Purchases is in both places. Account deletion: Profile
      > → Delete account (Apple confirms, then the account is deleted and
-     > its Sign in with Apple token revoked).
+     > its Sign in with Apple token revoked; the demo account has no Apple
+     > step).
 
 ## Phase 4 — Two-phone smoke test (~10 minutes)
 

@@ -11,7 +11,7 @@ This document is the single place to understand everything: the product, the rul
 | Dependencies | **Zero** third-party packages — Apple frameworks + raw `URLSession` |
 | State | `@Observable` (Observation framework), no Combine |
 | Backends | Mock (seeded offline demo) and Live (Supabase) behind identical protocols |
-| Auth | Sign in with Apple. Email + SMS codes are built but switched off (`FeatureFlags.emailAndPhoneSignInEnabled = false`) |
+| Auth | Sign in with Apple, and email + password for accounts made in the Supabase dashboard (App Review's demo account). Email + SMS codes are built but switched off (`FeatureFlags.emailAndPhoneSignInEnabled = false`) |
 | Design | Adaptive "gallery print": paper + ink in light, deep charcoal + paper-white in dark; system-following with in-app override |
 | Tests | Deterministic XCTests (⌘U): engine rules, critical mock flows, live sync reconciliation, profile editor |
 
@@ -243,9 +243,12 @@ the device. An eligible birthday is held locally while sign-in finishes,
 then cleared when recorded eligibility is confirmed. This is self-reported screening,
 not independent identity or age verification.
 
-**Only Sign in with Apple is shown**: email and phone remain behind
-`FeatureFlags.emailAndPhoneSignInEnabled`, and must pass the same age screen
-if enabled. Apple uses its native sheet. All methods resolve to a Supabase
+**Sign in with Apple is the sign-in.** Under it, **Sign in with a password**
+is for accounts made with a password in the Supabase dashboard, such as App
+Review's demo account (GoTrue's `password` grant); the app can't make one.
+Email and phone codes remain behind `FeatureFlags.emailAndPhoneSignInEnabled`.
+Every method passes the same age screen first. Apple uses its native sheet.
+All methods resolve to a Supabase
 `auth.users` row, which alone grants no core app access. A new account uses
 `complete_profile(name, colour, birthday)` to save its initial profile and
 birthday atomically. Older profiles without a birthday use `save_birthday`.

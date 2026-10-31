@@ -14,8 +14,12 @@ actor SupabaseClient {
         /// decodes back only to `userId`. A `userID` here silently failed to
         /// decode, so every relaunch looked signed out.
         let userId: UUID
+        /// How the account signs in, as GoTrue lists it ("apple", "email").
+        /// nil in sessions saved before it was kept: those were all Apple's.
+        var providers: [String]? = nil
 
         var isExpired: Bool { Date() > expiresAt.addingTimeInterval(-60) }
+        var signsInWithApple: Bool { providers?.contains("apple") ?? true }
     }
 
     enum ClientError: LocalizedError {
@@ -132,7 +136,11 @@ actor SupabaseClient {
     // MARK: - Auth (GoTrue)
 
     private struct AuthResponse: Decodable {
-        struct AuthUser: Decodable { let id: UUID }
+        struct AuthUser: Decodable {
+            struct AppMetadata: Decodable { let providers: [String]? }
+            let id: UUID
+            let appMetadata: AppMetadata?
+        }
         let accessToken: String
         let refreshToken: String
         let expiresIn: Double
@@ -140,6 +148,7 @@ actor SupabaseClient {
     }
 
     var currentUserID: UUID? { session?.userId }
+    var signsInWithApple: Bool { session?.signsInWithApple ?? true }
 
     private struct OTPRequest: Encodable {
         let email: String?
@@ -158,6 +167,11 @@ actor SupabaseClient {
         let provider: String
         let idToken: String
         let nonce: String
+    }
+
+    private struct PasswordRequest: Encodable {
+        let email: String
+        let password: String
     }
 
     /// Sends a 6-digit code. Exactly one of email/phone must be set.
@@ -186,6 +200,16 @@ actor SupabaseClient {
         let response: AuthResponse = try await authRequest(
             path: "token?grant_type=id_token",
             body: IdTokenRequest(provider: "apple", idToken: idToken, nonce: nonce)
+        )
+        return storeSession(from: response)
+    }
+
+    /// Email and password, for an account made with a password in the
+    /// Supabase dashboard (App Review's demo account). The app never makes one.
+    func signInWithPassword(email: String, password: String) async throws -> Session {
+        let response: AuthResponse = try await authRequest(
+            path: "token?grant_type=password",
+            body: PasswordRequest(email: email, password: password)
         )
         return storeSession(from: response)
     }
@@ -259,7 +283,8 @@ actor SupabaseClient {
             accessToken: response.accessToken,
             refreshToken: response.refreshToken,
             expiresAt: Date().addingTimeInterval(response.expiresIn),
-            userId: response.user.id
+            userId: response.user.id,
+            providers: response.user.appMetadata?.providers
         )
         session = new
         if let data = try? encoder.encode(new) {

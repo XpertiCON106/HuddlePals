@@ -190,6 +190,28 @@ final class AgeScreeningTests: XCTestCase {
         XCTAssertTrue(BirthdayCheckViewModel(deps: deps).isUnderage)
     }
 
+    func testPasswordSignInWaitsForTheAgeCheckAndKeepsAnIneligibleAccountPending() async {
+        let auth = AgeGateAuthSpy()
+        auth.state = .ageRestricted(auth.user)
+        let deps = dependencies(auth: auth)
+        let onboarding = OnboardingViewModel(deps: deps)
+        onboarding.emailInput = "review@example.test"
+        onboarding.passwordInput = "secret"
+        onboarding.showPasswordSignIn()
+        await onboarding.signInWithPassword()
+        XCTAssertEqual(onboarding.step, .age)
+        XCTAssertEqual(auth.authenticationCalls, 0, "nothing is sent before the birthday")
+
+        onboarding.continueAfterAgeCheck(Birthday(year: 1990, month: 1, day: 1))
+        onboarding.showPasswordSignIn()
+        XCTAssertEqual(onboarding.step, .password)
+        await onboarding.signInWithPassword()
+        XCTAssertEqual(auth.authenticationCalls, 1)
+        XCTAssertNil(deps.session.currentUser)
+        XCTAssertEqual(deps.session.pendingBirthdayUser?.id, auth.user.id)
+        XCTAssertTrue(deps.session.hasIneligibleBirthday)
+    }
+
     func testFailedBirthdaySaveKeepsThePendingAccountOutsideTheApp() async {
         let auth = AgeGateAuthSpy()
         auth.saveError = URLError(.notConnectedToInternet)
@@ -279,6 +301,10 @@ private final class AgeGateAuthSpy: AuthServiceProtocol {
         return state
     }
     func signInWithApple(idToken: String, nonce: String, suggestedName: String?) async throws -> AuthSessionState {
+        authenticationCalls += 1
+        return state
+    }
+    func signInWithPassword(email: String, password: String) async throws -> AuthSessionState {
         authenticationCalls += 1
         return state
     }

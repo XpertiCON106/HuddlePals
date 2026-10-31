@@ -5,7 +5,9 @@ import Observation
 /// billing when it goes on, and typing DELETE before the button works.
 /// Apple then confirms it's them: its fresh authorization code lets the
 /// server revoke the app's Apple tokens (App Review 5.1.1(v)). When Apple
-/// can't confirm, deleting is still offered without it (Apple TN3194).
+/// can't confirm, deleting is still offered without it (Apple TN3194). An
+/// account that signs in with a password has no Apple tokens, so Apple
+/// isn't asked.
 @MainActor
 @Observable
 final class DeleteAccountViewModel {
@@ -50,6 +52,9 @@ final class DeleteAccountViewModel {
         isDeleting = true
         defer { isDeleting = false }
         errorMessage = nil
+        guard await deps.auth.signsInWithApple() else {
+            return await performDeletion(appleAuthorizationCode: nil)
+        }
         let code: String
         do {
             code = try await deps.appleReauth.authorizationCode()

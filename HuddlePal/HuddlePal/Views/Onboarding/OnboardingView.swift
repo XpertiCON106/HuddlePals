@@ -3,10 +3,10 @@ import PhotosUI
 import SwiftUI
 
 /// Onboarding: concept cards → sign-in method (Apple; email / phone only
-/// when `FeatureFlags.emailAndPhoneSignInEnabled`) → code → the Terms of
-/// Service (Agree required; Decline signs out, back to the first card) →
-/// profile. Returning accounts skip the profile step, and the Terms once
-/// they've agreed to the current ones.
+/// when `FeatureFlags.emailAndPhoneSignInEnabled`) → code, or a password for
+/// an account made with one → the Terms of Service (Agree required; Decline
+/// signs out, back to the first card) → profile. Returning accounts skip the
+/// profile step, and the Terms once they've agreed to the current ones.
 struct OnboardingView: View {
     @Environment(AppDependencies.self) private var deps
     @State private var viewModel: OnboardingViewModel?
@@ -44,6 +44,7 @@ private struct OnboardingContent: View {
                 } else {
                     MethodStep(viewModel: viewModel)
                 }
+            case .password: PasswordStep(viewModel: viewModel)
             case .profile: ProfileStep(viewModel: viewModel)
             }
         }
@@ -324,6 +325,19 @@ private struct MethodStep: View {
                         Task { await viewModel.sendCode() }
                     }
                 }
+
+                // For accounts made with a password, like App Review's.
+                Button {
+                    viewModel.showPasswordSignIn()
+                } label: {
+                    // The frame inside the label: outside it, only the
+                    // words were tappable.
+                    Text("Sign in with a password")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
             }
             .padding(Theme.screenPadding)
             .modifier(CenteredWhenAppleOnly())
@@ -492,6 +506,95 @@ private struct CodeStep: View {
             Spacer()
         }
         .padding(Theme.screenPadding)
+    }
+}
+
+// MARK: - Step 3, with a password
+
+/// Only accounts made with a password in the dashboard sign in here (App
+/// Review's demo account); there's no way to make one in the app.
+private struct PasswordStep: View {
+    @Bindable var viewModel: OnboardingViewModel
+    @FocusState private var focused: Field?
+
+    private enum Field {
+        case email, password
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                Image(systemName: "key")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.top, 48)
+
+                Text("Sign in with a password")
+                    .font(Theme.displayFont(28))
+                    .foregroundStyle(Theme.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text("Only for accounts that have a password. New to HuddlePals? Go back and continue with Apple.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 30)
+
+                VStack(spacing: 10) {
+                    TextField("Email", text: $viewModel.emailInput)
+                        .keyboardType(.emailAddress)
+                        .textContentType(.username)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focused, equals: .email)
+                        .submitLabel(.next)
+                        .onSubmit { focused = .password }
+                        .modifier(FormField())
+                    SecureField("Password", text: $viewModel.passwordInput)
+                        .textContentType(.password)
+                        .focused($focused, equals: .password)
+                        .submitLabel(.go)
+                        .onSubmit { Task { await viewModel.signInWithPassword() } }
+                        .modifier(FormField())
+                }
+                .font(.system(size: 17, weight: .medium))
+                .padding(.top, 8)
+
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.destructive)
+                        .multilineTextAlignment(.center)
+                }
+
+                PrimaryButton(
+                    title: "Sign in",
+                    systemImage: "arrow.right",
+                    isLoading: viewModel.isWorking,
+                    isEnabled: viewModel.canSignInWithPassword
+                ) {
+                    focused = nil
+                    Task { await viewModel.signInWithPassword() }
+                }
+
+                Button {
+                    viewModel.backToMethod()
+                } label: {
+                    // The frame inside the label: outside it, only the
+                    // word itself was tappable.
+                    Text("Back")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .disabled(viewModel.isWorking)
+            }
+            .padding(Theme.screenPadding)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
     }
 }
 
